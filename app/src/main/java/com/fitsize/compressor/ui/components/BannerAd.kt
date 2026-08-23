@@ -1,6 +1,7 @@
 package com.fitsize.compressor.ui.components
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -20,10 +21,23 @@ private const val TEST_BANNER_ID = "ca-app-pub-3940256099942544/6300978111"
 
 @Composable
 fun FitsizeBannerAd(modifier: Modifier = Modifier) {
-    FitsizeFixedAd(
-        adSize = AdSize.BANNER,
-        modifier = modifier.fillMaxWidth().height(50.dp),
-    )
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        val context = LocalContext.current
+        val widthDp = maxWidth.value.toInt().coerceAtLeast(1)
+        val adSize = remember(context, widthDp) {
+            AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, widthDp)
+        }
+
+        FitsizeFixedAd(
+            adSize = adSize,
+            modifier = Modifier
+                .width(adSize.width.dp)
+                .height(adSize.height.dp),
+        )
+    }
 }
 
 @Composable
@@ -34,7 +48,9 @@ fun FitsizeMrecAd(modifier: Modifier = Modifier) {
     ) {
         FitsizeFixedAd(
             adSize = AdSize.MEDIUM_RECTANGLE,
-            modifier = Modifier.width(300.dp).height(250.dp),
+            modifier = Modifier
+                .width(300.dp)
+                .height(250.dp),
         )
     }
 }
@@ -45,7 +61,7 @@ private fun FitsizeFixedAd(
     modifier: Modifier,
 ) {
     val context = LocalContext.current
-    val adView = remember(adSize) {
+    val adView = remember(context, adSize) {
         AdView(context).apply {
             adUnitId = TEST_BANNER_ID
             setAdSize(adSize)
@@ -54,7 +70,9 @@ private fun FitsizeFixedAd(
     }
 
     DisposableEffect(adView) {
-        onDispose { adView.destroy() }
+        onDispose {
+            adView.destroy()
+        }
     }
 
     AndroidView(
