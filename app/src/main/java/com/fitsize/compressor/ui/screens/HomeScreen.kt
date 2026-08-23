@@ -17,10 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.VideoFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,9 +28,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fitsize.compressor.R
 import com.fitsize.compressor.ui.components.FitsizeBannerAd
 
 @Composable
@@ -57,7 +55,7 @@ fun HomeScreen(onVideoSelected: (Uri) -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text("Fitsize", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-            Icon(Icons.Outlined.Settings, contentDescription = "Settings")
+            Icon(painter = painterResource(R.drawable.ic_settings), contentDescription = "Settings")
         }
 
         Spacer(Modifier.height(20.dp))
@@ -89,7 +87,7 @@ fun HomeScreen(onVideoSelected: (Uri) -> Unit) {
                     modifier = Modifier.height(54.dp),
                     shape = RoundedCornerShape(16.dp),
                 ) {
-                    Icon(Icons.Outlined.VideoFile, null)
+                    Icon(painter = painterResource(R.drawable.ic_video_file), contentDescription = null)
                     Spacer(Modifier.size(8.dp))
                     Text("SELECT VIDEO", fontWeight = FontWeight.Bold)
                 }
@@ -124,7 +122,7 @@ fun HomeScreen(onVideoSelected: (Uri) -> Unit) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         ) {
             Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.History, null, tint = MaterialTheme.colorScheme.primary)
+                Icon(painter = painterResource(R.drawable.ic_history), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.size(14.dp))
                 Column {
                     Text("History", fontWeight = FontWeight.Bold)
