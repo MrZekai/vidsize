@@ -4,6 +4,8 @@ import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.annotation.OptIn
@@ -19,6 +21,7 @@ import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.VideoEncoderSettings
 import com.fitsize.compressor.model.CompressionPreset
@@ -33,10 +36,25 @@ import kotlin.coroutines.resumeWithException
 @OptIn(UnstableApi::class)
 object CompressionEngine {
 
+    /** How often the encoder is polled for progress, in milliseconds. */
+    private const val PROGRESS_POLL_MS = 300L
+
+    /**
+     * Compresses [input] with [preset] and publishes the result to MediaStore.
+     *
+     * Must be called from the main thread: Media3's `Transformer` is bound to
+     * the Looper of the thread that creates it, and progress is polled on that
+     * same thread.
+     *
+     * @param onProgress optional encoder progress in the range 0f..1f. When null
+     *        the pipeline behaves exactly as before — this parameter is additive
+     *        and changes no encoding behaviour.
+     */
     suspend fun compress(
         context: Context,
         input: Uri,
         preset: CompressionPreset,
+        onProgress: ((Float) -> Unit)? = null,
     ): CompressionResult {
         val info = withContext(Dispatchers.IO) { VideoProbe.probe(context, input) }
         val plan = CompressionPlanner.plan(info, preset)
@@ -51,6 +69,7 @@ object CompressionEngine {
                 videoBitrate = plan.videoBitrate,
                 audioBitrate = plan.audioBitrate,
                 targetHeight = plan.targetHeight,
+                onProgress = onProgress,
             )
             val actual = temp.length().takeIf { it > 0 } ?: export.fileSizeBytes
             require(actual > 0) { "Compression finished without a readable output file." }
@@ -75,6 +94,7 @@ object CompressionEngine {
         videoBitrate: Int,
         audioBitrate: Int,
         targetHeight: Int,
+        onProgress: ((Float) -> Unit)?,
     ): ExportResult = suspendCancellableCoroutine { continuation ->
         val videoSettings = VideoEncoderSettings.Builder()
             .setBitrate(videoBitrate)
@@ -111,7 +131,19 @@ object CompressionEngine {
             .addListener(listener)
             .build()
 
-        continuation.invokeOnCancellation { transformer.cancel() }
+        val handler = Handler(Looper.getMainLooper())
+        var poller: Runnable? = null
+
+        // A single cancellation handler: Transformer is not thread-safe, so the
+        // cancel is posted back to the thread that created it, and the progress
+        // poller is torn down at the same time.
+        continuation.invokeOnCancellation {
+            handler.post {
+                poller?.let { handler.removeCallbacks(it) }
+                transformer.cancel()
+            }
+        }
+
         val effects = Effects(
             emptyList(),
             listOf<Effect>(Presentation.createForHeight(targetHeight)),
@@ -120,6 +152,23 @@ object CompressionEngine {
             .setEffects(effects)
             .build()
         transformer.start(item, output.absolutePath)
+
+        if (onProgress != null) {
+            val holder = ProgressHolder()
+            val runnable = object : Runnable {
+                override fun run() {
+                    // Once the continuation has resumed there is nothing left to
+                    // report, so the loop retires itself.
+                    if (!continuation.isActive) return
+                    if (transformer.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) {
+                        onProgress(holder.progress.coerceIn(0, 100) / 100f)
+                    }
+                    handler.postDelayed(this, PROGRESS_POLL_MS)
+                }
+            }
+            poller = runnable
+            handler.postDelayed(runnable, PROGRESS_POLL_MS)
+        }
     }
 
     private fun publish(context: Context, source: File): Uri {

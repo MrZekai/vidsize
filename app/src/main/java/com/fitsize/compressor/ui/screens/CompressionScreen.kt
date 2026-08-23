@@ -1,11 +1,9 @@
 package com.fitsize.compressor.ui.screens
 
-import android.content.Context
-import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.BorderStroke
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,19 +16,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,346 +30,434 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.fitsize.compressor.R
 import com.fitsize.compressor.media.CompressionEngine
 import com.fitsize.compressor.media.CompressionPlanner
 import com.fitsize.compressor.media.VideoProbe
+import com.fitsize.compressor.media.rememberVideoThumbnail
 import com.fitsize.compressor.model.CompressionPreset
 import com.fitsize.compressor.model.CompressionResult
 import com.fitsize.compressor.model.VideoInfo
-import com.fitsize.compressor.ui.components.FitsizeMrecAd
-import com.fitsize.compressor.ui.theme.FitsizeAccent
-import com.fitsize.compressor.ui.theme.FitsizeAccentSoft
-import com.fitsize.compressor.ui.theme.FitsizeBorder
-import com.fitsize.compressor.ui.theme.FitsizeCard
-import com.fitsize.compressor.ui.theme.FitsizeInk
-import com.fitsize.compressor.ui.theme.FitsizeMuted
-import com.fitsize.compressor.ui.theme.FitsizeSoft
-import com.fitsize.compressor.ui.theme.FitsizeSuccess
-import com.fitsize.compressor.ui.theme.FitsizeSuccessSoft
+import com.fitsize.compressor.ui.components.Eyebrow
+import com.fitsize.compressor.ui.components.FitsizeCard
+import com.fitsize.compressor.ui.components.HairLine
+import com.fitsize.compressor.ui.components.IconAction
+import com.fitsize.compressor.ui.components.PrimaryButton
+import com.fitsize.compressor.ui.components.SectionHeader
+import com.fitsize.compressor.ui.components.TintedPill
+import com.fitsize.compressor.ui.format.Fmt
+import com.fitsize.compressor.ui.theme.FitsizeColor
+import com.fitsize.compressor.ui.theme.FitsizeShape
+import com.fitsize.compressor.ui.theme.FitsizeTheme
+import com.fitsize.compressor.ui.theme.FitsizeType
+import com.fitsize.compressor.ui.theme.Space
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
+/**
+ * Compression screen.
+ *
+ * Structure mirrors Home: a fixed bar at the top, one scrolling body, and a
+ * fixed action bar at the bottom that clears the navigation bar. The primary
+ * action never scrolls out of reach — on a 360dp phone with a long preset list
+ * that is the difference between a considered product and a form.
+ *
+ * Progress is real, not decorative: [CompressionEngine] reports encoder progress
+ * and this screen renders it. When the encoder has not produced a figure yet the
+ * ring shows a hint arc rather than a fake percentage.
+ */
 @Composable
 fun CompressionScreen(
     videoUri: Uri,
     onBack: () -> Unit,
+    onCompleted: (CompressionResult) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var info by remember { mutableStateOf<VideoInfo?>(null) }
-    var preset by remember { mutableStateOf(CompressionPreset.BALANCED) }
+    var info by remember(videoUri) { mutableStateOf<VideoInfo?>(null) }
+    var probeFailed by remember(videoUri) { mutableStateOf(false) }
+    var preset by remember(videoUri) { mutableStateOf(CompressionPreset.BALANCED) }
     var busy by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0f) }
+    var progressKnown by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var result by remember { mutableStateOf<CompressionResult?>(null) }
+    var job by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(videoUri) {
-        info = runCatching {
-            withContext(Dispatchers.IO) {
-                VideoProbe.probe(context, videoUri)
-            }
-        }.onFailure {
-            error = it.message ?: it::class.java.simpleName
+        val probed = runCatching {
+            withContext(Dispatchers.IO) { VideoProbe.probe(context, videoUri) }
         }.getOrNull()
+        info = probed
+        probeFailed = probed == null
     }
 
-    Column(
+    // While an export is running, swallow the back gesture: the user cancels
+    // deliberately with the button instead of losing work by accident.
+    BackHandler(enabled = busy) { }
+    BackHandler(enabled = !busy && result == null) { onBack() }
+
+    fun startCompression() {
+        error = null
+        progress = 0f
+        progressKnown = false
+        busy = true
+        job = scope.launch {
+            runCatching {
+                CompressionEngine.compress(
+                    context = context,
+                    input = videoUri,
+                    preset = preset,
+                    onProgress = { value ->
+                        progressKnown = true
+                        progress = value
+                    },
+                )
+            }.onSuccess { completed ->
+                result = completed
+                onCompleted(completed)
+            }.onFailure { throwable ->
+                if (throwable !is CancellationException) {
+                    error = throwable.message
+                }
+            }
+            busy = false
+        }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(FitsizeSoft)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .background(FitsizeColor.Background),
     ) {
-        Spacer(Modifier.height(10.dp))
+        Column(modifier = Modifier.fillMaxSize()) {
+            CompressionTopBar(onBack = onBack, enabled = !busy)
 
-        TextButton(
-            onClick = onBack,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-        ) {
-            Text(
-                text = "←  Back",
-                color = FitsizeAccent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        Text(
-            text = "Choose compression",
-            color = FitsizeInk,
-            fontSize = 32.sp,
-            lineHeight = 36.sp,
-            fontWeight = FontWeight.Black,
-        )
-
-        Spacer(Modifier.height(7.dp))
-
-        Text(
-            text = "Choose the balance you want between quality and file size.",
-            color = FitsizeMuted,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
-        )
-
-        Spacer(Modifier.height(22.dp))
-
-        info?.let { video ->
-            SelectedVideoCard(video)
-
-            Spacer(Modifier.height(22.dp))
-
-            Text(
-                text = "Compression level",
-                color = FitsizeInk,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.ExtraBold,
-            )
-
-            Spacer(Modifier.height(11.dp))
-
-            CompressionPreset.entries.forEach { option ->
-                val plan = CompressionPlanner.plan(video, option)
-                PresetCard(
-                    preset = option,
-                    selected = option == preset,
-                    estimate = plan.estimatedOutputBytes,
-                    onClick = { preset = option },
-                )
-                Spacer(Modifier.height(10.dp))
-            }
-        }
-
-        error?.let { message ->
-            Spacer(Modifier.height(8.dp))
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = Color(0xFFFFF1F0),
-                border = BorderStroke(1.dp, Color(0xFFFFD5D2)),
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Space.gutter),
             ) {
                 Text(
-                    text = message,
-                    modifier = Modifier.padding(14.dp),
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
+                    text = stringResource(R.string.compress_title),
+                    style = FitsizeType.screenTitle,
+                    color = FitsizeColor.Ink,
                 )
-            }
-        }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.compress_subtitle),
+                    style = FitsizeType.body,
+                    color = FitsizeColor.Muted,
+                )
 
-        Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Space.lg))
 
-        Button(
-            onClick = {
-                busy = true
-                error = null
-                result = null
+                SelectedVideoCard(videoUri = videoUri, info = info, failed = probeFailed)
 
-                scope.launch {
-                    runCatching {
-                        CompressionEngine.compress(context, videoUri, preset)
-                    }.onSuccess {
-                        result = it
-                    }.onFailure {
-                        error = it.message ?: it::class.java.simpleName
+                Spacer(Modifier.height(Space.xl))
+
+                SectionHeader(title = stringResource(R.string.section_level))
+
+                Spacer(Modifier.height(Space.sm))
+
+                val currentInfo = info
+                CompressionPreset.entries.forEach { option ->
+                    val estimate = currentInfo?.let {
+                        CompressionPlanner.plan(it, option).estimatedOutputBytes
                     }
-                    busy = false
+                    PresetRow(
+                        preset = option,
+                        selected = option == preset,
+                        estimateBytes = estimate,
+                        sourceBytes = currentInfo?.sourceBytes ?: 0L,
+                        enabled = !busy,
+                        onClick = { preset = option },
+                    )
+                    Spacer(Modifier.height(Space.xs))
                 }
-            },
-            enabled = info != null && !busy,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(58.dp),
-            shape = RoundedCornerShape(18.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = FitsizeAccent,
-                contentColor = Color.White,
-                disabledContainerColor = Color(0xFFD9D5F7),
-                disabledContentColor = Color.White,
-            ),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
-        ) {
-            if (busy) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    color = Color.White,
-                    strokeWidth = 2.dp,
-                )
-                Spacer(Modifier.size(10.dp))
+
+                Spacer(Modifier.height(Space.xxs))
+
                 Text(
-                    text = "COMPRESSING…",
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 0.4.sp,
+                    text = stringResource(R.string.estimate_note),
+                    style = FitsizeType.caption,
+                    color = FitsizeColor.Faint,
                 )
-            } else {
-                Text(
-                    text = "COMPRESS VIDEO",
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 0.5.sp,
-                )
+
+                val message = error
+                if (message != null) {
+                    Spacer(Modifier.height(Space.md))
+                    ErrorCard(detail = message)
+                }
+
+                Spacer(Modifier.height(Space.xl))
             }
+
+            CompressionActionBar(
+                enabled = info != null && !busy,
+                onCompress = { startCompression() },
+            )
         }
 
-        Spacer(Modifier.height(28.dp))
+        if (busy) {
+            ProcessingOverlay(
+                progress = progress,
+                progressKnown = progressKnown,
+                onCancel = {
+                    job?.cancel()
+                    busy = false
+                },
+            )
+        }
     }
 
-    result?.let { compressionResult ->
-        ResultDialog(
-            context = context,
-            result = compressionResult,
-            onCompressAnother = onBack,
+    val finished = result
+    if (finished != null) {
+        ResultSheet(
+            result = finished,
+            onDismiss = { result = null },
+            onCompressAnother = {
+                result = null
+                onBack()
+            },
+        )
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Bars                                                                       */
+/* ------------------------------------------------------------------------- */
+
+@Composable
+private fun CompressionTopBar(onBack: () -> Unit, enabled: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(FitsizeColor.Background)
+            .statusBarsPadding()
+            .padding(horizontal = Space.gutter, vertical = Space.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconAction(
+            icon = R.drawable.ic_arrow_back,
+            contentDescription = stringResource(R.string.back),
+            onClick = { if (enabled) onBack() },
+            tint = if (enabled) FitsizeColor.InkSoft else FitsizeColor.Faint,
         )
     }
 }
 
 @Composable
-private fun SelectedVideoCard(info: VideoInfo) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = FitsizeCard,
-        border = BorderStroke(1.dp, FitsizeBorder),
+private fun CompressionActionBar(enabled: Boolean, onCompress: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(FitsizeColor.Background),
     ) {
+        HairLine()
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = Space.gutter, vertical = Space.sm),
         ) {
-            Text(
-                text = "SELECTED VIDEO",
-                color = Color(0xFF98A2B3),
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 0.8.sp,
-            )
-
-            Spacer(Modifier.height(7.dp))
-
-            Text(
-                text = "${info.width} × ${info.height}",
-                color = FitsizeInk,
-                fontSize = 21.sp,
-                lineHeight = 25.sp,
-                fontWeight = FontWeight.ExtraBold,
-            )
-
-            Spacer(Modifier.height(5.dp))
-
-            Text(
-                text = buildString {
-                    append(formatDuration(info.durationMs))
-                    if (info.sourceBytes > 0L) {
-                        append("  •  ")
-                        append(formatSize(info.sourceBytes))
-                    }
-                },
-                color = FitsizeMuted,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
+            PrimaryButton(
+                text = stringResource(R.string.cta_compress),
+                onClick = onCompress,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabled,
             )
         }
     }
 }
 
-@Composable
-private fun PresetCard(
-    preset: CompressionPreset,
-    selected: Boolean,
-    estimate: Long,
-    onClick: () -> Unit,
-) {
-    val background = if (selected) FitsizeAccentSoft else FitsizeCard
-    val border = if (selected) FitsizeAccent else FitsizeBorder
+/* ------------------------------------------------------------------------- */
+/* Source summary                                                             */
+/* ------------------------------------------------------------------------- */
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = background,
-        border = BorderStroke(if (selected) 1.5.dp else 1.dp, border),
+@Composable
+private fun SelectedVideoCard(videoUri: Uri, info: VideoInfo?, failed: Boolean) {
+    val thumbnail by rememberVideoThumbnail(videoUri)
+
+    FitsizeCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = Space.md,
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 17.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .size(20.dp)
-                    .background(
-                        color = if (selected) FitsizeAccent else Color.Transparent,
-                        shape = CircleShape,
-                    )
-                    .then(
-                        if (selected) {
-                            Modifier
-                        } else {
-                            Modifier.background(Color(0xFFF2F4F7), CircleShape)
-                        }
-                    ),
+                    .size(width = 104.dp, height = 72.dp)
+                    .clip(FitsizeShape.small)
+                    .background(FitsizeColor.SurfaceMuted),
                 contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(if (selected) 7.dp else 8.dp)
-                        .background(
-                            color = if (selected) Color.White else Color(0xFFB8BEC9),
-                            shape = CircleShape,
-                        ),
-                )
+                val bitmap = thumbnail
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_video_file),
+                        contentDescription = null,
+                        tint = FitsizeColor.Faint,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+
+                if (info != null && info.durationMs > 0L) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(6.dp)
+                            .clip(FitsizeShape.chip)
+                            .background(Color(0xCC0F1222))
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = Fmt.duration(info.durationMs),
+                            style = FitsizeType.micro,
+                            color = Color.White,
+                        )
+                    }
+                }
             }
 
-            Spacer(Modifier.size(13.dp))
+            Spacer(Modifier.width(Space.sm))
 
-            Column(
-                modifier = Modifier.weight(1f),
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Eyebrow(text = stringResource(R.string.selected_video))
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    text = preset.title,
-                    color = FitsizeInk,
-                    fontSize = 16.sp,
-                    lineHeight = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    text = when {
+                        info != null -> Fmt.resolution(
+                            info.width,
+                            info.height,
+                            stringResource(R.string.unknown),
+                        )
+                        failed -> stringResource(R.string.unknown)
+                        else -> stringResource(R.string.reading_video)
+                    },
+                    style = FitsizeType.cardTitle,
+                    color = FitsizeColor.Ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = preset.subtitle,
-                    color = FitsizeMuted,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
+                    text = if (info != null && info.sourceBytes > 0L) {
+                        Fmt.bytes(info.sourceBytes)
+                    } else {
+                        "—"
+                    },
+                    style = FitsizeType.supporting,
+                    color = FitsizeColor.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
-            Column(
-                horizontalAlignment = Alignment.End,
-            ) {
+            if (info != null && info.height > 0) {
+                Spacer(Modifier.width(Space.xs))
+                TintedPill(text = Fmt.resolutionBadge(info.height))
+            }
+        }
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Preset row                                                                 */
+/* ------------------------------------------------------------------------- */
+
+@Composable
+private fun PresetRow(
+    preset: CompressionPreset,
+    selected: Boolean,
+    estimateBytes: Long?,
+    sourceBytes: Long,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val fraction = if (estimateBytes != null && sourceBytes > 0L) {
+        (estimateBytes.toFloat() / sourceBytes.toFloat()).coerceIn(0.06f, 1f)
+    } else {
+        0f
+    }
+
+    FitsizeCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        clickEnabled = enabled,
+        role = Role.RadioButton,
+        shape = FitsizeShape.large,
+        color = if (selected) FitsizeColor.IndigoSoft else FitsizeColor.Surface,
+        border = if (selected) FitsizeColor.Indigo else FitsizeColor.Border,
+        elevation = if (selected) 8.dp else 4.dp,
+        contentPadding = Space.md,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SelectionDot(selected = selected)
+
+            Spacer(Modifier.width(Space.sm))
+
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "EST.",
-                    color = Color(0xFF98A2B3),
-                    fontSize = 9.sp,
-                    lineHeight = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.6.sp,
+                    text = stringResource(presetTitleRes(preset)),
+                    style = FitsizeType.cardTitle,
+                    color = FitsizeColor.Ink,
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "≈ ${formatMb(estimate)} MB",
-                    color = if (selected) FitsizeAccent else FitsizeInk,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    text = stringResource(presetBodyRes(preset)),
+                    style = FitsizeType.supporting,
+                    color = FitsizeColor.Muted,
+                )
+
+                if (fraction > 0f) {
+                    Spacer(Modifier.height(Space.xs))
+                    SizeBar(fraction = fraction, selected = selected)
+                }
+            }
+
+            Spacer(Modifier.width(Space.xs))
+
+            Column(horizontalAlignment = Alignment.End) {
+                Eyebrow(text = stringResource(R.string.estimate_short))
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = if (estimateBytes != null) {
+                        stringResource(R.string.estimate_value, Fmt.estimate(estimateBytes))
+                    } else {
+                        "—"
+                    },
+                    style = FitsizeType.cardTitle,
+                    color = if (selected) FitsizeColor.Indigo else FitsizeColor.Ink,
+                    maxLines = 1,
                 )
             }
         }
@@ -387,237 +465,136 @@ private fun PresetCard(
 }
 
 @Composable
-private fun ResultDialog(
-    context: Context,
-    result: CompressionResult,
-    onCompressAnother: () -> Unit,
-) {
-    val savedBytes = (result.sourceBytes - result.outputBytes).coerceAtLeast(0L)
-    val savedPercent = if (result.sourceBytes > 0L) {
-        (
-            (1.0 - result.outputBytes.toDouble() / result.sourceBytes.toDouble()) * 100.0
-        ).coerceIn(0.0, 100.0)
-    } else {
-        0.0
-    }
-
-    Dialog(
-        onDismissRequest = {},
-        properties = DialogProperties(
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false,
-        ),
+private fun SelectionDot(selected: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .clip(FitsizeShape.chip)
+            .background(if (selected) FitsizeColor.Indigo else FitsizeColor.SurfaceMuted),
+        contentAlignment = Alignment.Center,
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.98f)
-                .widthIn(max = 430.dp),
-            shape = RoundedCornerShape(30.dp),
-            color = FitsizeCard,
-            border = BorderStroke(1.dp, FitsizeBorder),
-            shadowElevation = 10.dp,
-        ) {
-            Column(
+        if (selected) {
+            Icon(
+                painter = painterResource(R.drawable.ic_check),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(14.dp),
+            )
+        } else {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, end = 20.dp, top = 22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .background(FitsizeSuccessSoft, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "✓",
-                            color = FitsizeSuccess,
-                            fontSize = 28.sp,
-                            lineHeight = 30.sp,
-                            fontWeight = FontWeight.Black,
-                        )
-                    }
-
-                    Spacer(Modifier.height(13.dp))
-
-                    Text(
-                        text = "Great! Your video is ready.",
-                        color = FitsizeInk,
-                        fontSize = 24.sp,
-                        lineHeight = 29.sp,
-                        fontWeight = FontWeight.Black,
-                    )
-
-                    Spacer(Modifier.height(7.dp))
-
-                    Text(
-                        text = "Smaller file. Same moment. Ready to share.",
-                        color = FitsizeMuted,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                    )
-
-                    Spacer(Modifier.height(18.dp))
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        color = FitsizeAccentSoft,
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(17.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = "${formatSize(result.sourceBytes)}  →  ${formatSize(result.outputBytes)}",
-                                color = FitsizeInk,
-                                fontSize = 21.sp,
-                                lineHeight = 25.sp,
-                                fontWeight = FontWeight.Black,
-                            )
-
-                            Spacer(Modifier.height(5.dp))
-
-                            Text(
-                                text = if (savedBytes > 0L) {
-                                    "You saved ${formatSize(savedBytes)}  •  ${
-                                        String.format(Locale.US, "%.0f", savedPercent)
-                                    }% smaller"
-                                } else {
-                                    "Compression complete"
-                                },
-                                color = FitsizeAccent,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(11.dp))
-
-                    Text(
-                        text = "${result.preset.title}  •  ${
-                            String.format(Locale.US, "%.1f", result.elapsedMs / 1000.0)
-                        }s",
-                        color = Color(0xFF98A2B3),
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-
-                    Spacer(Modifier.height(17.dp))
-
-                    Button(
-                        onClick = { shareVideo(context, result.outputUri) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = FitsizeAccent,
-                            contentColor = Color.White,
-                        ),
-                    ) {
-                        Text(
-                            text = "SHARE VIDEO",
-                            fontWeight = FontWeight.ExtraBold,
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    OutlinedButton(
-                        onClick = { openVideo(context, result.outputUri) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, FitsizeBorder),
-                    ) {
-                        Text(
-                            text = "OPEN VIDEO",
-                            color = FitsizeInk,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    TextButton(
-                        onClick = onCompressAnother,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "Compress another video",
-                            color = FitsizeAccent,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Text(
-                        text = "Advertisement",
-                        color = Color(0xFF98A2B3),
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-
-                Spacer(Modifier.height(7.dp))
-
-                FitsizeMrecAd(
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(18.dp))
-            }
+                    .size(9.dp)
+                    .clip(FitsizeShape.chip)
+                    .background(FitsizeColor.Border),
+            )
         }
     }
 }
 
-private fun openVideo(context: Context, uri: Uri) {
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "video/mp4")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    runCatching {
-        context.startActivity(intent)
-    }
-}
-
-private fun shareVideo(context: Context, uri: Uri) {
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "video/mp4"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(
-        Intent.createChooser(intent, "Share compressed video")
-    )
-}
-
-private fun formatMb(bytes: Long): String =
-    String.format(Locale.US, "%.1f", bytes / 1024.0 / 1024.0)
-
-private fun formatSize(bytes: Long): String {
-    val mib = bytes / 1024.0 / 1024.0
-    return if (mib >= 1024.0) {
-        String.format(Locale.US, "%.2f GB", mib / 1024.0)
-    } else {
-        String.format(Locale.US, "%.1f MB", mib)
+/**
+ * Relative-size bar. Reads as "how much of the original is left" at a glance,
+ * which is a far more useful comparison between presets than three numbers.
+ */
+@Composable
+private fun SizeBar(fraction: Float, selected: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(5.dp)
+            .clip(FitsizeShape.chip)
+            .background(if (selected) Color.White else FitsizeColor.SurfaceMuted),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction)
+                .height(5.dp)
+                .clip(FitsizeShape.chip)
+                .background(
+                    if (selected) FitsizeColor.Indigo else FitsizeColor.Indigo.copy(alpha = 0.35f),
+                ),
+        )
     }
 }
 
-private fun formatDuration(ms: Long): String {
-    val total = ms / 1000L
-    return "%d:%02d".format(total / 60L, total % 60L)
+@Composable
+private fun ErrorCard(detail: String?) {
+    FitsizeCard(
+        modifier = Modifier.fillMaxWidth(),
+        color = FitsizeColor.DangerSoft,
+        border = FitsizeColor.DangerBorder,
+        elevation = 0.dp,
+        contentPadding = Space.md,
+    ) {
+        Text(
+            text = stringResource(R.string.error_title),
+            style = FitsizeType.cardTitle,
+            color = FitsizeColor.Danger,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = stringResource(R.string.error_generic),
+            style = FitsizeType.supporting,
+            color = FitsizeColor.Danger.copy(alpha = 0.86f),
+        )
+        if (!detail.isNullOrBlank()) {
+            Spacer(Modifier.height(Space.xs))
+            Text(
+                text = detail,
+                style = FitsizeType.micro,
+                color = FitsizeColor.Danger.copy(alpha = 0.7f),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Preset copy                                                                */
+/* ------------------------------------------------------------------------- */
+
+private fun presetTitleRes(preset: CompressionPreset): Int = when (preset) {
+    CompressionPreset.BALANCED -> R.string.preset_balanced_title
+    CompressionPreset.SMALLER -> R.string.preset_smaller_title
+    CompressionPreset.SMALLEST -> R.string.preset_smallest_title
+}
+
+private fun presetBodyRes(preset: CompressionPreset): Int = when (preset) {
+    CompressionPreset.BALANCED -> R.string.preset_balanced_body
+    CompressionPreset.SMALLER -> R.string.preset_smaller_body
+    CompressionPreset.SMALLEST -> R.string.preset_smallest_body
+}
+
+/* ------------------------------------------------------------------------- */
+/* Preview                                                                    */
+/* ------------------------------------------------------------------------- */
+
+@Preview(name = "Preset row", widthDp = 360, showBackground = true)
+@Composable
+private fun PresetRowPreview() {
+    FitsizeTheme {
+        Column(
+            modifier = Modifier
+                .background(FitsizeColor.Background)
+                .padding(Space.gutter),
+            verticalArrangement = Arrangement.spacedBy(Space.xs),
+        ) {
+            PresetRow(
+                preset = CompressionPreset.BALANCED,
+                selected = true,
+                estimateBytes = 612L * 1024L * 1024L,
+                sourceBytes = 1024L * 1024L * 1024L,
+                enabled = true,
+                onClick = {},
+            )
+            PresetRow(
+                preset = CompressionPreset.SMALLER,
+                selected = false,
+                estimateBytes = 320L * 1024L * 1024L,
+                sourceBytes = 1024L * 1024L * 1024L,
+                enabled = true,
+                onClick = {},
+            )
+        }
+    }
 }

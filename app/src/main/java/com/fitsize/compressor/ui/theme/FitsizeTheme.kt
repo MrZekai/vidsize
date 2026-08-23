@@ -1,47 +1,76 @@
 package com.fitsize.compressor.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-val FitsizeInk = Color(0xFF101828)
-val FitsizeMuted = Color(0xFF667085)
-val FitsizeSoft = Color(0xFFF7F8FC)
-val FitsizeCard = Color(0xFFFFFFFF)
-val FitsizeBorder = Color(0xFFE7EAF0)
-val FitsizeAccent = Color(0xFF6657E8)
-val FitsizeAccentStrong = Color(0xFF5546D8)
-val FitsizeAccentSoft = Color(0xFFF0EEFF)
-val FitsizeBlueSoft = Color(0xFFEEF6FF)
-val FitsizeSuccess = Color(0xFF16A36A)
-val FitsizeSuccessSoft = Color(0xFFEAF8F1)
-
-private val Light = lightColorScheme(
-    primary = FitsizeAccent,
+private val FitsizeColorScheme = lightColorScheme(
+    primary = FitsizeColor.Indigo,
     onPrimary = Color.White,
-    primaryContainer = FitsizeAccentSoft,
-    onPrimaryContainer = FitsizeInk,
-    secondary = Color(0xFF2E77D0),
-    tertiary = FitsizeSuccess,
-    background = FitsizeSoft,
-    onBackground = FitsizeInk,
-    surface = FitsizeCard,
-    onSurface = FitsizeInk,
-    surfaceVariant = Color(0xFFF3F5F9),
-    onSurfaceVariant = FitsizeMuted,
-    outline = Color(0xFFD6DAE3),
-    outlineVariant = FitsizeBorder,
-    error = Color(0xFFB42318),
+    primaryContainer = FitsizeColor.IndigoSoft,
+    onPrimaryContainer = FitsizeColor.Ink,
+
+    secondary = FitsizeColor.Cyan,
+    onSecondary = Color.White,
+    secondaryContainer = FitsizeColor.CyanSoft,
+    onSecondaryContainer = FitsizeColor.Ink,
+
+    tertiary = FitsizeColor.Mint,
+    onTertiary = Color.White,
+    tertiaryContainer = FitsizeColor.MintSoft,
+    onTertiaryContainer = FitsizeColor.Ink,
+
+    background = FitsizeColor.Background,
+    onBackground = FitsizeColor.Ink,
+
+    surface = FitsizeColor.Surface,
+    onSurface = FitsizeColor.Ink,
+    surfaceVariant = FitsizeColor.SurfaceMuted,
+    onSurfaceVariant = FitsizeColor.Muted,
+
+    outline = FitsizeColor.BorderStrong,
+    outlineVariant = FitsizeColor.Border,
+
+    error = FitsizeColor.Danger,
+    onError = Color.White,
+    errorContainer = FitsizeColor.DangerSoft,
+    onErrorContainer = FitsizeColor.Danger,
+
+    scrim = FitsizeColor.Scrim,
 )
 
+private val FitsizeShapes = Shapes(
+    extraSmall = RoundedCornerShape(Radius.sm),
+    small = RoundedCornerShape(Radius.sm),
+    medium = RoundedCornerShape(Radius.md),
+    large = RoundedCornerShape(Radius.lg),
+    extraLarge = RoundedCornerShape(Radius.xl),
+)
+
+/**
+ * Fitsize theme.
+ *
+ * V1 is deliberately **light only**. The product identity was approved as Light
+ * Minimal, and a half-finished dark palette would ship a second, unreviewed
+ * visual language. The device's dark-mode setting is therefore ignored here on
+ * purpose — see [com.fitsize.compressor.MainActivity], which pins the system
+ * bars to dark icons so the status bar stays legible over the light canvas even
+ * when the phone itself is in dark mode.
+ *
+ * A dark theme is a V2 item: add a `darkColorScheme` alongside this one and
+ * switch on `isSystemInDarkTheme()`. Nothing else in the UI needs to change,
+ * because every screen reads its colours from [FitsizeColor] rather than
+ * hard-coding hex values.
+ */
 @Composable
 fun FitsizeTheme(content: @Composable () -> Unit) {
-    // V1 visual direction is intentionally Light Minimal.
-    // Device dark mode must not silently replace the approved product identity.
     MaterialTheme(
-        colorScheme = Light,
-        typography = MaterialTheme.typography,
+        colorScheme = FitsizeColorScheme,
+        typography = FitsizeTypography,
+        shapes = FitsizeShapes,
         content = content,
     )
 }

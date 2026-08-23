@@ -11,8 +11,8 @@ android {
         applicationId = "com.fitsize.compressor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.2.0"
+        versionCode = 2
+        versionName = "0.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -52,6 +52,7 @@ dependencies {
     implementation("androidx.compose.ui:ui:1.11.4")
     implementation("androidx.compose.ui:ui-tooling-preview:1.11.4")
     implementation("androidx.compose.foundation:foundation:1.11.4")
+    implementation("androidx.compose.animation:animation:1.11.4")
     implementation("androidx.compose.material3:material3:1.4.0")
 
     implementation("androidx.media3:media3-transformer:1.11.0")

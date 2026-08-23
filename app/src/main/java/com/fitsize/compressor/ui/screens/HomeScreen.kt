@@ -1,10 +1,5 @@
 package com.fitsize.compressor.ui.screens
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,365 +13,463 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.fitsize.compressor.R
-import com.fitsize.compressor.ui.components.FitsizeBannerAd
-import com.fitsize.compressor.ui.theme.FitsizeAccent
-import com.fitsize.compressor.ui.theme.FitsizeAccentSoft
-import com.fitsize.compressor.ui.theme.FitsizeBlueSoft
-import com.fitsize.compressor.ui.theme.FitsizeBorder
-import com.fitsize.compressor.ui.theme.FitsizeCard
-import com.fitsize.compressor.ui.theme.FitsizeInk
-import com.fitsize.compressor.ui.theme.FitsizeMuted
-import com.fitsize.compressor.ui.theme.FitsizeSoft
-import com.fitsize.compressor.ui.theme.FitsizeSuccess
-import com.fitsize.compressor.ui.theme.FitsizeSuccessSoft
+import com.fitsize.compressor.data.history.CompressionHistoryEntry
+import com.fitsize.compressor.data.history.HistorySummary
+import com.fitsize.compressor.ui.components.AnchoredBannerSlot
+import com.fitsize.compressor.ui.components.Eyebrow
+import com.fitsize.compressor.ui.components.FitsizeCard
+import com.fitsize.compressor.ui.components.HeroArt
+import com.fitsize.compressor.ui.components.IconAction
+import com.fitsize.compressor.ui.components.PrimaryButton
+import com.fitsize.compressor.ui.components.SavingsChart
+import com.fitsize.compressor.ui.components.SectionHeader
+import com.fitsize.compressor.ui.components.TertiaryButton
+import com.fitsize.compressor.ui.components.TintedPill
+import com.fitsize.compressor.ui.format.Fmt
+import com.fitsize.compressor.ui.theme.FitsizeColor
+import com.fitsize.compressor.ui.theme.FitsizeShape
+import com.fitsize.compressor.ui.theme.FitsizeTheme
+import com.fitsize.compressor.ui.theme.FitsizeType
+import com.fitsize.compressor.ui.theme.Space
 
+/**
+ * Home.
+ *
+ * Layout contract:
+ *  - A fixed app bar that clears the status bar via [statusBarsPadding].
+ *  - A single scrolling content column between the bar and the ad.
+ *  - An anchored ad strip pinned above the navigation bar.
+ *
+ * The bar and the ad never scroll; only the content between them does. That is
+ * what makes the screen feel like an app rather than a long web page, and it is
+ * also what keeps the banner in a stable, non-accidental position.
+ */
 @Composable
-fun HomeScreen(onVideoSelected: (Uri) -> Unit) {
-    val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
-        if (uri != null) onVideoSelected(uri)
-    }
+fun HomeScreen(
+    summary: HistorySummary,
+    onSelectVideo: () -> Unit,
+    onClearHistory: () -> Unit,
+) {
+    var showSettings by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(FitsizeSoft)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
+            .background(FitsizeColor.Background),
     ) {
-        Spacer(Modifier.height(18.dp))
+        HomeTopBar(onSettings = { showSettings = true })
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = "Fitsize",
-                    color = FitsizeInk,
-                    fontSize = 30.sp,
-                    lineHeight = 34.sp,
-                    fontWeight = FontWeight.Black,
-                )
-                Text(
-                    text = "Video Compressor",
-                    color = FitsizeMuted,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = FitsizeSuccessSoft,
-                border = BorderStroke(1.dp, Color(0xFFCFEEDD)),
-            ) {
-                Text(
-                    text = "LOCAL",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                    color = FitsizeSuccess,
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.7.sp,
-                )
-            }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        val heroShape = RoundedCornerShape(30.dp)
-        Box(
+        Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFFF2F0FF),
-                            Color(0xFFF5F8FF),
-                            Color(0xFFEEF7FF),
-                        ),
-                    ),
-                    shape = heroShape,
-                )
-                .padding(24.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Space.gutter),
         ) {
-            Column {
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = Color.White.copy(alpha = 0.82f),
-                    border = BorderStroke(1.dp, Color.White),
-                ) {
-                    Text(
-                        text = "VIDEO COMPRESSOR",
-                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-                        color = FitsizeAccent,
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 1.0.sp,
-                    )
-                }
+            Spacer(Modifier.height(Space.xs))
 
-                Spacer(Modifier.height(16.dp))
+            HeroPanel(onSelectVideo = onSelectVideo)
 
-                Text(
-                    text = "Make your video\nsmaller.",
-                    color = FitsizeInk,
-                    fontSize = 38.sp,
-                    lineHeight = 41.sp,
-                    fontWeight = FontWeight.Black,
+            Spacer(Modifier.height(Space.sm))
+
+            TrustRow()
+
+            Spacer(Modifier.height(Space.xxl))
+
+            SectionHeader(
+                title = stringResource(R.string.section_recent),
+                action = {
+                    if (!summary.isEmpty) {
+                        TertiaryButton(
+                            text = stringResource(R.string.clear_history),
+                            onClick = onClearHistory,
+                            color = FitsizeColor.Muted,
+                        )
+                    }
+                },
+            )
+
+            Spacer(Modifier.height(Space.sm))
+
+            RecentPanel(entries = summary.entries)
+
+            Spacer(Modifier.height(Space.sm))
+
+            StorageSavedPanel(summary = summary)
+
+            Spacer(Modifier.height(Space.xl))
+        }
+
+        AnchoredBannerSlot(modifier = Modifier.navigationBarsPadding())
+    }
+
+    if (showSettings) {
+        SettingsSheet(onDismiss = { showSettings = false })
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* App bar                                                                    */
+/* ------------------------------------------------------------------------- */
+
+@Composable
+private fun HomeTopBar(onSettings: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(FitsizeColor.Background)
+            .statusBarsPadding()
+            .padding(horizontal = Space.gutter, vertical = Space.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.app_name),
+                style = FitsizeType.wordmark,
+                color = FitsizeColor.Ink,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(R.string.home_subtitle),
+                style = FitsizeType.caption,
+                color = FitsizeColor.Muted,
+            )
+        }
+
+        IconAction(
+            icon = R.drawable.ic_settings,
+            contentDescription = stringResource(R.string.home_settings),
+            onClick = onSettings,
+        )
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Hero                                                                       */
+/* ------------------------------------------------------------------------- */
+
+@Composable
+private fun HeroPanel(onSelectVideo: () -> Unit) {
+    FitsizeCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = FitsizeShape.hero,
+        color = FitsizeColor.SurfaceTint,
+        border = FitsizeColor.IndigoBorder,
+        elevation = 0.dp,
+        contentPadding = Space.lg,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                TintedPill(
+                    text = stringResource(R.string.hero_eyebrow),
+                    background = FitsizeColor.Surface,
+                    border = FitsizeColor.IndigoBorder,
+                    foreground = FitsizeColor.Indigo,
+                    uppercase = true,
                 )
 
-                Spacer(Modifier.height(11.dp))
+                Spacer(Modifier.height(Space.sm))
 
                 Text(
-                    text = "Reduce file size while keeping the quality you need.",
-                    color = FitsizeMuted,
-                    fontSize = 16.sp,
-                    lineHeight = 23.sp,
+                    text = stringResource(R.string.hero_headline),
+                    style = FitsizeType.hero,
+                    color = FitsizeColor.Ink,
                 )
 
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(Space.xs))
 
-                Button(
-                    onClick = {
-                        picker.launch(PickVisualMediaRequest(PickVisualMedia.VideoOnly))
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(58.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = FitsizeAccent,
-                        contentColor = Color.White,
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_video_file),
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp),
-                    )
-                    Spacer(Modifier.size(10.dp))
-                    Text(
-                        text = "SELECT VIDEO",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.5.sp,
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.hero_body),
+                    style = FitsizeType.supporting,
+                    color = FitsizeColor.Muted,
+                )
             }
+
+            Spacer(Modifier.width(Space.xs))
+
+            HeroArt(size = 96.dp)
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(Space.lg))
 
-        Row(
+        PrimaryButton(
+            text = stringResource(R.string.cta_select_video),
+            onClick = onSelectVideo,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            TrustPill(
-                text = "On-device",
-                modifier = Modifier.weight(1f),
-                background = FitsizeAccentSoft,
-                foreground = FitsizeAccent,
-            )
-            TrustPill(
-                text = "Fast",
-                modifier = Modifier.weight(1f),
-                background = FitsizeBlueSoft,
-                foreground = Color(0xFF2E77D0),
-            )
-            TrustPill(
-                text = "No watermark",
-                modifier = Modifier.weight(1f),
-                background = FitsizeSuccessSoft,
-                foreground = FitsizeSuccess,
-            )
-        }
-
-        Spacer(Modifier.height(26.dp))
-
-        Text(
-            text = "Advertisement",
-            modifier = Modifier.padding(start = 2.dp, bottom = 7.dp),
-            color = Color(0xFF98A2B3),
-            fontSize = 10.sp,
-            lineHeight = 12.sp,
-            fontWeight = FontWeight.Medium,
+            leadingIcon = R.drawable.ic_video_file,
+            trailingIcon = R.drawable.ic_chevron_right,
         )
-
-        FitsizeBannerAd(modifier = Modifier.fillMaxWidth())
-
-        Spacer(Modifier.height(26.dp))
-
-        Text(
-            text = "Your activity",
-            color = FitsizeInk,
-            fontSize = 18.sp,
-            lineHeight = 22.sp,
-            fontWeight = FontWeight.ExtraBold,
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            ActivityCard(
-                modifier = Modifier.weight(1f),
-                eyebrow = "RECENT",
-                value = "No videos yet",
-                supporting = "Compressed videos will appear here.",
-                icon = R.drawable.ic_history,
-                accent = FitsizeAccent,
-                accentSoft = FitsizeAccentSoft,
-            )
-
-            ActivityCard(
-                modifier = Modifier.weight(1f),
-                eyebrow = "TOTAL SAVED",
-                value = "0 MB",
-                supporting = "Your storage savings will add up here.",
-                icon = null,
-                accent = FitsizeSuccess,
-                accentSoft = FitsizeSuccessSoft,
-            )
-        }
-
-        Spacer(Modifier.height(30.dp))
     }
 }
 
 @Composable
-private fun TrustPill(
+private fun TrustRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Space.xs),
+    ) {
+        TrustItem(
+            text = stringResource(R.string.trust_on_device),
+            modifier = Modifier.weight(1f),
+            background = FitsizeColor.IndigoSoft,
+            border = FitsizeColor.IndigoBorder,
+            foreground = FitsizeColor.Indigo,
+        )
+        TrustItem(
+            text = stringResource(R.string.trust_fast),
+            modifier = Modifier.weight(1f),
+            background = FitsizeColor.CyanSoft,
+            border = FitsizeColor.CyanBorder,
+            foreground = FitsizeColor.Cyan,
+        )
+        TrustItem(
+            text = stringResource(R.string.trust_no_watermark),
+            modifier = Modifier.weight(1f),
+            background = FitsizeColor.MintSoft,
+            border = FitsizeColor.MintBorder,
+            foreground = FitsizeColor.Mint,
+        )
+    }
+}
+
+@Composable
+private fun TrustItem(
     text: String,
     modifier: Modifier,
     background: Color,
+    border: Color,
     foreground: Color,
 ) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = background,
+    Box(
+        modifier = modifier
+            .clip(FitsizeShape.chip)
+            .background(background)
+            .padding(horizontal = Space.xs, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = text,
-                color = foreground,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                fontWeight = FontWeight.Bold,
-            )
+        Text(
+            text = text,
+            style = FitsizeType.caption,
+            color = foreground,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Activity                                                                   */
+/* ------------------------------------------------------------------------- */
+
+@Composable
+private fun RecentPanel(entries: List<CompressionHistoryEntry>) {
+    FitsizeCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = Space.md,
+    ) {
+        if (entries.isEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(FitsizeShape.small)
+                        .background(FitsizeColor.SurfaceMuted),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_history),
+                        contentDescription = null,
+                        tint = FitsizeColor.Faint,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(Space.sm))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.recent_empty_title),
+                        style = FitsizeType.cardTitle,
+                        color = FitsizeColor.Ink,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.recent_empty_body),
+                        style = FitsizeType.supporting,
+                        color = FitsizeColor.Muted,
+                    )
+                }
+            }
+        } else {
+            entries.take(MAX_RECENT_ROWS).forEachIndexed { index, entry ->
+                if (index > 0) Spacer(Modifier.height(Space.sm))
+                RecentRow(entry)
+            }
         }
     }
 }
 
 @Composable
-private fun ActivityCard(
-    modifier: Modifier,
-    eyebrow: String,
-    value: String,
-    supporting: String,
-    icon: Int?,
-    accent: Color,
-    accentSoft: Color,
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        color = FitsizeCard,
-        border = BorderStroke(1.dp, FitsizeBorder),
+private fun RecentRow(entry: CompressionHistoryEntry) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+                .size(40.dp)
+                .clip(FitsizeShape.small)
+                .background(FitsizeColor.IndigoSoft),
+            contentAlignment = Alignment.Center,
         ) {
-            if (icon != null) {
-                Surface(
-                    shape = RoundedCornerShape(13.dp),
-                    color = accentSoft,
-                ) {
-                    Icon(
-                        painter = painterResource(icon),
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier
-                            .padding(9.dp)
-                            .size(20.dp),
-                    )
-                }
-                Spacer(Modifier.height(18.dp))
-            } else {
-                Surface(
-                    shape = RoundedCornerShape(13.dp),
-                    color = accentSoft,
-                ) {
-                    Text(
-                        text = "↓",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        color = accent,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
-                    )
-                }
-                Spacer(Modifier.height(18.dp))
-            }
-
-            Text(
-                text = eyebrow,
-                color = Color(0xFF98A2B3),
-                fontSize = 9.sp,
-                lineHeight = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 0.8.sp,
-            )
-
-            Spacer(Modifier.height(5.dp))
-
-            Text(
-                text = value,
-                color = FitsizeInk,
-                fontSize = 18.sp,
-                lineHeight = 21.sp,
-                fontWeight = FontWeight.ExtraBold,
-            )
-
-            Spacer(Modifier.height(6.dp))
-
-            Text(
-                text = supporting,
-                color = FitsizeMuted,
-                fontSize = 11.sp,
-                lineHeight = 15.sp,
+            Icon(
+                painter = painterResource(R.drawable.ic_video_file),
+                contentDescription = null,
+                tint = FitsizeColor.Indigo,
+                modifier = Modifier.size(20.dp),
             )
         }
+
+        Spacer(Modifier.width(Space.sm))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = entry.displayName,
+                style = FitsizeType.cardTitle,
+                color = FitsizeColor.Ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(
+                    R.string.recent_row_summary,
+                    Fmt.bytes(entry.sourceBytes),
+                    Fmt.bytes(entry.outputBytes),
+                ),
+                style = FitsizeType.supporting,
+                color = FitsizeColor.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        Spacer(Modifier.width(Space.xs))
+
+        TintedPill(
+            text = "−${Fmt.percentSmaller(entry.sourceBytes, entry.outputBytes)}%",
+            background = FitsizeColor.MintSoft,
+            border = FitsizeColor.MintBorder,
+            foreground = FitsizeColor.Mint,
+        )
+    }
+}
+
+@Composable
+private fun StorageSavedPanel(summary: HistorySummary) {
+    FitsizeCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = Space.md,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Eyebrow(text = stringResource(R.string.storage_saved_label))
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = Fmt.bytes(summary.totalSavedBytes),
+                    style = FitsizeType.hero,
+                    color = FitsizeColor.Indigo,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = if (summary.isEmpty) {
+                        stringResource(R.string.storage_saved_empty)
+                    } else {
+                        pluralStringResource(
+                            R.plurals.video_count,
+                            summary.videoCount,
+                            summary.videoCount,
+                        )
+                    },
+                    style = FitsizeType.supporting,
+                    color = FitsizeColor.Muted,
+                )
+            }
+
+            Spacer(Modifier.width(Space.md))
+
+            SavingsChart(
+                values = summary.entries.map { it.savedBytes }.reversed(),
+                modifier = Modifier.weight(0.9f),
+            )
+        }
+    }
+}
+
+private const val MAX_RECENT_ROWS = 3
+
+/* ------------------------------------------------------------------------- */
+/* Previews                                                                   */
+/* ------------------------------------------------------------------------- */
+
+@Preview(name = "Home · empty · 360dp", widthDp = 360, heightDp = 760, showBackground = true)
+@Composable
+private fun HomeEmptyPreview() {
+    FitsizeTheme {
+        HomeScreen(
+            summary = HistorySummary.Empty,
+            onSelectVideo = {},
+            onClearHistory = {},
+        )
+    }
+}
+
+@Preview(name = "Home · with history · 412dp", widthDp = 412, heightDp = 880, showBackground = true)
+@Composable
+private fun HomeWithHistoryPreview() {
+    val sample = listOf(
+        CompressionHistoryEntry(1, "", "Fitsize_1042.mp4", 1_096_000_000L, 612_000_000L, "Balanced", 0L),
+        CompressionHistoryEntry(2, "", "Fitsize_0931.mp4", 240_000_000L, 96_000_000L, "Smaller", 0L),
+        CompressionHistoryEntry(3, "", "Fitsize_0820.mp4", 88_000_000L, 24_000_000L, "Smallest", 0L),
+    )
+    FitsizeTheme {
+        HomeScreen(
+            summary = HistorySummary(
+                entries = sample,
+                totalSavedBytes = sample.sumOf { it.savedBytes },
+                videoCount = sample.size,
+            ),
+            onSelectVideo = {},
+            onClearHistory = {},
+        )
     }
 }

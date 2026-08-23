@@ -49,6 +49,35 @@ Light Minimal, premium utility design. One dominant **Compress Video** action. N
 - Google Mobile Ads SDK
 - Target API 36
 
+## Build
+
+```bash
+./gradlew :app:assembleDebug          # debug APK -> app/build/outputs/apk/debug/
+./gradlew :app:testDebugUnitTest      # planner unit tests
+./gradlew :app:assembleRelease        # minified release build
+```
+
+Requires JDK 17+ and the Android SDK with API 36 installed. Android Studio users
+can simply open the project root and run the `app` configuration.
+
+## UI
+
+The UI layer was rebuilt in `v0.3` around a real design system. See
+[`docs/UI_SPEC.md`](docs/UI_SPEC.md) for the tokens, the screen architecture and
+the ad placement rules.
+
+Direction: **Light Minimal**. Light theme only in V1, on every device, including
+phones set to dark mode.
+
 ## Current status
 
-`v0.2` — product direction corrected from target-MB compression to quality-profile compression. Monetization requirements are now locked as Home Banner + Result MREC + App Open. The code is an early source scaffold and still needs CI/build verification and real-device testing.
+`v0.3` — production-intent UI layer: design system (colour, spacing, type,
+shapes), redesigned Home and Compression screens, real encoder progress, a
+premium result sheet, local compression history, and an adaptive launcher icon.
+
+The compression engine (`media/CompressionEngine.kt`, `CompressionPlanner`,
+`VideoProbe`, MediaStore export) is unchanged apart from one additive, optional
+`onProgress` callback used to drive the progress ring.
+
+Still open before production: real-device testing across OEMs, AdMob production
+unit ids, UMP consent, and localisation beyond English.
