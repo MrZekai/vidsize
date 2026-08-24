@@ -1,10 +1,10 @@
-# Fitsize V1 Product Spec
+# Vidsize V1 Product Spec
 
 ## Core promise
 
 **Compress your video. Keep the quality you need.**
 
-Fitsize is a global Android video compressor. It reduces video file size locally on the device. It does not promise a specific final MB value.
+Vidsize is a global Android video compressor. It reduces video file size locally on the device. It does not promise a specific final MB value.
 
 ## Primary flow
 
@@ -20,7 +20,7 @@ The UI may show an **estimated** output size before compression, clearly marked 
 
 ## Home
 
-- Fitsize header + Settings
+- Vidsize header + Settings
 - Hero: Compress Video
 - Select Video CTA
 - AdMob banner/adaptive-banner region
@@ -63,7 +63,7 @@ No Pro tier and no subscription in V1. No rewarded or interstitial placement is 
 - Use only during a legitimate app loading/entry moment.
 - If loading completes before the ad is ready, continue to Home and skip the ad.
 - Apply a long cooldown; initial implementation target is at least 6 hours between App Open impressions.
-- Suppress around active compression/result transitions and system flows initiated by Fitsize.
+- Suppress around active compression/result transitions and system flows initiated by Vidsize.
 - Use Google test ad units until production setup.
 
 ## Non-goals for V1

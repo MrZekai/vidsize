@@ -1,8 +1,10 @@
-name: Android Debug Build
+name: Android QA Build
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - 'qa/**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -26,13 +28,37 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace
+      - name: Source policy audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          legacy_brand="fit""size"
+          legacy_package="com\\.fit""size"
+          if grep -RIniE "${legacy_brand}|${legacy_package}" app docs README.md store --exclude='*.png'; then
+            echo 'Legacy brand reference found.' >&2
+            exit 1
+          fi
+          ! grep -q 'FOREGROUND_SERVICE_DATA_SYNC' app/src/main/AndroidManifest.xml
+          ! grep -q 'foregroundServiceType="[^"]*dataSync' app/src/main/AndroidManifest.xml
+          grep -q 'android:allowBackup="false"' app/src/main/AndroidManifest.xml
+          grep -q 'minSdk = 29' app/build.gradle.kts
+          grep -q 'const val ENABLED = true' app/src/main/java/com/vidsize/compressor/ads/AppOpenAdPolicy.kt
+
+      - name: Unit tests, lint and debug APK
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
 
       - name: Upload debug APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fitsize-debug
+          name: vidsize-v060-qa-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vidsize-v060-lint
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore

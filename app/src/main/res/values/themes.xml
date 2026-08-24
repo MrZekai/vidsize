@@ -1,9 +1,18 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.Fitsize" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">sans</item>
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Launch theme.
+
+      Parented to a *Light* platform theme rather than a DayNight one on
+      purpose: Vidsize V1 is light-only, so the window must not flash a dark
+      background on a device in dark mode before Compose takes over.
+
+      The bars are transparent because MainActivity draws edge-to-edge and pins
+      the bar icon colour itself.
+    -->
+    <style name="Theme.Vidsize" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/vidsize_background</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/white</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>

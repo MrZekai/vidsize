@@ -4,14 +4,29 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- User-initiated video transcoding continues while the app is backgrounded. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
-        android:name=".FitsizeApplication"
-        android:allowBackup="true"
+        android:name=".VidsizeApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Fitsize">
+        android:localeConfig="@xml/locales_config"
+        android:theme="@style/Theme.Vidsize">
 
-        <!-- Google test App ID. Replace with the real AdMob App ID before production. -->
+        <!--
+          Google's TEST AdMob App ID.
+
+          Replace with the real one before the production release — see
+          docs/RELEASE_CHECKLIST.md section C. Shipping test ad units to
+          production means zero revenue; shipping a real ID before closed
+          testing risks invalid-traffic flags from your own taps.
+        -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713" />
@@ -32,5 +47,10 @@
                 <data android:mimeType="video/*" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".media.CompressionService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProcessing" />
     </application>
 </manifest>

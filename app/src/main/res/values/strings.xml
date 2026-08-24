@@ -1,3 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Fitsize</string>
+    <string name="app_name">Vidsize</string>
+
+    <!-- Not translated: legal endpoints. Update both if the domain changes. -->
+    <string name="url_privacy" translatable="false">https://mrzekai.github.io/vidsize/privacy.html</string>
+    <string name="url_terms" translatable="false">https://mrzekai.github.io/vidsize/terms.html</string>
+
+    <!-- Home -->
+    <string name="home_subtitle">Video Compressor</string>
+    <string name="home_settings">Settings</string>
+    <string name="hero_eyebrow">VIDEO COMPRESSOR</string>
+    <string name="hero_headline">Make your video smaller.</string>
+    <string name="hero_body">Reduce file size while keeping the quality you need.</string>
+    <string name="cta_select_video">SELECT VIDEO</string>
+    <string name="trust_on_device">On-device</string>
+    <string name="trust_fast">Fast</string>
+    <string name="trust_no_watermark">No watermark</string>
+
+    <!-- Activity -->
+    <string name="section_recent">Recent</string>
+    <string name="recent_empty_title">No videos yet</string>
+    <string name="recent_empty_body">Your compressed videos will show up here.</string>
+    <string name="recent_row_summary">%1$s → %2$s</string>
+    <string name="storage_saved_label">Storage saved</string>
+    <string name="storage_saved_empty">Compress a video to start saving space.</string>
+    <string name="clear_history">Clear</string>
+
+    <!-- Ads -->
+    <string name="ad_label">Advertisement</string>
+
+    <!-- Compression screen -->
+    <string name="compress_title">Choose compression</string>
+    <string name="compress_subtitle">Pick the balance you want between quality and file size.</string>
+    <string name="back">Back</string>
+    <string name="selected_video">SELECTED VIDEO</string>
+    <string name="label_resolution">RESOLUTION</string>
+    <string name="label_duration">DURATION</string>
+    <string name="label_size">ORIGINAL SIZE</string>
+    <string name="section_level">Compression level</string>
+    <string name="estimate_short">EST.</string>
+    <string name="estimate_value">≈ %1$s</string>
+    <string name="estimate_note">Estimates only. The final size depends on your video, its length and your device.</string>
+    <string name="cta_compress">COMPRESS VIDEO</string>
+    <string name="reading_video">Reading your video…</string>
+
+    <!-- Presets -->
+    <string name="preset_balanced_title">Balanced</string>
+    <string name="preset_balanced_body">Smaller file, strong quality</string>
+    <string name="preset_smaller_title">Smaller</string>
+    <string name="preset_smaller_body">More compression, good quality</string>
+    <string name="preset_smallest_title">Smallest</string>
+    <string name="preset_smallest_body">Maximum practical size reduction</string>
+
+    <!-- Pre-flight notices -->
+    <string name="notice_no_space_title">Not enough free space</string>
+    <string name="notice_no_space_body">This compression needs about %1$s free, and your device has %2$s. Free up some space and try again.</string>
+    <string name="notice_long_job_title">This is a big video</string>
+    <string name="notice_long_job_body">Compression may take several minutes. You can leave the app; it will continue in the background.</string>
+
+    <!-- Processing -->
+    <string name="processing_title">Compressing your video</string>
+    <string name="processing_body">You can leave Vidsize — compression will continue in the background.</string>
+    <string name="processing_preparing">Preparing…</string>
+    <string name="processing_finishing">Saving to your gallery…</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Errors -->
+    <string name="error_title">Compression didn\'t finish</string>
+    <string name="error_generic">This video couldn\'t be compressed on your device. Try a different compression level, or pick another video.</string>
+    <string name="error_storage">Your device ran out of space while compressing. Free up some space and try again.</string>
+    <string name="try_again">Try again</string>
+
+    <!-- Result -->
+    <string name="result_title">Great! Your video is ready 🎉</string>
+    <string name="result_transform">%1$s → %2$s</string>
+    <string name="result_saved">You saved %1$s • %2$d%% smaller</string>
+    <string name="result_meta">%1$s • %2$s</string>
+    <string name="result_share">SHARE VIDEO</string>
+    <string name="result_open">Open Video</string>
+    <string name="result_another">Compress another video</string>
+    <string name="result_location">Already saved to your gallery · Movies/Vidsize</string>
+    <string name="share_chooser">Share compressed video</string>
+    <string name="close">Close</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_appearance_body">Vidsize uses a light theme in this version.</string>
+    <string name="settings_privacy_title">Privacy</string>
+    <string name="settings_privacy_body">Your videos are compressed on this device. Nothing is uploaded to a server.</string>
+    <string name="settings_ads_title">Ads</string>
+    <string name="settings_ads_body">Vidsize is free and supported by ads.</string>
+    <string name="settings_legal_section">LEGAL</string>
+    <string name="settings_privacy_policy">Privacy Policy</string>
+    <string name="settings_terms">Terms of Use</string>
+    <string name="settings_ad_privacy">Ad privacy options</string>
+    <string name="settings_version">Version %1$s</string>
+
+    <!-- Background compression notification -->
+    <string name="notification_channel_name">Compression progress</string>
+    <string name="notification_channel_description">Shows progress while a video is being compressed.</string>
+    <string name="notification_title">Compressing your video</string>
+    <string name="notification_done_title">Video ready</string>
+    <string name="notification_done_body">Your compressed video was saved to Movies/Vidsize.</string>
+    <string name="result_default_name">Compressed video</string>
+
+    <!-- Shared -->
+    <string name="unknown">Unknown</string>
+
+    <plurals name="video_count">
+        <item quantity="one">%1$d video</item>
+        <item quantity="other">%1$d videos</item>
+    </plurals>
 </resources>

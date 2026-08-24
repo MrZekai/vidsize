@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Fitsize"
+rootProject.name = "Vidsize"
 include(":app")

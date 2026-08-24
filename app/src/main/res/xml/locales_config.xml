@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Declares the languages Vidsize ships, so Android 13+ users can override the
+  app's language independently of the system language
+  (Settings > Apps > Vidsize > Language).
+
+  Note: the Indonesian resource folder is `values-in` (a legacy Java code) but
+  the BCP-47 tag declared here is `id`. Both are correct in their own place.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="tr" />
+    <locale android:name="es" />
+    <locale android:name="pt-BR" />
+    <locale android:name="id" />
+    <locale android:name="de" />
+    <locale android:name="hi" />
+    <locale android:name="ar" />
+</locale-config>

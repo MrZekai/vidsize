@@ -1,4 +1,4 @@
-# Fitsize Roadmap
+# Vidsize Roadmap
 
 ## Milestone 0 — repository + CI
 - Create GitHub repository
@@ -27,11 +27,11 @@
 - Positive success/result panel
 - History
 - Saved-space counter
-- Light/dark themes
+- Light-only theme locked for V1
 - Home banner/adaptive banner polish
 - Result 300×250 MREC
-- App Open manager with warm-up, readiness, expiry and cooldown guards
-- UMP/consent before production ad IDs
+- App Open manager with warm-up, readiness, expiry and cooldown guards ✅
+- UMP/consent before production ad IDs ✅
 
 ## Milestone 4 — global release
 - Localization
