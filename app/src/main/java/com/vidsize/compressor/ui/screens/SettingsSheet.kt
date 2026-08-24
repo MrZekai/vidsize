@@ -59,6 +59,8 @@ import com.vidsize.compressor.ui.theme.Space
 @Composable
 fun SettingsSheet(onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val privacyUrl = stringResource(R.string.url_privacy)
+    val termsUrl = stringResource(R.string.url_terms)
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -146,12 +148,12 @@ fun SettingsSheet(onDismiss: () -> Unit) {
 
                     LinkRow(
                         label = stringResource(R.string.settings_privacy_policy),
-                        onClick = { openUrl(context, context.getString(R.string.url_privacy)) },
+                        onClick = { openUrl(context, privacyUrl) },
                     )
 
                     LinkRow(
                         label = stringResource(R.string.settings_terms),
-                        onClick = { openUrl(context, context.getString(R.string.url_terms)) },
+                        onClick = { openUrl(context, termsUrl) },
                     )
 
                     // Shown only where the user's region requires a re-openable

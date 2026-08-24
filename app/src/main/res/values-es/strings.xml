@@ -74,6 +74,7 @@
     <string name="unknown">Desconocido</string>
     <plurals name="video_count">
         <item quantity="one">%1$d vídeo</item>
+        <item quantity="many">%1$d vídeos</item>
         <item quantity="other">%1$d vídeos</item>
     </plurals>
     <string name="notification_channel_name">Progreso de compresión</string>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Vidsize</string>
+    <string name="app_name" translatable="false">Vidsize</string>
 
     <!-- Not translated: legal endpoints. Update both if the domain changes. -->
     <string name="url_privacy" translatable="false">https://mrzekai.github.io/vidsize/privacy.html</string>

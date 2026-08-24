@@ -73,6 +73,7 @@
     <string name="settings_version">Sürüm %1$s</string>
     <string name="unknown">Bilinmiyor</string>
     <plurals name="video_count">
+        <item quantity="one">%1$d video</item>
         <item quantity="other">%1$d video</item>
     </plurals>
     <string name="notification_channel_name">Sıkıştırma ilerlemesi</string>
