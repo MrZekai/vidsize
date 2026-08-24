@@ -32,13 +32,22 @@ class AppOpenAdPolicy(context: Context) {
         prefs.edit().putLong(KEY_LAST_FULL_SCREEN, nowMillis).apply()
     }
 
-    /** Count user sessions, not short trips through system/external activities. */
+    /**
+     * Counts a *session*, not a foreground event.
+     *
+     * ProcessLifecycleOwner fires on every return to the app, including returns
+     * from the photo picker and the share sheet. Counting those made the
+     * three-session threshold reachable inside a single real visit, which put
+     * the first App Open ad in the worst possible place. A foreground within
+     * [SESSION_GAP_MILLIS] of the previous one is treated as the same session.
+     */
     fun registerSession(nowMillis: Long = System.currentTimeMillis()) {
         firstLaunchMillis(nowMillis)
-
-        val lastSession = prefs.getLong(KEY_LAST_SESSION, 0L)
-        if (lastSession > 0L && nowMillis - lastSession < SESSION_DEBOUNCE_MILLIS) return
-
+        val previous = prefs.getLong(KEY_LAST_SESSION, 0L)
+        if (previous > 0L && nowMillis - previous < SESSION_GAP_MILLIS) {
+            prefs.edit().putLong(KEY_LAST_SESSION, nowMillis).apply()
+            return
+        }
         prefs.edit()
             .putInt(KEY_SESSIONS, sessionCount() + 1)
             .putLong(KEY_LAST_SESSION, nowMillis)
@@ -61,12 +70,14 @@ class AppOpenAdPolicy(context: Context) {
         private const val INSTALL_GRACE_MILLIS = 3L * 24L * 60L * 60L * 1000L
         private const val MIN_SESSIONS_BEFORE_FIRST_AD = 3
         private const val COOLDOWN_MILLIS = 6L * 60L * 60L * 1000L
-        private const val SESSION_DEBOUNCE_MILLIS = 30L * 60L * 1000L
 
         private const val FILE_NAME = "vidsize_ads"
         private const val KEY_FIRST_LAUNCH = "first_launch"
         private const val KEY_SESSIONS = "sessions"
-        private const val KEY_LAST_SESSION = "last_session"
         private const val KEY_LAST_FULL_SCREEN = "last_full_screen"
+        private const val KEY_LAST_SESSION = "last_session"
+
+        /** Foregrounds closer together than this belong to the same session. */
+        private const val SESSION_GAP_MILLIS = 30L * 60L * 1000L
     }
 }

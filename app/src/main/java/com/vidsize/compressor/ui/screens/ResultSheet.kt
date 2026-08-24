@@ -39,8 +39,7 @@ import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
-import com.vidsize.compressor.ui.components.AdLabel
-import com.vidsize.compressor.ui.components.MrecSlot
+import com.vidsize.compressor.ui.components.NativeAdCard
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SecondaryButton
 import com.vidsize.compressor.ui.components.TertiaryButton
@@ -162,6 +161,14 @@ fun ResultSheet(
                         Spacer(Modifier.height(Space.xs))
 
                         SecondaryButton(
+                            text = stringResource(R.string.result_show_in_gallery),
+                            onClick = { showInGallery(context, result.outputUri) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        Spacer(Modifier.height(Space.xxs))
+
+                        SecondaryButton(
                             text = stringResource(R.string.result_open),
                             onClick = { openVideo(context, result.outputUri) },
                             modifier = Modifier.fillMaxWidth(),
@@ -184,15 +191,14 @@ fun ResultSheet(
                             textAlign = TextAlign.Center,
                         )
 
-                        if (adsVisible) {
-                            Spacer(Modifier.height(Space.lg))
-                            AdLabel()
-                            Spacer(Modifier.height(6.dp))
-                        }
                     }
 
+                    // The advertisement lives below every primary action, with a
+                    // full gutter of separation so a thumb travelling to
+                    // "Compress another video" cannot land on the creative.
                     if (adsVisible) {
-                        MrecSlot(modifier = Modifier.padding(horizontal = Space.md))
+                        Spacer(Modifier.height(Space.xl))
+                        NativeAdCard(modifier = Modifier.padding(horizontal = Space.lg))
                     }
 
                     Spacer(Modifier.height(Space.lg))
@@ -294,6 +300,31 @@ private fun shareVideo(context: Context, uri: Uri) {
         context.startActivity(
             Intent.createChooser(intent, context.getString(R.string.share_chooser)),
         )
+    }
+}
+
+/**
+ * Opens the saved file in the device's gallery/photos app, which is the only
+ * reliable way to "show the file where it lives" across OEMs.
+ *
+ * A literal folder-browser intent (ACTION_VIEW on a directory document) is
+ * honoured by some Files apps and ignored by many others, so the gallery route
+ * is used first and a generic chooser is the fallback.
+ */
+private fun showInGallery(context: Context, uri: Uri) {
+    val gallery = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "video/*")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val launched = runCatching {
+        context.startActivity(gallery)
+    }.isSuccess
+    if (!launched) {
+        runCatching {
+            context.startActivity(
+                Intent.createChooser(gallery, context.getString(R.string.result_show_in_gallery)),
+            )
+        }
     }
 }
 

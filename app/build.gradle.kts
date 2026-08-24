@@ -1,3 +1,11 @@
+// Production Native Ad unit id. Supplied by gradle.properties / local.properties
+// or a CI secret; never committed. Debug builds ignore it entirely and always
+// use Google's test unit (see ads/NativeAdLoader.kt).
+val nativeResultAdUnitId: String =
+    (providers.gradleProperty("VIDSIZE_NATIVE_RESULT_AD_UNIT_ID").orNull
+        ?: System.getenv("VIDSIZE_NATIVE_RESULT_AD_UNIT_ID")
+        ?: "")
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -14,11 +22,17 @@ android {
         // avoids broad legacy storage permissions on Android 7–9.
         minSdk = 29
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.6.0"
+        versionCode = 6
+        versionName = "0.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+
+        buildConfigField(
+            "String",
+            "NATIVE_RESULT_AD_UNIT_ID",
+            "\"$nativeResultAdUnitId\"",
+        )
     }
 
     buildTypes {

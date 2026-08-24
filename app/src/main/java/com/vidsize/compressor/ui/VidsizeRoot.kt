@@ -28,8 +28,8 @@ import com.vidsize.compressor.ui.screens.HomeScreen
  */
 @Composable
 fun VidsizeRoot(initialVideo: Uri?) {
+    val context = LocalContext.current
     val history = rememberHistoryController()
-    val app = LocalContext.current.applicationContext as VidsizeApplication
 
     var selectedVideo by rememberSaveable { mutableStateOf(initialVideo?.toString()) }
 
@@ -42,10 +42,13 @@ fun VidsizeRoot(initialVideo: Uri?) {
         HomeScreen(
             summary = history.summary,
             onSelectVideo = {
-                // The system picker backgrounds Vidsize. Suppress the single
-                // foreground callback when the user returns so App Open can
-                // never cover the freshly selected compression screen.
-                app.appOpenAdManager.suppressNextForeground()
+                // The system photo picker runs in another process, so returning
+                // from it is a normal app foreground. Without this the App Open
+                // ad could appear on top of the compression screen the moment a
+                // video is chosen — the exact placement AdMob warns against.
+                (context.applicationContext as? VidsizeApplication)
+                    ?.appOpenAdManager
+                    ?.suppressNextForeground()
                 picker.launch(PickVisualMediaRequest(PickVisualMedia.VideoOnly))
             },
             onClearHistory = { history.clear() },

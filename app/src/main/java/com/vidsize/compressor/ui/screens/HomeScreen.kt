@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
 import com.vidsize.compressor.data.history.CompressionHistoryEntry
 import com.vidsize.compressor.data.history.HistorySummary
-import com.vidsize.compressor.ui.components.AnchoredBannerSlot
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
@@ -122,7 +121,11 @@ fun HomeScreen(
             Spacer(Modifier.height(Space.xl))
         }
 
-        AnchoredBannerSlot(modifier = Modifier.navigationBarsPadding())
+        // Home is deliberately ad-free. The banner that used to sit here earned
+        // very little, was the first thing a new user saw, and worked against
+        // the premium identity. All advertising now lives on the result sheet,
+        // at the natural break after the job is done.
+        Spacer(Modifier.navigationBarsPadding())
     }
 
     if (showSettings) {

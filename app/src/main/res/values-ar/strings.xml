@@ -86,4 +86,6 @@
     <string name="result_default_name">فيديو مضغوط</string>
     <string name="notification_done_title">الفيديو جاهز</string>
     <string name="notification_done_body">تم حفظ الفيديو المضغوط في Movies/Vidsize.</string>
+    <string name="ad_badge">إعلان</string>
+    <string name="result_show_in_gallery">عرض في المعرض</string>
 </resources>

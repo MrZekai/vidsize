@@ -83,4 +83,6 @@
     <string name="result_default_name">Vídeo comprimido</string>
     <string name="notification_done_title">Vídeo pronto</string>
     <string name="notification_done_body">Seu vídeo comprimido foi salvo em Movies/Vidsize.</string>
+    <string name="ad_badge">Anúncio</string>
+    <string name="result_show_in_gallery">Ver na galeria</string>
 </resources>

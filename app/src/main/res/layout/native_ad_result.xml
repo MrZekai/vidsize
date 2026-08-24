@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Large Native Advanced ad for the compression result sheet.
+
+  Why a View layout and not Compose: the Google Mobile Ads SDK measures
+  impressions and attributes clicks by holding real View references
+  (NativeAdView.headlineView, .mediaView, .callToActionView …) and calling
+  setNativeAd(). Composables cannot be registered that way. The layout is
+  inflated inside an AndroidView, styled with the same tokens as the rest of
+  Vidsize so it still looks like part of the product.
+
+  Policy notes that must survive any future edit:
+   - The AdChoices overlay is placed by the SDK in the top-right of the
+     NativeAdView. Nothing is drawn over that corner.
+   - The "Ad" badge is always visible and is never the CTA.
+   - Only NativeAdView registered asset views are clickable. No parent
+     click listener is attached anywhere.
+   - The CTA label always comes from nativeAd.callToAction.
+-->
+<com.google.android.gms.ads.nativead.NativeAdView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_native_card"
+        android:padding="14dp">
+
+        <!-- Attribution row. Sits top-left; the SDK's AdChoices icon owns the
+             top-right corner, so the two never collide. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingBottom="10dp">
+
+            <TextView
+                android:id="@+id/ad_attribution"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_native_badge"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="@string/ad_badge"
+                android:textColor="@color/vidsize_indigo"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08"
+                android:includeFontPadding="false" />
+
+            <!-- Reserves the top-right corner for AdChoices. -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <View
+                android:layout_width="26dp"
+                android:layout_height="1dp" />
+        </LinearLayout>
+
+        <!-- Landscape media. 16:9 keeps a stable height so the sheet never
+             jumps when the creative loads. -->
+        <com.google.android.gms.ads.nativead.MediaView
+            android:id="@+id/ad_media"
+            android:layout_width="match_parent"
+            android:layout_height="176dp"
+            android:background="@color/vidsize_surface_muted" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="12dp">
+
+            <ImageView
+                android:id="@+id/ad_icon"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:scaleType="centerCrop"
+                android:adjustViewBounds="true"
+                android:contentDescription="@null"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/ad_headline"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="2"
+                    android:ellipsize="end"
+                    android:textColor="@color/vidsize_ink"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/ad_advertiser"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:paddingTop="2dp"
+                    android:textColor="@color/vidsize_muted"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <RatingBar
+                    android:id="@+id/ad_stars"
+                    style="?android:attr/ratingBarStyleSmall"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:isIndicator="true"
+                    android:numStars="5"
+                    android:stepSize="0.1"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/ad_body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="3"
+            android:ellipsize="end"
+            android:paddingTop="10dp"
+            android:lineSpacingExtra="2dp"
+            android:textColor="@color/vidsize_muted"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <!-- Full-width CTA. Text always supplied by the SDK. -->
+        <Button
+            android:id="@+id/ad_cta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/bg_native_cta"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.03"
+            android:stateListAnimator="@null"
+            android:textAllCaps="true" />
+    </LinearLayout>
+</com.google.android.gms.ads.nativead.NativeAdView>

@@ -3,4 +3,16 @@
     <color name="white">#FFFFFFFF</color>
     <color name="vidsize_background">#FFF6F6FB</color>
     <color name="ic_launcher_background">#FF5559EE</color>
+
+    <!-- Mirrors ui/theme/Color.kt. Used by the native ad layout, which is a
+         View hierarchy and therefore cannot read the Compose tokens. -->
+    <color name="vidsize_surface">#FFFFFFFF</color>
+    <color name="vidsize_surface_muted">#FFF9F9FD</color>
+    <color name="vidsize_border">#FFEBECF3</color>
+    <color name="vidsize_ink">#FF0F1222</color>
+    <color name="vidsize_muted">#FF6E7385</color>
+    <color name="vidsize_faint">#FF9AA0B0</color>
+    <color name="vidsize_indigo">#FF5559EE</color>
+    <color name="vidsize_indigo_soft">#FFEEEDFF</color>
+    <color name="vidsize_violet">#FF8250F5</color>
 </resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CTA button. Uses the Vidsize primary gradient so the control looks native
+     to the app, but the label text always comes from the NativeAd itself -
+     never a hard-coded "Install". -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:startColor="@color/vidsize_indigo"
+        android:endColor="@color/vidsize_violet"
+        android:angle="0" />
+    <corners android:radius="18dp" />
+</shape>

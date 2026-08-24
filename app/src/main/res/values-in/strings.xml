@@ -81,4 +81,6 @@
     <string name="result_default_name">Video terkompresi</string>
     <string name="notification_done_title">Video siap</string>
     <string name="notification_done_body">Video terkompresimu disimpan di Movies/Vidsize.</string>
+    <string name="ad_badge">Iklan</string>
+    <string name="result_show_in_gallery">Lihat di Galeri</string>
 </resources>

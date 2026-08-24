@@ -82,4 +82,6 @@
     <string name="result_default_name">Sıkıştırılmış video</string>
     <string name="notification_done_title">Video hazır</string>
     <string name="notification_done_body">Sıkıştırılmış videon Movies/Vidsize klasörüne kaydedildi.</string>
+    <string name="ad_badge">Reklam</string>
+    <string name="result_show_in_gallery">Galeride Göster</string>
 </resources>
