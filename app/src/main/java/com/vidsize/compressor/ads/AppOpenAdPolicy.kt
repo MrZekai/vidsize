@@ -32,10 +32,17 @@ class AppOpenAdPolicy(context: Context) {
         prefs.edit().putLong(KEY_LAST_FULL_SCREEN, nowMillis).apply()
     }
 
-    /** Count real process foreground sessions, not only process creation. */
+    /** Count user sessions, not short trips through system/external activities. */
     fun registerSession(nowMillis: Long = System.currentTimeMillis()) {
         firstLaunchMillis(nowMillis)
-        prefs.edit().putInt(KEY_SESSIONS, sessionCount() + 1).apply()
+
+        val lastSession = prefs.getLong(KEY_LAST_SESSION, 0L)
+        if (lastSession > 0L && nowMillis - lastSession < SESSION_DEBOUNCE_MILLIS) return
+
+        prefs.edit()
+            .putInt(KEY_SESSIONS, sessionCount() + 1)
+            .putLong(KEY_LAST_SESSION, nowMillis)
+            .apply()
     }
 
     fun sessionCount(): Int = prefs.getInt(KEY_SESSIONS, 0)
@@ -54,10 +61,12 @@ class AppOpenAdPolicy(context: Context) {
         private const val INSTALL_GRACE_MILLIS = 3L * 24L * 60L * 60L * 1000L
         private const val MIN_SESSIONS_BEFORE_FIRST_AD = 3
         private const val COOLDOWN_MILLIS = 6L * 60L * 60L * 1000L
+        private const val SESSION_DEBOUNCE_MILLIS = 30L * 60L * 1000L
 
         private const val FILE_NAME = "vidsize_ads"
         private const val KEY_FIRST_LAUNCH = "first_launch"
         private const val KEY_SESSIONS = "sessions"
+        private const val KEY_LAST_SESSION = "last_session"
         private const val KEY_LAST_FULL_SCREEN = "last_full_screen"
     }
 }

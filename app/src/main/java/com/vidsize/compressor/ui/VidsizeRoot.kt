@@ -9,6 +9,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import com.vidsize.compressor.VidsizeApplication
 import com.vidsize.compressor.data.history.rememberHistoryController
 import com.vidsize.compressor.ui.screens.CompressionScreen
 import com.vidsize.compressor.ui.screens.HomeScreen
@@ -27,6 +29,7 @@ import com.vidsize.compressor.ui.screens.HomeScreen
 @Composable
 fun VidsizeRoot(initialVideo: Uri?) {
     val history = rememberHistoryController()
+    val app = LocalContext.current.applicationContext as VidsizeApplication
 
     var selectedVideo by rememberSaveable { mutableStateOf(initialVideo?.toString()) }
 
@@ -39,6 +42,10 @@ fun VidsizeRoot(initialVideo: Uri?) {
         HomeScreen(
             summary = history.summary,
             onSelectVideo = {
+                // The system picker backgrounds Vidsize. Suppress the single
+                // foreground callback when the user returns so App Open can
+                // never cover the freshly selected compression screen.
+                app.appOpenAdManager.suppressNextForeground()
                 picker.launch(PickVisualMediaRequest(PickVisualMedia.VideoOnly))
             },
             onClearHistory = { history.clear() },
