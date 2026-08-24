@@ -21,7 +21,7 @@ class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks
     private var currentActivity: Activity? = null
 
     override fun onCreate() {
-        super.onCreate()
+        super<Application>.onCreate()
         appOpenAdPolicy = AppOpenAdPolicy(this)
         appOpenAdManager = AppOpenAdManager(this, appOpenAdPolicy)
         registerActivityLifecycleCallbacks(this)
