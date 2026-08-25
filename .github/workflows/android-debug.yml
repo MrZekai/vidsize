@@ -34,7 +34,11 @@ jobs:
           set -euo pipefail
           test -f keystores/vidsize-qa-debug.jks
           expected="8C:CB:0E:A9:8D:2B:17:1E:8C:9A:D3:24:C9:F6:D2:F2:0D:53:FD:C8:02:C9:24:75:DF:EB:71:AE:FA:D7:20:E0"
-          actual="$(keytool -list -v             -keystore keystores/vidsize-qa-debug.jks             -storepass vidsize-qa-debug-2026             -alias vidsizeqa 2>/dev/null | awk '/SHA256:/'"'"'{print $2; exit}'"'"')"
+          actual="$(keytool -list -v \
+            -keystore keystores/vidsize-qa-debug.jks \
+            -storepass vidsize-qa-debug-2026 \
+            -alias vidsizeqa 2>/dev/null \
+            | awk '/SHA256:/ {print $2; exit}')"
           echo "QA signing certificate SHA256: $actual"
           test "$actual" = "$expected"
 
