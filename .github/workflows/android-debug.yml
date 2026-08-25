@@ -28,6 +28,16 @@ jobs:
         with:
           gradle-version: '9.5.0'
 
+      - name: Stable QA signing audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f keystores/vidsize-qa-debug.jks
+          expected="8C:CB:0E:A9:8D:2B:17:1E:8C:9A:D3:24:C9:F6:D2:F2:0D:53:FD:C8:02:C9:24:75:DF:EB:71:AE:FA:D7:20:E0"
+          actual="$(keytool -list -v             -keystore keystores/vidsize-qa-debug.jks             -storepass vidsize-qa-debug-2026             -alias vidsizeqa 2>/dev/null | awk '/SHA256:/'"'"'{print $2; exit}'"'"')"
+          echo "QA signing certificate SHA256: $actual"
+          test "$actual" = "$expected"
+
       - name: Source policy audit
         shell: bash
         run: |
@@ -43,6 +53,8 @@ jobs:
           grep -q 'android:allowBackup="false"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
           grep -q 'const val ENABLED = true' app/src/main/java/com/vidsize/compressor/ads/AppOpenAdPolicy.kt
+          grep -q 'vidsize-qa-debug.jks' app/build.gradle.kts
+          grep -q 'signingConfig = signingConfigs.getByName("qaDebug")' app/build.gradle.kts
 
       - name: Unit tests, lint and debug APK
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
@@ -51,7 +63,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v060-qa-apk
+          name: vidsize-v070-stable-qa-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
@@ -59,6 +71,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v060-lint
+          name: vidsize-v070-lint
           path: app/build/reports/lint-results-debug.html
           if-no-files-found: ignore

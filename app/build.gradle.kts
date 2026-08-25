@@ -35,7 +35,26 @@ android {
         )
     }
 
+    // Stable QA/debug signing key.
+    //
+    // IMPORTANT: This key is intentionally public and is used ONLY for debug APKs
+    // produced for device QA. It must never be used for Play release/upload signing.
+    // Keeping one fixed debug key lets every GitHub Actions APK update the previous
+    // QA APK in-place instead of Android rejecting it for a signature mismatch.
+    signingConfigs {
+        create("qaDebug") {
+            storeFile = rootProject.file("keystores/vidsize-qa-debug.jks")
+            storePassword = "vidsize-qa-debug-2026"
+            keyAlias = "vidsizeqa"
+            keyPassword = "vidsize-qa-debug-2026"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("qaDebug")
+        }
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
