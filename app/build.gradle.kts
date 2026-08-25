@@ -6,6 +6,12 @@ val nativeResultAdUnitId: String =
         ?: System.getenv("VIDSIZE_NATIVE_RESULT_AD_UNIT_ID")
         ?: "")
 
+// Production Home adaptive banner unit. Debug/QA always uses Google's test unit.
+val homeBannerAdUnitId: String =
+    (providers.gradleProperty("VIDSIZE_HOME_BANNER_AD_UNIT_ID").orNull
+        ?: System.getenv("VIDSIZE_HOME_BANNER_AD_UNIT_ID")
+        ?: "")
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -22,8 +28,8 @@ android {
         // avoids broad legacy storage permissions on Android 7–9.
         minSdk = 29
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.7.0"
+        versionCode = 7
+        versionName = "0.7.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -32,6 +38,11 @@ android {
             "String",
             "NATIVE_RESULT_AD_UNIT_ID",
             "\"$nativeResultAdUnitId\"",
+        )
+        buildConfigField(
+            "String",
+            "HOME_BANNER_AD_UNIT_ID",
+            "\"$homeBannerAdUnitId\"",
         )
     }
 

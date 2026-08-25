@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -40,6 +39,7 @@ import com.vidsize.compressor.data.history.HistorySummary
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
+import com.vidsize.compressor.ui.components.HomeBannerAd
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SavingsChart
@@ -121,11 +121,9 @@ fun HomeScreen(
             Spacer(Modifier.height(Space.xl))
         }
 
-        // Home is deliberately ad-free. The banner that used to sit here earned
-        // very little, was the first thing a new user saw, and worked against
-        // the premium identity. All advertising now lives on the result sheet,
-        // at the natural break after the job is done.
-        Spacer(Modifier.navigationBarsPadding())
+        // Monetization stays visible without interrupting the user's workflow.
+        // The scrollable content remains above this consent-gated adaptive banner.
+        HomeBannerAd()
     }
 
     if (showSettings) {
