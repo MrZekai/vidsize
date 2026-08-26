@@ -46,10 +46,15 @@ outright; the rest cost you ratings rather than approval.
 
 ## C. AdMob
 
-- [ ] **BLOCKER — Create the real AdMob app** and replace the test App ID in
-      `AndroidManifest.xml` (`com.google.android.gms.ads.APPLICATION_ID`).
-- [ ] **BLOCKER — Create three real ad units** (anchored adaptive banner + 300×250 + App Open)
-      and replace the banner/MREC test IDs plus `TEST_APP_OPEN_UNIT` before production. Keep Google demo units during developer QA.
+- [ ] **BLOCKER — Create the real AdMob app** and provide its App ID as
+      `VIDSIZE_ADMOB_APP_ID` only for the production build. Debug and `closedTest`
+      deliberately use Google's demo App ID.
+- [ ] **BLOCKER — Create four real ad units**: Home adaptive banner,
+      Compression adaptive banner, Result Native Advanced, and App Open. Provide
+      them as `VIDSIZE_HOME_BANNER_AD_UNIT_ID`,
+      `VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID`,
+      `VIDSIZE_NATIVE_RESULT_AD_UNIT_ID`, and `VIDSIZE_APP_OPEN_AD_UNIT_ID`.
+      Production packaging hard-fails if any production identifier is missing.
 - [ ] **BLOCKER — Configure the GDPR message in the AdMob console**
       (Privacy & messaging → European regulations). The `ConsentManager` code is
       already wired, but without a published message the form never appears.
@@ -62,7 +67,8 @@ outright; the rest cost you ratings rather than approval.
       re-opens the form.
 - [ ] App Open QA: first 3 days suppressed, first 3 sessions suppressed, no ad over
       compression/result/share-sheet entry, no entry delay when an ad is unavailable.
-- [ ] Before production, replace Google's App Open demo ID with the real unit ID.
+- [ ] Confirm `closedTest` uses Google demo ads and the true `release`
+      variant uses only the four real Vidsize ad units.
 
 ## D. Play Console
 
@@ -78,9 +84,11 @@ outright; the rest cost you ratings rather than approval.
 - [ ] **BLOCKER — EU trader status declared** if you distribute in the EU.
 - [ ] **BLOCKER — Closed testing** — follow the exact tester count/duration shown for this developer account in Play Console. Recruit testers before the production gate.
 - [ ] Target API 36 — already set. Re-check Play's current target-API deadline before production.
-- [ ] Upload the **signed AAB**, not an APK. Keep the upload keystore backed up
-      somewhere you will still have in five years — losing it is unrecoverable
-      without Play App Signing key reset.
+- [ ] The CI `closedTest` AAB is an **UNSIGNED Red-Team artifact only**.
+      Do not upload it to Play.
+- [ ] After final Red-Team approval, create/secure the private Play upload key and
+      upload the resulting **signed AAB**, not an APK. Keep the upload keystore
+      backed up somewhere you will still have in five years.
 - [ ] Store listing: 25-char title, 70-char short description, 8 localised
       listings, screenshots with the real `1.02 GB → 612 MB` number.
 

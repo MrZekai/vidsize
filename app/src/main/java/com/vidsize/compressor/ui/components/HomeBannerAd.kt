@@ -27,19 +27,17 @@ import androidx.lifecycle.LifecycleOwner
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
-import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.R
+import com.vidsize.compressor.ads.AdIds
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ui.theme.Space
 import com.vidsize.compressor.ui.theme.VidsizeColor
 import com.vidsize.compressor.ui.theme.VidsizeType
 
-private const val TEST_BANNER_UNIT = "ca-app-pub-3940256099942544/9214589741"
-
 @Composable
 fun HomeBannerAd(modifier: Modifier = Modifier) {
     AdaptiveBannerAd(
-        productionUnitId = BuildConfig.HOME_BANNER_AD_UNIT_ID,
+        unitId = AdIds.homeBanner,
         modifier = modifier,
         includeNavigationPadding = true,
         active = true,
@@ -52,7 +50,7 @@ fun CompressionBannerAd(
     active: Boolean = true,
 ) {
     AdaptiveBannerAd(
-        productionUnitId = BuildConfig.COMPRESSION_BANNER_AD_UNIT_ID,
+        unitId = AdIds.compressionBanner,
         modifier = modifier,
         includeNavigationPadding = false,
         active = active,
@@ -70,7 +68,7 @@ fun CompressionBannerAd(
  */
 @Composable
 private fun AdaptiveBannerAd(
-    productionUnitId: String,
+    unitId: String?,
     modifier: Modifier,
     includeNavigationPadding: Boolean,
     active: Boolean,
@@ -138,9 +136,7 @@ private fun AdaptiveBannerAd(
                     )
                 }
             } else if (active && ConsentManager.adsAllowed) {
-                val unitId = if (BuildConfig.DEBUG) TEST_BANNER_UNIT else productionUnitId
-
-                if (unitId.isNotBlank()) {
+                if (!unitId.isNullOrBlank()) {
                     val adView = remember(context, adSize, unitId) {
                         AdView(context).apply {
                             adUnitId = unitId

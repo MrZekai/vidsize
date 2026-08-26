@@ -15,13 +15,15 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,7 +73,8 @@ fun HomeScreen(
     onSelectVideo: () -> Unit,
     onClearHistory: () -> Unit,
 ) {
-    var showSettings by remember { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -103,7 +106,7 @@ fun HomeScreen(
                     if (!summary.isEmpty) {
                         TertiaryButton(
                             text = stringResource(R.string.clear_history),
-                            onClick = onClearHistory,
+                            onClick = { confirmClearHistory = true },
                             color = VidsizeColor.Muted,
                         )
                     }
@@ -130,6 +133,29 @@ fun HomeScreen(
         SettingsSheet(
             onDismiss = { showSettings = false },
             onClearHistory = onClearHistory,
+        )
+    }
+
+    if (confirmClearHistory) {
+        AlertDialog(
+            onDismissRequest = { confirmClearHistory = false },
+            title = { Text(stringResource(R.string.settings_clear_history_title)) },
+            text = { Text(stringResource(R.string.settings_clear_history_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClearHistory()
+                        confirmClearHistory = false
+                    },
+                ) {
+                    Text(stringResource(R.string.settings_clear_history_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearHistory = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
         )
     }
 }

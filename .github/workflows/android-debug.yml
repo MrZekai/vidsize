@@ -1,4 +1,4 @@
-name: Android QA Build
+name: Android QA + Closed-Test Audit
 
 on:
   push:
@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -55,24 +55,38 @@ jobs:
           ! grep -q 'FOREGROUND_SERVICE_DATA_SYNC' app/src/main/AndroidManifest.xml
           ! grep -q 'foregroundServiceType="[^"]*dataSync' app/src/main/AndroidManifest.xml
           grep -q 'android:allowBackup="false"' app/src/main/AndroidManifest.xml
+          grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'const val ENABLED = true' app/src/main/java/com/vidsize/compressor/ads/AppOpenAdPolicy.kt
-          grep -q 'vidsize-qa-debug.jks' app/build.gradle.kts
-          grep -q 'signingConfig = signingConfigs.getByName("qaDebug")' app/build.gradle.kts
           grep -q 'versionCode = 8' app/build.gradle.kts
-          grep -q 'COMPRESSION_BANNER_AD_UNIT_ID' app/build.gradle.kts
+          grep -q 'create("closedTest")' app/build.gradle.kts
+          grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
+          grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
+          grep -q 'VIDSIZE_APP_OPEN_AD_UNIT_ID' app/build.gradle.kts
+          grep -q 'verifyProductionAdConfig' app/build.gradle.kts
+          grep -q 'AdIds.appOpen' app/src/main/java/com/vidsize/compressor/ads/AppOpenAdManager.kt
+          grep -q 'AdIds.nativeResult' app/src/main/java/com/vidsize/compressor/ads/NativeAdLoader.kt
+          grep -q 'AdIds.homeBanner' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           grep -q 'CompressionBannerAd(active = !busy)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          grep -q 'suppressAppOpenOnReturn' app/src/main/java/com/vidsize/compressor/ui/screens/ResultSheet.kt
           grep -q 'ic_launcher_monochrome' app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
           test -f store/assets/icon-512.png
-          test -f app/src/main/assets/legal/privacy.html
-          test -f app/src/main/assets/legal/terms.html
+          test -f docs/index.html
+          test -f app/src/main/assets/legal/index.html
           cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html
           cmp -s docs/terms.html app/src/main/assets/legal/terms.html
+          cmp -s docs/index.html app/src/main/assets/legal/index.html
 
-      - name: Unit tests, lint and debug APK
+      - name: Debug QA gate
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
 
-      - name: Upload debug APK
+      - name: Release-like closed-test R8/AAB gate
+        run: gradle :app:lintClosedTest :app:bundleClosedTest --stacktrace
+
+      - name: Create exact source audit ZIP
+        shell: bash
+        run: git archive --format=zip --output=vidsize-v080-source-audit.zip HEAD
+
+      - name: Upload QA APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -80,10 +94,28 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
-      - name: Upload lint report
+      - name: Upload UNSIGNED closed-test audit AAB
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vidsize-v080-closed-test-UNSIGNED-audit-aab
+          path: app/build/outputs/bundle/closedTest/*.aab
+          if-no-files-found: warn
+
+      - name: Upload source audit ZIP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vidsize-v080-source-audit
+          path: vidsize-v080-source-audit.zip
+          if-no-files-found: warn
+
+      - name: Upload lint reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: vidsize-v080-lint
-          path: app/build/reports/lint-results-debug.html
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-closedTest.html
           if-no-files-found: ignore

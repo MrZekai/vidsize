@@ -3,8 +3,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-    <!-- User-initiated video transcoding continues while the app is backgrounded. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -19,17 +17,9 @@
         android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.Vidsize">
 
-        <!--
-          Google's TEST AdMob App ID.
-
-          Replace with the real one before the production release — see
-          docs/RELEASE_CHECKLIST.md section C. Shipping test ad units to
-          production means zero revenue; shipping a real ID before closed
-          testing risks invalid-traffic flags from your own taps.
-        -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="${ADMOB_APP_ID}" />
 
         <activity
             android:name=".MainActivity"
@@ -40,7 +30,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- V1 retention hook: receive a video from Gallery / Files share sheet. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

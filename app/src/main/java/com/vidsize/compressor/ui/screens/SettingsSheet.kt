@@ -31,8 +31,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +47,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.ConsentManager
+import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.SecondaryButton
 import com.vidsize.compressor.ui.theme.Space
@@ -65,10 +66,12 @@ fun SettingsSheet(
     onClearHistory: () -> Unit,
 ) {
     val context = LocalContext.current
-    var legalPage by remember { mutableStateOf<LegalPage?>(null) }
-    var confirmClearHistory by remember { mutableStateOf(false) }
+    var legalPageName by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
 
-    val page = legalPage
+    val page = legalPageName?.let { name ->
+        LegalPage.values().firstOrNull { it.name == name }
+    }
     if (page != null) {
         LegalDocumentSheet(
             title = stringResource(
@@ -76,7 +79,7 @@ fun SettingsSheet(
                 else R.string.settings_terms,
             ),
             assetFileName = page.assetFileName,
-            onDismiss = { legalPage = null },
+            onDismiss = { legalPageName = null },
         )
         return
     }
@@ -123,16 +126,20 @@ fun SettingsSheet(
 
                     Spacer(Modifier.height(Space.lg))
 
-                    ActionRow(
-                        icon = R.drawable.ic_language,
-                        tint = VidsizeColor.Indigo,
-                        tintSoft = VidsizeColor.IndigoSoft,
-                        title = stringResource(R.string.settings_language_title),
-                        body = stringResource(R.string.settings_language_body),
-                        onClick = { openLanguageSettings(context) },
-                    )
-
-                    Spacer(Modifier.height(Space.md))
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        ActionRow(
+                            icon = R.drawable.ic_language,
+                            tint = VidsizeColor.Indigo,
+                            tintSoft = VidsizeColor.IndigoSoft,
+                            title = stringResource(R.string.settings_language_title),
+                            body = stringResource(R.string.settings_language_body),
+                            onClick = {
+                                context.suppressAppOpenOnReturn()
+                                openLanguageSettings(context)
+                            },
+                        )
+                        Spacer(Modifier.height(Space.md))
+                    }
 
                     ActionRow(
                         icon = R.drawable.ic_notification,
@@ -140,7 +147,10 @@ fun SettingsSheet(
                         tintSoft = VidsizeColor.CyanSoft,
                         title = stringResource(R.string.settings_notifications_title),
                         body = stringResource(R.string.settings_notifications_body),
-                        onClick = { openNotificationSettings(context) },
+                        onClick = {
+                            context.suppressAppOpenOnReturn()
+                            openNotificationSettings(context)
+                        },
                     )
 
                     Spacer(Modifier.height(Space.md))
@@ -188,12 +198,12 @@ fun SettingsSheet(
 
                     LinkRow(
                         label = stringResource(R.string.settings_privacy_policy),
-                        onClick = { legalPage = LegalPage.Privacy },
+                        onClick = { legalPageName = LegalPage.Privacy.name },
                     )
 
                     LinkRow(
                         label = stringResource(R.string.settings_terms),
-                        onClick = { legalPage = LegalPage.Terms },
+                        onClick = { legalPageName = LegalPage.Terms.name },
                     )
 
                     if (ConsentManager.privacyOptionsRequired) {

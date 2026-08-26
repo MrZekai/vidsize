@@ -1,6 +1,9 @@
 package com.vidsize.compressor.ui.screens
 
+import android.content.Intent
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,13 +25,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.vidsize.compressor.R
+import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.theme.Space
 import com.vidsize.compressor.ui.theme.VidsizeColor
 import com.vidsize.compressor.ui.theme.VidsizeShape
 import com.vidsize.compressor.ui.theme.VidsizeType
 
-/** Bundled legal document viewer: Settings never depends on a live website. */
 @Composable
 fun LegalDocumentSheet(
     title: String,
@@ -42,6 +45,27 @@ fun LegalDocumentSheet(
             settings.javaScriptEnabled = false
             settings.domStorageEnabled = false
             settings.setSupportZoom(false)
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                ): Boolean {
+                    val uri = request?.url ?: return false
+                    val isBundledLegal =
+                        uri.scheme == "file" &&
+                            uri.path?.startsWith("/android_asset/legal/") == true
+                    if (isBundledLegal) return false
+
+                    val action = when (uri.scheme?.lowercase()) {
+                        "http", "https" -> Intent.ACTION_VIEW
+                        "mailto" -> Intent.ACTION_SENDTO
+                        else -> return true
+                    }
+                    context.suppressAppOpenOnReturn()
+                    runCatching { context.startActivity(Intent(action, uri)) }
+                    return true
+                }
+            }
             loadUrl("file:///android_asset/legal/$assetFileName")
         }
     }

@@ -37,6 +37,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.ConsentManager
+import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
 import com.vidsize.compressor.ui.components.NativeAdCard
@@ -291,6 +292,7 @@ private fun ResultFigures(
 /* ------------------------------------------------------------------------- */
 
 private fun shareVideo(context: Context, uri: Uri) {
+    context.suppressAppOpenOnReturn()
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "video/mp4"
         putExtra(Intent.EXTRA_STREAM, uri)
@@ -312,6 +314,7 @@ private fun shareVideo(context: Context, uri: Uri) {
  * is used first and a generic chooser is the fallback.
  */
 private fun showInGallery(context: Context, uri: Uri) {
+    context.suppressAppOpenOnReturn()
     val gallery = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "video/*")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -329,6 +332,7 @@ private fun showInGallery(context: Context, uri: Uri) {
 }
 
 private fun openVideo(context: Context, uri: Uri) {
+    context.suppressAppOpenOnReturn()
     val intent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "video/mp4")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

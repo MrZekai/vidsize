@@ -69,10 +69,11 @@ class AppOpenAdManager(
             return
         }
         if (isLoadingAd || isAdAvailable()) return
+        val unitId = AdIds.appOpen ?: return
         isLoadingAd = true
         AppOpenAd.load(
             appContext,
-            AppOpenAdPolicy.TEST_APP_OPEN_UNIT,
+            unitId,
             AdRequest.Builder().build(),
             object : AppOpenAdLoadCallback() {
                 override fun onAdLoaded(ad: AppOpenAd) {
