@@ -61,7 +61,7 @@ jobs:
           grep -q 'signingConfig = signingConfigs.getByName("qaDebug")' app/build.gradle.kts
           grep -q 'versionCode = 8' app/build.gradle.kts
           grep -q 'COMPRESSION_BANNER_AD_UNIT_ID' app/build.gradle.kts
-          grep -q 'CompressionBannerAd()' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          grep -q 'CompressionBannerAd(active = !busy)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
           grep -q 'ic_launcher_monochrome' app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
           test -f store/assets/icon-512.png
           test -f app/src/main/assets/legal/privacy.html
