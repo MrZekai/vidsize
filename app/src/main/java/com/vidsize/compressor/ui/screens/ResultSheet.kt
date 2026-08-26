@@ -60,8 +60,8 @@ import com.vidsize.compressor.ui.theme.Space
  * no experimental Material API in its path — this screen must not break on a
  * Material 3 point release.
  *
- * Ad placement follows the plan exactly: the 300x250 MREC sits **below** all
- * three actions, after the user has seen the outcome. Nothing full-screen fires
+ * Ad placement follows the plan exactly: the Native Advanced card sits
+ * **below** all actions, after the user has seen the outcome. Nothing full-screen fires
  * here, and the ad's space is reserved so the buttons never move under a thumb
  * that is already travelling towards them.
  */
