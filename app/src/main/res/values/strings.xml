@@ -69,7 +69,7 @@
     <string name="error_title">Compression didn\'t finish</string>
     <string name="error_generic">This video couldn\'t be compressed on your device. Try a different compression level, or pick another video.</string>
     <string name="error_storage">Your device ran out of space while compressing. Free up some space and try again.</string>
-    <string name="error_invalid_video">This file doesn't contain a readable video. Choose a different video.</string>
+    <string name="error_invalid_video">This file doesn\'t contain a readable video. Choose a different video.</string>
     <string name="error_no_savings">This video is already well compressed. Try another video or keep the original.</string>
     <string name="try_again">Try again</string>
 
