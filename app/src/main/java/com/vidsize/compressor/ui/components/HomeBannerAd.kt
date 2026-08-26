@@ -21,6 +21,9 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
@@ -39,33 +42,44 @@ fun HomeBannerAd(modifier: Modifier = Modifier) {
         productionUnitId = BuildConfig.HOME_BANNER_AD_UNIT_ID,
         modifier = modifier,
         includeNavigationPadding = true,
+        active = true,
     )
 }
 
 @Composable
-fun CompressionBannerAd(modifier: Modifier = Modifier) {
+fun CompressionBannerAd(
+    modifier: Modifier = Modifier,
+    active: Boolean = true,
+) {
     AdaptiveBannerAd(
         productionUnitId = BuildConfig.COMPRESSION_BANNER_AD_UNIT_ID,
         modifier = modifier,
         includeNavigationPadding = false,
+        active = active,
     )
 }
 
 /**
- * Shared adaptive banner implementation.
+ * Stable anchored-ad slot.
  *
- * Debug/QA always uses Google's official test unit. Release builds use the
- * placement-specific production id. UMP remains the single gate before any ad
- * request is made.
+ * The slot is reserved while UMP / Mobile Ads resolves, so a late ad can never
+ * push a primary control under a travelling finger. If UMP resolves to a state
+ * where ads cannot be requested, the slot is removed. While compression runs,
+ * [active] is false: the geometry stays reserved but no AdView remains behind
+ * the processing scrim.
  */
 @Composable
 private fun AdaptiveBannerAd(
     productionUnitId: String,
     modifier: Modifier,
     includeNavigationPadding: Boolean,
+    active: Boolean,
 ) {
     val inspecting = LocalInspectionMode.current
-    if (!inspecting && !ConsentManager.adsAllowed) return
+
+    if (!inspecting && ConsentManager.consentResolved && !ConsentManager.canRequestAds) {
+        return
+    }
 
     val containerModifier = if (includeNavigationPadding) {
         modifier
@@ -78,30 +92,42 @@ private fun AdaptiveBannerAd(
             .background(VidsizeColor.Surface)
     }
 
-    Column(modifier = containerModifier) {
-        Text(
-            text = stringResource(R.string.ad_label),
-            modifier = Modifier.padding(
-                horizontal = Space.gutter,
-                vertical = 4.dp,
-            ),
-            style = VidsizeType.micro,
-            color = VidsizeColor.Faint,
-        )
+    val showCreative = inspecting || (active && ConsentManager.adsAllowed)
 
-        BoxWithConstraints(
+    Column(modifier = containerModifier) {
+        // Fixed disclosure row: the text may appear later, its geometry does not.
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp),
+                .height(24.dp)
+                .padding(horizontal = Space.gutter),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            if (showCreative) {
+                Text(
+                    text = stringResource(R.string.ad_label),
+                    style = VidsizeType.micro,
+                    color = VidsizeColor.InkSoft,
+                )
+            }
+        }
+
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
+            val context = LocalContext.current
             val widthDp = maxWidth.value.toInt().coerceAtLeast(1)
+            val adSize = remember(context, widthDp) {
+                AdSize.getLargeAnchoredAdaptiveBannerAdSize(context, widthDp)
+            }
+            val slotHeight = adSize.height.coerceAtLeast(50).dp
 
             if (inspecting) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp)
+                        .height(slotHeight)
                         .background(VidsizeColor.SurfaceMuted),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -111,14 +137,10 @@ private fun AdaptiveBannerAd(
                         color = VidsizeColor.Muted,
                     )
                 }
-            } else {
-                val context = LocalContext.current
+            } else if (active && ConsentManager.adsAllowed) {
                 val unitId = if (BuildConfig.DEBUG) TEST_BANNER_UNIT else productionUnitId
 
                 if (unitId.isNotBlank()) {
-                    val adSize = remember(context, widthDp) {
-                        AdSize.getLargeAnchoredAdaptiveBannerAdSize(context, widthDp)
-                    }
                     val adView = remember(context, adSize, unitId) {
                         AdView(context).apply {
                             adUnitId = unitId
@@ -126,23 +148,46 @@ private fun AdaptiveBannerAd(
                             loadAd(AdRequest.Builder().build())
                         }
                     }
+                    val lifecycleOwner = context as? LifecycleOwner
 
-                    DisposableEffect(adView) {
-                        onDispose { adView.destroy() }
+                    DisposableEffect(adView, lifecycleOwner) {
+                        val observer = LifecycleEventObserver { _, event ->
+                            when (event) {
+                                Lifecycle.Event.ON_RESUME -> adView.resume()
+                                Lifecycle.Event.ON_PAUSE -> adView.pause()
+                                else -> Unit
+                            }
+                        }
+                        lifecycleOwner?.lifecycle?.addObserver(observer)
+                        if (lifecycleOwner?.lifecycle?.currentState
+                                ?.isAtLeast(Lifecycle.State.RESUMED) == true
+                        ) {
+                            adView.resume()
+                        }
+
+                        onDispose {
+                            lifecycleOwner?.lifecycle?.removeObserver(observer)
+                            adView.pause()
+                            adView.destroy()
+                        }
                     }
 
                     AndroidView(
                         factory = { adView },
                         modifier = Modifier
                             .width(adSize.width.dp)
-                            .height(adSize.height.dp),
+                            .height(slotHeight),
                     )
+                } else {
+                    Spacer(Modifier.height(slotHeight))
                 }
+            } else {
+                // Consent/SDK pending or compression active: reserve, do not serve.
+                Spacer(Modifier.height(slotHeight))
             }
         }
 
-        if (!includeNavigationPadding) {
-            Spacer(Modifier.height(4.dp))
-        }
+        // Keep the compression CTA comfortably separated from the creative.
+        Spacer(Modifier.height(if (includeNavigationPadding) 8.dp else 20.dp))
     }
 }

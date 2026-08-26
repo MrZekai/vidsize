@@ -26,6 +26,10 @@ object ConsentManager {
     var adsSdkReady by mutableStateOf(false)
         private set
 
+    /** UMP has finished resolving the current request (success or fallback). */
+    var consentResolved by mutableStateOf(false)
+        private set
+
     /** True only while both consent and SDK readiness allow a new ad request. */
     val adsAllowed: Boolean
         get() = canRequestAds && adsSdkReady
@@ -46,17 +50,22 @@ object ConsentManager {
             {
                 UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) {
                     syncState(activity, consentInformation)
+                    consentResolved = true
                 }
             },
             {
                 // If the lookup fails, UMP's previously stored state still decides
                 // whether ads may be requested.
                 syncState(activity, consentInformation)
+                consentResolved = true
             },
         )
 
         // Returning users can reuse a valid stored consent state immediately.
         syncState(activity, consentInformation)
+        if (consentInformation.canRequestAds()) {
+            consentResolved = true
+        }
     }
 
     fun showPrivacyOptions(activity: Activity, onDismissed: () -> Unit = {}) {

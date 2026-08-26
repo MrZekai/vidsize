@@ -48,6 +48,8 @@
     <string name="error_title">لم يكتمل الضغط</string>
     <string name="error_generic">تعذّر ضغط هذا الفيديو على جهازك. جرّب مستوى ضغط آخر أو اختر فيديو مختلفًا.</string>
     <string name="error_storage">نفدت مساحة جهازك أثناء الضغط. فرّغ بعض المساحة ثم أعد المحاولة.</string>
+    <string name="error_invalid_video">لا يحتوي هذا الملف على فيديو قابل للقراءة. اختر فيديو آخر.</string>
+    <string name="error_no_savings">هذا الفيديو مضغوط جيدًا بالفعل. جرّب فيديو آخر أو احتفظ بالنسخة الأصلية.</string>
     <string name="try_again">أعد المحاولة</string>
     <string name="result_title">رائع! الفيديو جاهز 🎉</string>
     <string name="result_transform">%1$s ← %2$s</string>

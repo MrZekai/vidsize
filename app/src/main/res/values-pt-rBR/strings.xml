@@ -48,6 +48,8 @@
     <string name="error_title">A compressão não terminou</string>
     <string name="error_generic">Não foi possível comprimir este vídeo no seu aparelho. Tente outro nível de compressão ou escolha outro vídeo.</string>
     <string name="error_storage">Seu aparelho ficou sem espaço durante a compressão. Libere espaço e tente de novo.</string>
+    <string name="error_invalid_video">Este arquivo não contém um vídeo legível. Escolha outro vídeo.</string>
+    <string name="error_no_savings">Este vídeo já está bem compactado. Tente outro ou mantenha o original.</string>
     <string name="try_again">Tentar de novo</string>
     <string name="result_title">Pronto! Seu vídeo está aí 🎉</string>
     <string name="result_transform">%1$s → %2$s</string>

@@ -3,13 +3,12 @@ package com.vidsize.compressor.media
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.os.Environment
 import android.provider.MediaStore
 import androidx.annotation.OptIn
 import androidx.media3.common.Effect
-import androidx.media3.transformer.Effects
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
@@ -18,6 +17,8 @@ import androidx.media3.transformer.AudioEncoderSettings
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
@@ -35,20 +36,9 @@ import kotlin.coroutines.resumeWithException
 @OptIn(UnstableApi::class)
 object CompressionEngine {
 
-    /** How often the encoder is polled for progress, in milliseconds. */
     private const val PROGRESS_POLL_MS = 300L
+    private const val PENDING_EXPIRY_MILLIS = 24L * 60L * 60L * 1000L
 
-    /**
-     * Compresses [input] with [preset] and publishes the result to MediaStore.
-     *
-     * Must be called from the main thread: Media3's `Transformer` is bound to
-     * the Looper of the thread that creates it, and progress is polled on that
-     * same thread.
-     *
-     * @param onProgress optional encoder progress in the range 0f..1f. When null
-     *        the pipeline behaves exactly as before — this parameter is additive
-     *        and changes no encoding behaviour.
-     */
     suspend fun compress(
         context: Context,
         input: Uri,
@@ -68,10 +58,17 @@ object CompressionEngine {
                 videoBitrate = plan.videoBitrate,
                 audioBitrate = plan.audioBitrate,
                 targetHeight = plan.targetHeight,
+                hasAudio = info.hasAudio,
                 onProgress = onProgress,
             )
             val actual = temp.length().takeIf { it > 0 } ?: export.fileSizeBytes
             require(actual > 0) { "Compression finished without a readable output file." }
+
+            // Do not publish a "successful" file that consumes the same or more
+            // storage than the original. The user keeps the better original.
+            if (info.sourceBytes > 0L && actual >= info.sourceBytes) {
+                throw NoCompressionSavingsException()
+            }
 
             val published = withContext(Dispatchers.IO) { publish(context, temp) }
             return CompressionResult(
@@ -93,6 +90,7 @@ object CompressionEngine {
         videoBitrate: Int,
         audioBitrate: Int,
         targetHeight: Int,
+        hasAudio: Boolean,
         onProgress: ((Float) -> Unit)?,
     ): ExportResult = suspendCancellableCoroutine { continuation ->
         val videoSettings = VideoEncoderSettings.Builder()
@@ -133,9 +131,6 @@ object CompressionEngine {
         val handler = Handler(Looper.getMainLooper())
         var poller: Runnable? = null
 
-        // A single cancellation handler: Transformer is not thread-safe, so the
-        // cancel is posted back to the thread that created it, and the progress
-        // poller is torn down at the same time.
         continuation.invokeOnCancellation {
             handler.post {
                 poller?.let { handler.removeCallbacks(it) }
@@ -150,14 +145,22 @@ object CompressionEngine {
         val item = EditedMediaItem.Builder(MediaItem.fromUri(input))
             .setEffects(effects)
             .build()
-        transformer.start(item, output.absolutePath)
+
+        val sequence = if (hasAudio) {
+            EditedMediaItemSequence.withAudioAndVideoFrom(listOf(item))
+        } else {
+            EditedMediaItemSequence.withVideoFrom(listOf(item))
+        }
+        val composition = Composition.Builder(listOf(sequence))
+            .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
+            .build()
+
+        transformer.start(composition, output.absolutePath)
 
         if (onProgress != null) {
             val holder = ProgressHolder()
             val runnable = object : Runnable {
                 override fun run() {
-                    // Once the continuation has resumed there is nothing left to
-                    // report, so the loop retires itself.
                     if (!continuation.isActive) return
                     if (transformer.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) {
                         onProgress(holder.progress.coerceIn(0, 100) / 100f)
@@ -176,6 +179,10 @@ object CompressionEngine {
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Vidsize")
             put(MediaStore.Video.Media.IS_PENDING, 1)
+            put(
+                MediaStore.MediaColumns.DATE_EXPIRES,
+                (System.currentTimeMillis() + PENDING_EXPIRY_MILLIS) / 1000L,
+            )
         }
         val resolver = context.contentResolver
         val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -186,6 +193,7 @@ object CompressionEngine {
             }
             values.clear()
             values.put(MediaStore.Video.Media.IS_PENDING, 0)
+            values.putNull(MediaStore.MediaColumns.DATE_EXPIRES)
             resolver.update(uri, values, null, null)
             return uri
         } catch (t: Throwable) {

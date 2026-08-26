@@ -48,6 +48,8 @@
     <string name="error_title">Komprimierung nicht abgeschlossen</string>
     <string name="error_generic">Dieses Video konnte auf deinem Gerät nicht komprimiert werden. Probiere eine andere Stufe oder ein anderes Video.</string>
     <string name="error_storage">Während der Komprimierung ging der Speicher aus. Schaffe Platz und versuch es erneut.</string>
+    <string name="error_invalid_video">Diese Datei enthält kein lesbares Video. Wähle ein anderes Video.</string>
+    <string name="error_no_savings">Dieses Video ist bereits gut komprimiert. Probiere ein anderes oder behalte das Original.</string>
     <string name="try_again">Erneut versuchen</string>
     <string name="result_title">Fertig! Dein Video ist bereit 🎉</string>
     <string name="result_transform">%1$s → %2$s</string>

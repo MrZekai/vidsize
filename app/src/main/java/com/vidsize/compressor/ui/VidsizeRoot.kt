@@ -37,26 +37,25 @@ fun VidsizeRoot(initialVideo: Uri?) {
         if (uri != null) selectedVideo = uri.toString()
     }
 
+    val launchVideoPicker: () -> Unit = {
+        (context.applicationContext as? VidsizeApplication)
+            ?.appOpenAdManager
+            ?.suppressNextForeground()
+        picker.launch(PickVisualMediaRequest(PickVisualMedia.VideoOnly))
+    }
+
     val current = selectedVideo
     if (current == null) {
         HomeScreen(
             summary = history.summary,
-            onSelectVideo = {
-                // The system photo picker runs in another process, so returning
-                // from it is a normal app foreground. Without this the App Open
-                // ad could appear on top of the compression screen the moment a
-                // video is chosen — the exact placement AdMob warns against.
-                (context.applicationContext as? VidsizeApplication)
-                    ?.appOpenAdManager
-                    ?.suppressNextForeground()
-                picker.launch(PickVisualMediaRequest(PickVisualMedia.VideoOnly))
-            },
+            onSelectVideo = launchVideoPicker,
             onClearHistory = { history.clear() },
         )
     } else {
         CompressionScreen(
             videoUri = Uri.parse(current),
             onBack = { selectedVideo = null },
+            onSelectAnother = launchVideoPicker,
             // The service writes the history row (it owns the job); the UI
             // only needs to re-read it.
             onCompleted = { history.refresh() },

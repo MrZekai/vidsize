@@ -48,6 +48,8 @@
     <string name="error_title">Kompresi tidak selesai</string>
     <string name="error_generic">Video ini tidak bisa dikompres di perangkatmu. Coba tingkat kompresi lain atau pilih video lain.</string>
     <string name="error_storage">Ruang penyimpanan habis saat mengompres. Kosongkan ruang lalu coba lagi.</string>
+    <string name="error_invalid_video">File ini tidak berisi video yang dapat dibaca. Pilih video lain.</string>
+    <string name="error_no_savings">Video ini sudah terkompresi dengan baik. Coba video lain atau gunakan file asli.</string>
     <string name="try_again">Coba lagi</string>
     <string name="result_title">Selesai! Videomu sudah siap 🎉</string>
     <string name="result_transform">%1$s → %2$s</string>

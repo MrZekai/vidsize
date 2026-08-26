@@ -16,9 +16,9 @@ import kotlin.math.roundToInt
  */
 object Fmt {
 
-    private const val KB = 1024.0
-    private const val MB = KB * 1024.0
-    private const val GB = MB * 1024.0
+    private const val KB = 1000.0
+    private const val MB = KB * 1000.0
+    private const val GB = MB * 1000.0
 
     /** Human file size. Picks the unit so the number always has 3-4 digits. */
     fun bytes(value: Long): String {

@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.R
 import com.vidsize.compressor.media.CompressionJobState
 import com.vidsize.compressor.media.CompressionPlanner
@@ -88,6 +89,7 @@ import kotlinx.coroutines.withContext
 fun CompressionScreen(
     videoUri: Uri,
     onBack: () -> Unit,
+    onSelectAnother: () -> Unit,
     onCompleted: (CompressionResult) -> Unit,
 ) {
     val context = LocalContext.current
@@ -207,7 +209,14 @@ fun CompressionScreen(
                     color = VidsizeColor.Faint,
                 )
 
-                if (storage != null && !storage.hasRoom) {
+                if (probeFailed) {
+                    Spacer(Modifier.height(Space.md))
+                    NoticeCard(
+                        tone = NoticeTone.Error,
+                        title = stringResource(R.string.error_title),
+                        body = stringResource(R.string.error_invalid_video),
+                    )
+                } else if (storage != null && !storage.hasRoom) {
                     Spacer(Modifier.height(Space.md))
                     NoticeCard(
                         tone = NoticeTone.Blocking,
@@ -233,23 +242,40 @@ fun CompressionScreen(
                         tone = NoticeTone.Error,
                         title = stringResource(R.string.error_title),
                         body = stringResource(
-                            if (failure.outOfSpace) R.string.error_storage
-                            else R.string.error_generic,
+                            when (failure.reason) {
+                                CompressionJobState.FailureReason.OUT_OF_SPACE ->
+                                    R.string.error_storage
+                                CompressionJobState.FailureReason.INVALID_VIDEO ->
+                                    R.string.error_invalid_video
+                                CompressionJobState.FailureReason.NO_SAVINGS ->
+                                    R.string.error_no_savings
+                                CompressionJobState.FailureReason.GENERIC ->
+                                    R.string.error_generic
+                            },
                         ),
-                        detail = failure.message,
+                        detail = failure.debugMessage.takeIf { BuildConfig.DEBUG },
                     )
                 }
 
                 Spacer(Modifier.height(Space.xl))
             }
 
-            // Revenue placement is separated from the CTA by its own ad strip
-            // and the action bar divider, avoiding accidental-tap adjacency.
-            CompressionBannerAd()
+            // Keep the slot geometry stable, but destroy/pause the creative
+            // while the processing scrim is covering this screen.
+            CompressionBannerAd(active = !busy)
 
             CompressionActionBar(
-                enabled = info != null && !busy && storage?.hasRoom != false,
-                onCompress = { startCompression() },
+                text = stringResource(
+                    if (probeFailed) R.string.cta_select_video else R.string.cta_compress,
+                ),
+                enabled = if (probeFailed) {
+                    !busy
+                } else {
+                    info != null && !busy && storage?.hasRoom != false
+                },
+                onClick = {
+                    if (probeFailed) onSelectAnother() else startCompression()
+                },
             )
         }
 
@@ -300,7 +326,11 @@ private fun CompressionTopBar(onBack: () -> Unit, enabled: Boolean) {
 }
 
 @Composable
-private fun CompressionActionBar(enabled: Boolean, onCompress: () -> Unit) {
+private fun CompressionActionBar(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -314,8 +344,8 @@ private fun CompressionActionBar(enabled: Boolean, onCompress: () -> Unit) {
                 .padding(horizontal = Space.gutter, vertical = Space.sm),
         ) {
             PrimaryButton(
-                text = stringResource(R.string.cta_compress),
-                onClick = onCompress,
+                text = text,
+                onClick = onClick,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = enabled,
             )
@@ -417,7 +447,7 @@ private fun SelectedVideoCard(videoUri: Uri, info: VideoInfo?, failed: Boolean) 
 
             if (info != null && info.height > 0) {
                 Spacer(Modifier.width(Space.xs))
-                TintedPill(text = Fmt.resolutionBadge(info.height))
+                TintedPill(text = Fmt.resolutionBadge(minOf(info.width, info.height)))
             }
         }
     }

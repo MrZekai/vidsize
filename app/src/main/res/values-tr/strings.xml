@@ -48,6 +48,8 @@
     <string name="error_title">Sıkıştırma tamamlanamadı</string>
     <string name="error_generic">Bu video cihazında sıkıştırılamadı. Farklı bir sıkıştırma düzeyi dene ya da başka bir video seç.</string>
     <string name="error_storage">Sıkıştırma sırasında cihazının yeri doldu. Biraz yer açıp tekrar dene.</string>
+    <string name="error_invalid_video">Bu dosyada okunabilir bir video bulunamadı. Farklı bir video seç.</string>
+    <string name="error_no_savings">Bu video zaten iyi sıkıştırılmış. Başka bir video dene veya orijinali kullan.</string>
     <string name="try_again">Tekrar dene</string>
     <string name="result_title">Harika! Videon hazır 🎉</string>
     <string name="result_transform">%1$s → %2$s</string>

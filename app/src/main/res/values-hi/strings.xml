@@ -48,6 +48,8 @@
     <string name="error_title">कंप्रेशन पूरा नहीं हुआ</string>
     <string name="error_generic">यह वीडियो आपके फ़ोन पर कंप्रेस नहीं हो सका। दूसरा कंप्रेशन लेवल आज़माएँ या कोई और वीडियो चुनें।</string>
     <string name="error_storage">कंप्रेस करते समय फ़ोन की जगह खत्म हो गई। कुछ जगह खाली करके दोबारा कोशिश करें।</string>
+    <string name="error_invalid_video">इस फ़ाइल में पढ़ने योग्य वीडियो नहीं है। कोई दूसरा वीडियो चुनें।</string>
+    <string name="error_no_savings">यह वीडियो पहले से अच्छी तरह संपीड़ित है। कोई दूसरा वीडियो आज़माएँ या मूल फ़ाइल रखें।</string>
     <string name="try_again">फिर कोशिश करें</string>
     <string name="result_title">हो गया! आपका वीडियो तैयार है 🎉</string>
     <string name="result_transform">%1$s → %2$s</string>

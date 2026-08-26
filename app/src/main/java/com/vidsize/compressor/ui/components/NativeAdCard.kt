@@ -90,10 +90,11 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
     AndroidView(
         modifier = modifier.fillMaxWidth(),
         factory = { viewContext ->
-            LayoutInflater.from(viewContext)
-                .inflate(R.layout.native_ad_result, null) as NativeAdView
+            (LayoutInflater.from(viewContext)
+                .inflate(R.layout.native_ad_result, null) as NativeAdView)
+                .also { it.bind(ad) }
         },
-        update = { adView -> adView.bind(ad) },
+        update = { /* Assets are intentionally bound once per NativeAd instance. */ },
     )
 }
 

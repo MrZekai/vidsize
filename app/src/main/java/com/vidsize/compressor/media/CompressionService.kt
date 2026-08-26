@@ -76,10 +76,12 @@ class CompressionService : Service() {
             return START_NOT_STICKY
         }
 
-        // Already busy: ignore rather than trample the running export.
+        // Every startForegroundService request must promote promptly. If a
+        // second valid request arrives while the current export is active, renew
+        // foreground state first, then ignore the duplicate work request.
+        startForegroundSafely(buildNotification(progressPercent = null))
         if (job?.isActive == true) return START_NOT_STICKY
 
-        startForegroundSafely(buildNotification(progressPercent = null))
         CompressionJobState.markRunning()
 
         job = scope.launch {
@@ -101,9 +103,19 @@ class CompressionService : Service() {
                 if (throwable is CancellationException) {
                     CompressionJobState.reset()
                 } else {
+                    val reason = when {
+                        throwable is InvalidVideoException ->
+                            CompressionJobState.FailureReason.INVALID_VIDEO
+                        throwable is NoCompressionSavingsException ->
+                            CompressionJobState.FailureReason.NO_SAVINGS
+                        throwable.isOutOfSpace() ->
+                            CompressionJobState.FailureReason.OUT_OF_SPACE
+                        else ->
+                            CompressionJobState.FailureReason.GENERIC
+                    }
                     CompressionJobState.markFailed(
-                        message = throwable.message,
-                        outOfSpace = throwable.isOutOfSpace(),
+                        reason = reason,
+                        debugMessage = throwable.message,
                     )
                 }
             }

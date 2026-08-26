@@ -2,7 +2,9 @@ package com.vidsize.compressor.media
 
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.VideoInfo
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class CompressionPlannerTest {
@@ -25,5 +27,23 @@ class CompressionPlannerTest {
     fun smallestPresetUsesLowerResolutionCeiling() {
         val smallest = CompressionPlanner.plan(sample, CompressionPreset.SMALLEST)
         assertTrue(smallest.targetHeight <= 480)
+    }
+
+    @Test
+    fun portraitSmallerUses720pShortEdgeWithoutCrushingLongEdge() {
+        val portrait = sample.copy(width = 1080, height = 1920)
+        val smaller = CompressionPlanner.plan(portrait, CompressionPreset.SMALLER)
+        assertEquals(1280, smaller.targetHeight)
+    }
+
+    @Test
+    fun invalidDimensionsAreRejectedInsteadOfBecomingOnePixel() {
+        val invalid = sample.copy(width = 0, height = 0)
+        try {
+            CompressionPlanner.plan(invalid, CompressionPreset.BALANCED)
+            fail("Expected invalid dimensions to be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected.
+        }
     }
 }

@@ -6,6 +6,7 @@ data class VideoInfo(
     val height: Int,
     val sourceBytes: Long,
     val sourceBitrate: Int?,
+    val hasAudio: Boolean = true,
 ) {
     val durationSeconds: Double get() = durationMs / 1000.0
 }
