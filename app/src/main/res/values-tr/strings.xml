@@ -61,7 +61,7 @@
     <string name="close">Kapat</string>
     <string name="settings_title">Ayarlar</string>
     <string name="settings_language_title">Dil</string>
-    <string name="settings_language_body">Vidsize'ın kullanacağı dili seç.</string>
+    <string name="settings_language_body">Vidsize\'ın kullanacağı dili seç.</string>
     <string name="settings_notifications_title">Bildirimler</string>
     <string name="settings_notifications_body">Sıkıştırma ilerleme ve tamamlanma bildirimlerini yönet.</string>
     <string name="settings_history_title">Sıkıştırma geçmişi</string>
