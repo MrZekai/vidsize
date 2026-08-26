@@ -12,6 +12,12 @@ val homeBannerAdUnitId: String =
         ?: System.getenv("VIDSIZE_HOME_BANNER_AD_UNIT_ID")
         ?: "")
 
+// Production Compression-screen adaptive banner unit. Debug/QA uses test ads.
+val compressionBannerAdUnitId: String =
+    (providers.gradleProperty("VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID").orNull
+        ?: System.getenv("VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID")
+        ?: "")
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -28,8 +34,8 @@ android {
         // avoids broad legacy storage permissions on Android 7–9.
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.7.1"
+        versionCode = 8
+        versionName = "0.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -43,6 +49,11 @@ android {
             "String",
             "HOME_BANNER_AD_UNIT_ID",
             "\"$homeBannerAdUnitId\"",
+        )
+        buildConfigField(
+            "String",
+            "COMPRESSION_BANNER_AD_UNIT_ID",
+            "\"$compressionBannerAdUnitId\"",
         )
     }
 

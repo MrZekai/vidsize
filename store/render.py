@@ -196,7 +196,7 @@ body{{width:1024px;height:500px;background:linear-gradient(120deg,{INDIGO_SOFT} 
 </style></head><body>
 <div class='l'>
  <div class='mark'>
-  <div class='ic'><svg width='40' height='40' viewBox='0 0 108 108'><rect x='30' y='32' width='48' height='44' rx='8' fill='#fff'/><path d='M50,41 L58,41 L58,55 L64,55 L54,68 L44,55 L50,55 Z' fill='{INDIGO}'/></svg></div>
+  <div class='ic' style='background:#EDEBFD'><svg width='50' height='50' viewBox='0 0 108 108'><path fill='#4F46E5' fill-rule='evenodd' d='M38,32 H70 Q78,32 78,39 Q62,54 78,69 Q78,76 70,76 H38 Q30,76 30,69 Q46,54 30,39 Q30,32 38,32 Z M48,47 Q48,44.5 50.2,45.7 L63,52.8 Q65,54 63,55.2 L50.2,62.3 Q48,63.5 48,61 Z'/></svg></div>
   <div class='name'>Vidsize</div>
  </div>
  <div class='tag'>Compress video on your phone.<br>Keep the quality you need.</div>

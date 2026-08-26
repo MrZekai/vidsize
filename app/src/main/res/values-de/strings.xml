@@ -60,8 +60,15 @@
     <string name="share_chooser">Komprimiertes Video teilen</string>
     <string name="close">Schließen</string>
     <string name="settings_title">Einstellungen</string>
-    <string name="settings_appearance_title">Darstellung</string>
-    <string name="settings_appearance_body">Vidsize nutzt in dieser Version ein helles Design.</string>
+    <string name="settings_language_title">Sprache</string>
+    <string name="settings_language_body">Wähle die Sprache, die Vidsize verwendet.</string>
+    <string name="settings_notifications_title">Benachrichtigungen</string>
+    <string name="settings_notifications_body">Verwalte Fortschritts- und Abschlussbenachrichtigungen.</string>
+    <string name="settings_history_title">Komprimierungsverlauf</string>
+    <string name="settings_history_body">Lösche die Liste der letzten Vorgänge, ohne gespeicherte Videos zu entfernen.</string>
+    <string name="settings_clear_history_title">Komprimierungsverlauf löschen?</string>
+    <string name="settings_clear_history_body">Nur die Liste der letzten Vorgänge wird entfernt. Deine komprimierten Videos bleiben in Movies/Vidsize.</string>
+    <string name="settings_clear_history_confirm">Verlauf löschen</string>
     <string name="settings_privacy_title">Datenschutz</string>
     <string name="settings_privacy_body">Deine Videos werden auf diesem Gerät komprimiert. Es wird nichts auf einen Server hochgeladen.</string>
     <string name="settings_ads_title">Werbung</string>

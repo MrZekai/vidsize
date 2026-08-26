@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -21,10 +23,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,26 +49,37 @@ import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.SecondaryButton
+import com.vidsize.compressor.ui.theme.Space
 import com.vidsize.compressor.ui.theme.VidsizeColor
 import com.vidsize.compressor.ui.theme.VidsizeShape
 import com.vidsize.compressor.ui.theme.VidsizeType
-import com.vidsize.compressor.ui.theme.Space
 
-/**
- * Settings.
- *
- * V1 has almost nothing to configure — that is a product decision, not an
- * omission. The sheet answers the three questions a user actually has about a
- * free compressor (why is it light, where do my videos go, who is paying for
- * this) and then carries the legal surface Google Play requires: a reachable
- * privacy policy, terms, and — where the user's region requires it — a permanent
- * entry point back into the ad consent form.
- */
+private enum class LegalPage(val assetFileName: String) {
+    Privacy("privacy.html"),
+    Terms("terms.html"),
+}
+
 @Composable
-fun SettingsSheet(onDismiss: () -> Unit) {
+fun SettingsSheet(
+    onDismiss: () -> Unit,
+    onClearHistory: () -> Unit,
+) {
     val context = LocalContext.current
-    val privacyUrl = stringResource(R.string.url_privacy)
-    val termsUrl = stringResource(R.string.url_terms)
+    var legalPage by remember { mutableStateOf<LegalPage?>(null) }
+    var confirmClearHistory by remember { mutableStateOf(false) }
+
+    val page = legalPage
+    if (page != null) {
+        LegalDocumentSheet(
+            title = stringResource(
+                if (page == LegalPage.Privacy) R.string.settings_privacy_policy
+                else R.string.settings_terms,
+            ),
+            assetFileName = page.assetFileName,
+            onDismiss = { legalPage = null },
+        )
+        return
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -85,7 +104,6 @@ fun SettingsSheet(onDismiss: () -> Unit) {
                         .padding(horizontal = Space.lg),
                 ) {
                     Spacer(Modifier.height(Space.sm))
-
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Box(
                             modifier = Modifier
@@ -97,7 +115,6 @@ fun SettingsSheet(onDismiss: () -> Unit) {
                     }
 
                     Spacer(Modifier.height(Space.lg))
-
                     Text(
                         text = stringResource(R.string.settings_title),
                         style = VidsizeType.screenTitle,
@@ -106,12 +123,24 @@ fun SettingsSheet(onDismiss: () -> Unit) {
 
                     Spacer(Modifier.height(Space.lg))
 
-                    InfoRow(
-                        icon = R.drawable.ic_palette,
+                    ActionRow(
+                        icon = R.drawable.ic_language,
                         tint = VidsizeColor.Indigo,
                         tintSoft = VidsizeColor.IndigoSoft,
-                        title = stringResource(R.string.settings_appearance_title),
-                        body = stringResource(R.string.settings_appearance_body),
+                        title = stringResource(R.string.settings_language_title),
+                        body = stringResource(R.string.settings_language_body),
+                        onClick = { openLanguageSettings(context) },
+                    )
+
+                    Spacer(Modifier.height(Space.md))
+
+                    ActionRow(
+                        icon = R.drawable.ic_notification,
+                        tint = VidsizeColor.Cyan,
+                        tintSoft = VidsizeColor.CyanSoft,
+                        title = stringResource(R.string.settings_notifications_title),
+                        body = stringResource(R.string.settings_notifications_body),
+                        onClick = { openNotificationSettings(context) },
                     )
 
                     Spacer(Modifier.height(Space.md))
@@ -134,6 +163,17 @@ fun SettingsSheet(onDismiss: () -> Unit) {
                         body = stringResource(R.string.settings_ads_body),
                     )
 
+                    Spacer(Modifier.height(Space.md))
+
+                    ActionRow(
+                        icon = R.drawable.ic_delete,
+                        tint = VidsizeColor.Danger,
+                        tintSoft = VidsizeColor.DangerSoft,
+                        title = stringResource(R.string.settings_history_title),
+                        body = stringResource(R.string.settings_history_body),
+                        onClick = { confirmClearHistory = true },
+                    )
+
                     Spacer(Modifier.height(Space.lg))
                     HairLine()
                     Spacer(Modifier.height(Space.md))
@@ -148,17 +188,14 @@ fun SettingsSheet(onDismiss: () -> Unit) {
 
                     LinkRow(
                         label = stringResource(R.string.settings_privacy_policy),
-                        onClick = { openUrl(context, privacyUrl) },
+                        onClick = { legalPage = LegalPage.Privacy },
                     )
 
                     LinkRow(
                         label = stringResource(R.string.settings_terms),
-                        onClick = { openUrl(context, termsUrl) },
+                        onClick = { legalPage = LegalPage.Terms },
                     )
 
-                    // Shown only where the user's region requires a re-openable
-                    // consent control. Outside those regions the row would be a
-                    // dead end, so it is not rendered at all.
                     if (ConsentManager.privacyOptionsRequired) {
                         LinkRow(
                             label = stringResource(R.string.settings_ad_privacy),
@@ -171,7 +208,6 @@ fun SettingsSheet(onDismiss: () -> Unit) {
                     }
 
                     Spacer(Modifier.height(Space.md))
-
                     Text(
                         text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
                         style = VidsizeType.micro,
@@ -179,17 +215,38 @@ fun SettingsSheet(onDismiss: () -> Unit) {
                     )
 
                     Spacer(Modifier.height(Space.lg))
-
                     SecondaryButton(
                         text = stringResource(R.string.close),
                         onClick = onDismiss,
                         modifier = Modifier.fillMaxWidth(),
                     )
-
                     Spacer(Modifier.height(Space.lg))
                 }
             }
         }
+    }
+
+    if (confirmClearHistory) {
+        AlertDialog(
+            onDismissRequest = { confirmClearHistory = false },
+            title = { Text(stringResource(R.string.settings_clear_history_title)) },
+            text = { Text(stringResource(R.string.settings_clear_history_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClearHistory()
+                        confirmClearHistory = false
+                    },
+                ) {
+                    Text(stringResource(R.string.settings_clear_history_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearHistory = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }
 
@@ -202,36 +259,65 @@ private fun InfoRow(
     body: String,
 ) {
     Row(modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(VidsizeShape.small)
-                .background(tintSoft),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(icon),
-                contentDescription = null,
-                tint = tint,
-                modifier = Modifier.size(19.dp),
-            )
-        }
-
+        RowIcon(icon, tint, tintSoft)
         Spacer(Modifier.width(Space.sm))
-
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = VidsizeType.cardTitle,
-                color = VidsizeColor.Ink,
-            )
+            Text(text = title, style = VidsizeType.cardTitle, color = VidsizeColor.Ink)
             Spacer(Modifier.height(2.dp))
-            Text(
-                text = body,
-                style = VidsizeType.supporting,
-                color = VidsizeColor.Muted,
-            )
+            Text(text = body, style = VidsizeType.supporting, color = VidsizeColor.Muted)
         }
+    }
+}
+
+@Composable
+private fun ActionRow(
+    icon: Int,
+    tint: Color,
+    tintSoft: Color,
+    title: String,
+    body: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(VidsizeShape.small)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RowIcon(icon, tint, tintSoft)
+        Spacer(Modifier.width(Space.sm))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = VidsizeType.cardTitle, color = VidsizeColor.Ink)
+            Spacer(Modifier.height(2.dp))
+            Text(text = body, style = VidsizeType.supporting, color = VidsizeColor.Muted)
+        }
+        Spacer(Modifier.width(Space.xs))
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_right),
+            contentDescription = null,
+            tint = VidsizeColor.Faint,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
+@Composable
+private fun RowIcon(icon: Int, tint: Color, tintSoft: Color) {
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(VidsizeShape.small)
+            .background(tintSoft),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(19.dp),
+        )
     }
 }
 
@@ -260,16 +346,27 @@ private fun LinkRow(label: String, onClick: () -> Unit) {
     }
 }
 
-private fun openUrl(context: Context, url: String) {
-    runCatching {
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
+private fun openLanguageSettings(context: Context) {
+    val intent = if (Build.VERSION.SDK_INT >= 33) {
+        Intent(Settings.ACTION_APP_LOCALE_SETTINGS).apply {
+            data = Uri.parse("package:${context.packageName}")
+        }
+    } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:${context.packageName}")
+        }
     }
+    runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 }
 
-/** Compose's LocalContext is not always the Activity; unwrap it safely. */
+private fun openNotificationSettings(context: Context) {
+    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(intent) }
+}
+
 private fun Context.findActivity(): Activity? {
     var current: Context? = this
     while (current is ContextWrapper) {

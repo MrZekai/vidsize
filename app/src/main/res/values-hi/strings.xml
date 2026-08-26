@@ -60,8 +60,15 @@
     <string name="share_chooser">कंप्रेस किया वीडियो शेयर करें</string>
     <string name="close">बंद करें</string>
     <string name="settings_title">सेटिंग</string>
-    <string name="settings_appearance_title">दिखावट</string>
-    <string name="settings_appearance_body">इस वर्ज़न में Vidsize लाइट थीम इस्तेमाल करता है।</string>
+    <string name="settings_language_title">भाषा</string>
+    <string name="settings_language_body">Vidsize में इस्तेमाल होने वाली भाषा चुनें।</string>
+    <string name="settings_notifications_title">सूचनाएँ</string>
+    <string name="settings_notifications_body">कंप्रेशन की प्रगति और पूर्ण होने की सूचनाएँ प्रबंधित करें।</string>
+    <string name="settings_history_title">कंप्रेशन इतिहास</string>
+    <string name="settings_history_body">सहेजे गए वीडियो हटाए बिना हाल की सूची साफ करें।</string>
+    <string name="settings_clear_history_title">कंप्रेशन इतिहास साफ करें?</string>
+    <string name="settings_clear_history_body">केवल हाल की सूची हटेगी। आपके कंप्रेस किए गए वीडियो Movies/Vidsize में रहेंगे।</string>
+    <string name="settings_clear_history_confirm">इतिहास साफ करें</string>
     <string name="settings_privacy_title">प्राइवेसी</string>
     <string name="settings_privacy_body">आपके वीडियो इसी फ़ोन पर कंप्रेस होते हैं। कुछ भी सर्वर पर अपलोड नहीं होता।</string>
     <string name="settings_ads_title">विज्ञापन</string>

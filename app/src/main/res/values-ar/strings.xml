@@ -60,8 +60,15 @@
     <string name="share_chooser">مشاركة الفيديو المضغوط</string>
     <string name="close">إغلاق</string>
     <string name="settings_title">الإعدادات</string>
-    <string name="settings_appearance_title">المظهر</string>
-    <string name="settings_appearance_body">يستخدم Vidsize مظهرًا فاتحًا في هذا الإصدار.</string>
+    <string name="settings_language_title">اللغة</string>
+    <string name="settings_language_body">اختر اللغة التي يستخدمها Vidsize.</string>
+    <string name="settings_notifications_title">الإشعارات</string>
+    <string name="settings_notifications_body">إدارة إشعارات تقدم الضغط واكتماله.</string>
+    <string name="settings_history_title">سجل الضغط</string>
+    <string name="settings_history_body">امسح القائمة الأخيرة دون حذف مقاطع الفيديو المحفوظة.</string>
+    <string name="settings_clear_history_title">مسح سجل الضغط؟</string>
+    <string name="settings_clear_history_body">سيؤدي ذلك إلى إزالة القائمة الأخيرة فقط. ستبقى مقاطع الفيديو المضغوطة في Movies/Vidsize.</string>
+    <string name="settings_clear_history_confirm">مسح السجل</string>
     <string name="settings_privacy_title">الخصوصية</string>
     <string name="settings_privacy_body">تُضغط مقاطعك على هذا الجهاز. لا يُرفع أي شيء إلى أي خادم.</string>
     <string name="settings_ads_title">الإعلانات</string>

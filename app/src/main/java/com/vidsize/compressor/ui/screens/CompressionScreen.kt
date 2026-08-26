@@ -58,6 +58,7 @@ import com.vidsize.compressor.model.VideoInfo
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HairLine
+import com.vidsize.compressor.ui.components.CompressionBannerAd
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SectionHeader
@@ -241,6 +242,10 @@ fun CompressionScreen(
 
                 Spacer(Modifier.height(Space.xl))
             }
+
+            // Revenue placement is separated from the CTA by its own ad strip
+            // and the action bar divider, avoiding accidental-tap adjacency.
+            CompressionBannerAd()
 
             CompressionActionBar(
                 enabled = info != null && !busy && storage?.hasRoom != false,

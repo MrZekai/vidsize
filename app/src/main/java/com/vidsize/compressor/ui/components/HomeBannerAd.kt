@@ -31,26 +31,54 @@ import com.vidsize.compressor.ui.theme.Space
 import com.vidsize.compressor.ui.theme.VidsizeColor
 import com.vidsize.compressor.ui.theme.VidsizeType
 
-private const val TEST_BANNER_UNIT =
-    "ca-app-pub-3940256099942544/9214589741"
+private const val TEST_BANNER_UNIT = "ca-app-pub-3940256099942544/9214589741"
 
-/**
- * Revenue banner pinned to the bottom of Home.
- *
- * Debug/QA uses Google's official test unit. Release uses
- * VIDSIZE_HOME_BANNER_AD_UNIT_ID. No request is made until UMP allows ads.
- */
 @Composable
 fun HomeBannerAd(modifier: Modifier = Modifier) {
+    AdaptiveBannerAd(
+        productionUnitId = BuildConfig.HOME_BANNER_AD_UNIT_ID,
+        modifier = modifier,
+        includeNavigationPadding = true,
+    )
+}
+
+@Composable
+fun CompressionBannerAd(modifier: Modifier = Modifier) {
+    AdaptiveBannerAd(
+        productionUnitId = BuildConfig.COMPRESSION_BANNER_AD_UNIT_ID,
+        modifier = modifier,
+        includeNavigationPadding = false,
+    )
+}
+
+/**
+ * Shared adaptive banner implementation.
+ *
+ * Debug/QA always uses Google's official test unit. Release builds use the
+ * placement-specific production id. UMP remains the single gate before any ad
+ * request is made.
+ */
+@Composable
+private fun AdaptiveBannerAd(
+    productionUnitId: String,
+    modifier: Modifier,
+    includeNavigationPadding: Boolean,
+) {
     val inspecting = LocalInspectionMode.current
     if (!inspecting && !ConsentManager.adsAllowed) return
 
-    Column(
-        modifier = modifier
+    val containerModifier = if (includeNavigationPadding) {
+        modifier
             .fillMaxWidth()
             .background(VidsizeColor.Surface)
-            .navigationBarsPadding(),
-    ) {
+            .navigationBarsPadding()
+    } else {
+        modifier
+            .fillMaxWidth()
+            .background(VidsizeColor.Surface)
+    }
+
+    Column(modifier = containerModifier) {
         Text(
             text = stringResource(R.string.ad_label),
             modifier = Modifier.padding(
@@ -64,7 +92,7 @@ fun HomeBannerAd(modifier: Modifier = Modifier) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 6.dp),
+                .padding(bottom = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             val widthDp = maxWidth.value.toInt().coerceAtLeast(1)
@@ -85,20 +113,12 @@ fun HomeBannerAd(modifier: Modifier = Modifier) {
                 }
             } else {
                 val context = LocalContext.current
-                val unitId = if (BuildConfig.DEBUG) {
-                    TEST_BANNER_UNIT
-                } else {
-                    BuildConfig.HOME_BANNER_AD_UNIT_ID
-                }
+                val unitId = if (BuildConfig.DEBUG) TEST_BANNER_UNIT else productionUnitId
 
                 if (unitId.isNotBlank()) {
                     val adSize = remember(context, widthDp) {
-                        AdSize.getLargeAnchoredAdaptiveBannerAdSize(
-                            context,
-                            widthDp,
-                        )
+                        AdSize.getLargeAnchoredAdaptiveBannerAdSize(context, widthDp)
                     }
-
                     val adView = remember(context, adSize, unitId) {
                         AdView(context).apply {
                             adUnitId = unitId
@@ -119,6 +139,10 @@ fun HomeBannerAd(modifier: Modifier = Modifier) {
                     )
                 }
             }
+        }
+
+        if (!includeNavigationPadding) {
+            Spacer(Modifier.height(4.dp))
         }
     }
 }

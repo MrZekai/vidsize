@@ -60,8 +60,15 @@
     <string name="share_chooser">Sıkıştırılmış videoyu paylaş</string>
     <string name="close">Kapat</string>
     <string name="settings_title">Ayarlar</string>
-    <string name="settings_appearance_title">Görünüm</string>
-    <string name="settings_appearance_body">Vidsize bu sürümde açık tema kullanır.</string>
+    <string name="settings_language_title">Dil</string>
+    <string name="settings_language_body">Vidsize'ın kullanacağı dili seç.</string>
+    <string name="settings_notifications_title">Bildirimler</string>
+    <string name="settings_notifications_body">Sıkıştırma ilerleme ve tamamlanma bildirimlerini yönet.</string>
+    <string name="settings_history_title">Sıkıştırma geçmişi</string>
+    <string name="settings_history_body">Kaydedilen videoları silmeden son işlemler listesini temizle.</string>
+    <string name="settings_clear_history_title">Sıkıştırma geçmişi temizlensin mi?</string>
+    <string name="settings_clear_history_body">Bu işlem yalnızca son işlemler listesini kaldırır. Sıkıştırılmış videoların Movies/Vidsize içinde kalır.</string>
+    <string name="settings_clear_history_confirm">Geçmişi temizle</string>
     <string name="settings_privacy_title">Gizlilik</string>
     <string name="settings_privacy_body">Videoların bu cihazda sıkıştırılır. Hiçbir şey sunucuya yüklenmez.</string>
     <string name="settings_ads_title">Reklamlar</string>

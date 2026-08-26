@@ -59,6 +59,15 @@ jobs:
           grep -q 'const val ENABLED = true' app/src/main/java/com/vidsize/compressor/ads/AppOpenAdPolicy.kt
           grep -q 'vidsize-qa-debug.jks' app/build.gradle.kts
           grep -q 'signingConfig = signingConfigs.getByName("qaDebug")' app/build.gradle.kts
+          grep -q 'versionCode = 8' app/build.gradle.kts
+          grep -q 'COMPRESSION_BANNER_AD_UNIT_ID' app/build.gradle.kts
+          grep -q 'CompressionBannerAd()' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          grep -q 'ic_launcher_monochrome' app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
+          test -f store/assets/icon-512.png
+          test -f app/src/main/assets/legal/privacy.html
+          test -f app/src/main/assets/legal/terms.html
+          cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html
+          cmp -s docs/terms.html app/src/main/assets/legal/terms.html
 
       - name: Unit tests, lint and debug APK
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
@@ -67,7 +76,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v070-stable-qa-apk
+          name: vidsize-v080-qa-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
@@ -75,6 +84,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v070-lint
+          name: vidsize-v080-lint
           path: app/build/reports/lint-results-debug.html
           if-no-files-found: ignore

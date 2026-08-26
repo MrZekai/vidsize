@@ -60,8 +60,15 @@
     <string name="share_chooser">Bagikan video hasil kompresi</string>
     <string name="close">Tutup</string>
     <string name="settings_title">Pengaturan</string>
-    <string name="settings_appearance_title">Tampilan</string>
-    <string name="settings_appearance_body">Vidsize memakai tema terang di versi ini.</string>
+    <string name="settings_language_title">Bahasa</string>
+    <string name="settings_language_body">Pilih bahasa yang digunakan Vidsize.</string>
+    <string name="settings_notifications_title">Notifikasi</string>
+    <string name="settings_notifications_body">Kelola notifikasi progres dan selesai kompresi.</string>
+    <string name="settings_history_title">Riwayat kompresi</string>
+    <string name="settings_history_body">Hapus daftar terbaru tanpa menghapus video yang tersimpan.</string>
+    <string name="settings_clear_history_title">Hapus riwayat kompresi?</string>
+    <string name="settings_clear_history_body">Ini hanya menghapus daftar terbaru. Video terkompresi tetap ada di Movies/Vidsize.</string>
+    <string name="settings_clear_history_confirm">Hapus riwayat</string>
     <string name="settings_privacy_title">Privasi</string>
     <string name="settings_privacy_body">Videomu dikompres di perangkat ini. Tidak ada yang diunggah ke server.</string>
     <string name="settings_ads_title">Iklan</string>

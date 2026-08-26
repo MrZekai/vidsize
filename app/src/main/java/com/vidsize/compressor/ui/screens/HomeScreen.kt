@@ -127,7 +127,10 @@ fun HomeScreen(
     }
 
     if (showSettings) {
-        SettingsSheet(onDismiss = { showSettings = false })
+        SettingsSheet(
+            onDismiss = { showSettings = false },
+            onClearHistory = onClearHistory,
+        )
     }
 }
 

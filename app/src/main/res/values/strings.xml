@@ -85,8 +85,15 @@
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
-    <string name="settings_appearance_title">Appearance</string>
-    <string name="settings_appearance_body">Vidsize uses a light theme in this version.</string>
+    <string name="settings_language_title">Language</string>
+    <string name="settings_language_body">Choose the language Vidsize uses.</string>
+    <string name="settings_notifications_title">Notifications</string>
+    <string name="settings_notifications_body">Manage compression progress and completion notifications.</string>
+    <string name="settings_history_title">Compression history</string>
+    <string name="settings_history_body">Clear the recent list without deleting saved videos.</string>
+    <string name="settings_clear_history_title">Clear compression history?</string>
+    <string name="settings_clear_history_body">This removes only the recent list. Your compressed videos stay in Movies/Vidsize.</string>
+    <string name="settings_clear_history_confirm">Clear history</string>
     <string name="settings_privacy_title">Privacy</string>
     <string name="settings_privacy_body">Your videos are compressed on this device. Nothing is uploaded to a server.</string>
     <string name="settings_ads_title">Ads</string>
