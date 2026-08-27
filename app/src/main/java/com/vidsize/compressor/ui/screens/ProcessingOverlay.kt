@@ -70,12 +70,8 @@ fun ProcessingOverlay(
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 ProgressRing(
                     progress = progress,
-                    indeterminateSweep = !progressKnown,
-                    centreLabel = if (progressKnown) {
-                        "${(progress.coerceIn(0f, 1f) * 100f).roundToInt()}%"
-                    } else {
-                        null
-                    },
+                    indeterminateSweep = false,
+                    centreLabel = "${(progress.coerceIn(0f, 1f) * 100f).roundToInt()}%",
                 )
             }
 
@@ -93,7 +89,7 @@ fun ProcessingOverlay(
 
             Text(
                 text = when {
-                    !progressKnown -> stringResource(R.string.processing_preparing)
+                    progress <= 0.001f -> stringResource(R.string.processing_preparing)
                     progress >= 0.99f -> stringResource(R.string.processing_finishing)
                     else -> stringResource(R.string.processing_body)
                 },

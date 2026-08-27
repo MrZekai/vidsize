@@ -24,6 +24,22 @@ class CompressionPlannerTest {
     }
 
     @Test
+    fun sameResolutionBalancedEstimateDoesNotOverpromiseHugeSavings() {
+        val balanced = CompressionPlanner.plan(sample, CompressionPreset.BALANCED)
+        val floor = (sample.sourceBytes * 0.90).toLong()
+        assertTrue(balanced.estimatedOutputBytes >= floor)
+        assertEquals(1080, balanced.targetHeight)
+    }
+
+    @Test
+    fun downscaledPresetMayEstimateBelowSameResolutionFloor() {
+        val smaller = CompressionPlanner.plan(sample, CompressionPreset.SMALLER)
+        val floor = (sample.sourceBytes * 0.90).toLong()
+        assertTrue(smaller.targetHeight < sample.height)
+        assertTrue(smaller.estimatedOutputBytes < floor)
+    }
+
+    @Test
     fun smallestPresetUsesLowerResolutionCeiling() {
         val smallest = CompressionPlanner.plan(sample, CompressionPreset.SMALLEST)
         assertTrue(smallest.targetHeight <= 480)

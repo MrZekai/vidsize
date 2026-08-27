@@ -38,7 +38,7 @@ object CompressionJobState {
 
     val isRunning: Boolean get() = status is Status.Running
 
-    fun markRunning(progress: Float = 0f, progressKnown: Boolean = false) {
+    fun markRunning(progress: Float = 0f, progressKnown: Boolean = true) {
         status = Status.Running(progress, progressKnown)
     }
 
