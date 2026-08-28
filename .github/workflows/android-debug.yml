@@ -61,8 +61,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 11' app/build.gradle.kts
-          grep -q 'versionName = "0.8.3"' app/build.gradle.kts
+          grep -q 'versionCode = 12' app/build.gradle.kts
+          grep -q 'versionName = "0.8.4"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -71,8 +71,8 @@ jobs:
           grep -q 'AdIds.appOpen' app/src/main/java/com/vidsize/compressor/ads/AppOpenAdManager.kt
           grep -q 'AdIds.nativeResult' app/src/main/java/com/vidsize/compressor/ads/NativeAdLoader.kt
           grep -q 'AdIds.homeBanner' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
-          grep -q 'CompressionBannerAd(active = !busy)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
-          test "$(grep -c 'CompressionBannerAd(active = !busy)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt)" -eq 1
+          grep -q 'CompressionBannerAd(active = !processing)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          test "$(grep -c 'CompressionBannerAd(active = !processing)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt)" -eq 1
           grep -q 'setAdSize(AdSize.BANNER)' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           ! grep -q 'getLargeAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           grep -q 'ic_launcher_monochrome' app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
@@ -83,7 +83,7 @@ jobs:
           cmp -s docs/terms.html app/src/main/assets/legal/terms.html
           cmp -s docs/index.html app/src/main/assets/legal/index.html
 
-      - name: v0.8.3 audit-fix regression guards
+      - name: v0.8.3 compression + v0.8.4 UI regression guards
         shell: bash
         run: |
           set -euo pipefail
@@ -94,6 +94,9 @@ jobs:
           SCREEN=app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
           OVERLAY=app/src/main/java/com/vidsize/compressor/ui/screens/ProcessingOverlay.kt
           NATIVE=app/src/main/java/com/vidsize/compressor/ui/components/NativeAdCard.kt
+          RESULT=app/src/main/java/com/vidsize/compressor/ui/screens/ResultScreen.kt
+          RING=app/src/main/java/com/vidsize/compressor/ui/components/ProgressRing.kt
+          BANNER=app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           TESTS=app/src/test/java/com/vidsize/compressor/media/CompressionPlannerTest.kt
 
           # Strip KDoc/line comments so these guards test code, not prose.
@@ -125,9 +128,8 @@ jobs:
           # 2.1 - the native ad slot must stay reserved.
           has "$NATIVE" 'heightIn(min = AdSlotMinHeight)'
 
-          # 3.1 - the indeterminate ring must actually be wired.
+          # 3.1 - the job must still start in the unknown-progress state.
           has "$SERVICE" 'markRunning(progressKnown = false)'
-          has "$OVERLAY" 'indeterminateSweep = !progressKnown'
           grep -Fq 'progressKnown: Boolean = true' app/src/main/java/com/vidsize/compressor/media/CompressionJobState.kt
 
           # 3.2 - the MediaStore copy must stay cancellable.
@@ -153,6 +155,71 @@ jobs:
           for f in app/src/main/res/values*/strings.xml; do
             grep -Fq 'preset_not_viable' "$f" || { echo "missing preset_not_viable in $f" >&2; exit 1; }
           done
+
+          # ==================== v0.8.4 UI regression guards ====================
+
+          # 1 - the processing panel has exactly ONE call site. Two call sites put
+          # it in two composition slots, so crossing from preparing to running
+          # rebuilt the panel and every animation inside it restarted, which read
+          # on-device as a second compression starting from 1%.
+          test "$(grep -c 'ProcessingOverlay(' "$SCREEN")" -eq 1
+          has "$SCREEN" 'if (processing) {'
+          has "$SCREEN" 'val processing = busy || starting'
+
+          # 1 - no pseudo-progress during preparation. The old fixed 72-degree
+          # accent arc is gone from the ring and from every call site.
+          nothas "$RING"    'indeterminateSweep'
+          nothas "$OVERLAY" 'indeterminateSweep'
+          has    "$RING"    'trackOnly'
+          has    "$OVERLAY" 'trackOnly = !progressKnown'
+          nothasre "$RING"  'sweepAngle = 72'
+
+          # 2 - the processing panel carries the compression banner, reusing the
+          # standard 320x50 AdSize.BANNER infrastructure and its consent gate.
+          has "$OVERLAY" 'CompressionBannerAd('
+          has "$BANNER"  'setAdSize(AdSize.BANNER)'
+          has "$BANNER"  'AdIds.compressionBanner'
+          has "$OVERLAY" 'ConsentManager'
+          # exactly one banner call site inside the overlay
+          test "$(grep -c 'CompressionBannerAd(' "$OVERLAY")" -eq 1
+          # and no full-screen ad format anywhere on this surface
+          nothas "$OVERLAY" 'Interstitial'
+          nothas "$OVERLAY" 'AppOpenAd'
+
+          # 3 - the result is a real full-screen page, not a constrained dialog.
+          test -f "$RESULT"
+          test ! -f app/src/main/java/com/vidsize/compressor/ui/screens/ResultSheet.kt
+          has    "$RESULT" 'fun ResultScreen('
+          nothas "$RESULT" 'Dialog('
+          nothas "$RESULT" 'DialogProperties'
+          nothas "$RESULT" 'BoxWithConstraints'
+          nothas "$RESULT" 'Alignment.BottomCenter'
+          nothas "$RESULT" '0.94f'
+          nothas "$RESULT" 'sheetMaxHeight'
+          has    "$RESULT" 'fillMaxSize()'
+          has    "$RESULT" 'statusBarsPadding()'
+          has    "$RESULT" 'navigationBarsPadding()'
+          has    "$RESULT" 'verticalScroll('
+          has    "$SCREEN" 'ResultScreen('
+          nothas "$SCREEN" 'ResultSheet('
+
+          # 3 - back from the result must clear the finished job state.
+          has "$RESULT" 'BackHandler'
+          has "$SCREEN" 'onBack = { CompressionJobState.reset() }'
+
+          # 4 - the native ad keeps its reserved slot and its one-time binding,
+          # and the page can scroll far enough to expose the whole creative.
+          has "$NATIVE" 'AdSlotMinHeight'
+          has "$NATIVE" 'heightIn(min = AdSlotMinHeight)'
+          has "$NATIVE" 'it.bind(ad)'
+          # setNativeAd must be reachable only from the one-shot bind(), never
+          # from AndroidView's update block.
+          test "$(grep -c 'setNativeAd(' "$NATIVE")" -eq 1
+          has "$NATIVE" 'nativeAd?.destroy()'
+          has "$RESULT" 'NativeAdCard('
+
+          # no new permissions may sneak in with a UI change
+          test "$(grep -c 'uses-permission' app/src/main/AndroidManifest.xml)" -eq 5
 
       - name: Debug QA gate
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
@@ -188,13 +255,13 @@ jobs:
 
       - name: Create exact source audit ZIP
         shell: bash
-        run: git archive --format=zip --output=vidsize-v083-source-audit.zip HEAD
+        run: git archive --format=zip --output=vidsize-v084-source-audit.zip HEAD
 
       - name: Upload QA APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v083-qa-apk
+          name: vidsize-v084-qa-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
@@ -202,7 +269,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v083-closed-test-UNSIGNED-audit-aab
+          name: vidsize-v084-closed-test-UNSIGNED-audit-aab
           path: app/build/outputs/bundle/closedTest/*.aab
           if-no-files-found: warn
 
@@ -210,15 +277,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v083-source-audit
-          path: vidsize-v083-source-audit.zip
+          name: vidsize-v084-source-audit
+          path: vidsize-v084-source-audit.zip
           if-no-files-found: warn
 
       - name: Upload lint reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v083-lint
+          name: vidsize-v084-lint
           path: |
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-closedTest.html

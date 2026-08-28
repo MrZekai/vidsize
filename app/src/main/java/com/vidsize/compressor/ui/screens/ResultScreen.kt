@@ -3,19 +3,19 @@ package com.vidsize.compressor.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -33,13 +33,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
+import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.NativeAdCard
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SecondaryButton
@@ -52,162 +51,161 @@ import com.vidsize.compressor.ui.theme.VidsizeType
 import com.vidsize.compressor.ui.theme.Space
 
 /**
- * Result sheet.
+ * Result page.
  *
- * A bottom-anchored sheet rather than an inline card, because the result is a
- * moment, not a row: the compression finished, here is the win, here is what to
- * do with it. Built on [Dialog] rather than `ModalBottomSheet` so the surface has
- * no experimental Material API in its path — this screen must not break on a
- * Material 3 point release.
+ * ## v0.8.4: a real screen, not a sheet
  *
- * Ad placement: the Native Advanced card sits **below** all actions, after the
- * user has seen the outcome. Nothing full-screen fires here.
+ * This used to be a `Dialog` holding a bottom-anchored `Surface` capped at 94%
+ * of the window height. On a real device that produced three problems at once:
+ * the success moment looked like a popup over a dimmed compression screen; the
+ * 94% cap plus the bottom anchor meant the Native Advanced card sat below the
+ * fold with its call-to-action partly outside the visible area; and anything
+ * that grew inside the sheet pushed every button upward.
  *
- * The slot's height is reserved by [NativeAdCard] from the moment the sheet
- * opens. This sheet is bottom-anchored, so anything that appears inside it
- * pushes every button upward; before the slot was reserved, a creative arriving
- * a second after the sheet opened moved "Compress another video" out from under
- * a thumb already travelling towards it and put the ad's CTA there instead.
+ * It is now an ordinary full-viewport screen rendered in place of the
+ * compression screen: normal background, normal insets, one scrolling column.
+ * The whole page scrolls, so the native creative - including its CTA - is always
+ * fully reachable, and the actions never move under a travelling thumb.
+ *
+ * Back closes the result and returns to the compression screen for the same
+ * video; [onBack] is responsible for clearing the finished job state so no stale
+ * `Done` can be rendered against the next video.
  */
 @Composable
-fun ResultSheet(
+fun ResultScreen(
     result: CompressionResult,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
     onCompressAnother: () -> Unit,
 ) {
     val context = LocalContext.current
-    // The ad label and the 300x250 slot appear together or not at all, so the
-    // sheet never shows an "Advertisement" heading over empty space.
     val adsVisible = ConsentManager.adsAllowed || LocalInspectionMode.current
     val savedBytes = (result.sourceBytes - result.outputBytes).coerceAtLeast(0L)
     val percent = Fmt.percentSmaller(result.sourceBytes, result.outputBytes)
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false,
-        ),
+    BackHandler { onBack() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(VidsizeColor.Background)
+            .navigationBarsPadding(),
     ) {
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.BottomCenter,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = Space.gutter, vertical = Space.sm),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            val sheetMaxHeight = maxHeight * 0.94f
+            IconAction(
+                icon = R.drawable.ic_arrow_back,
+                contentDescription = stringResource(R.string.back),
+                onClick = onBack,
+            )
+        }
 
-            Surface(
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
                     .widthIn(max = 560.dp)
-                    .heightIn(max = sheetMaxHeight),
-                shape = VidsizeShape.sheet,
-                color = VidsizeColor.Surface,
+                    .fillMaxWidth()
+                    .padding(horizontal = Space.gutter),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .navigationBarsPadding(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Spacer(Modifier.height(Space.sm))
-                    SheetHandle()
-                    Spacer(Modifier.height(Space.lg))
+                Spacer(Modifier.height(Space.sm))
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Space.lg),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        SuccessMark()
+                SuccessMark()
 
-                        Spacer(Modifier.height(Space.md))
+                Spacer(Modifier.height(Space.md))
 
-                        Text(
-                            text = stringResource(R.string.result_title),
-                            style = VidsizeType.screenTitle,
-                            color = VidsizeColor.Ink,
-                            textAlign = TextAlign.Center,
-                        )
+                Text(
+                    text = stringResource(R.string.result_title),
+                    style = VidsizeType.screenTitle,
+                    color = VidsizeColor.Ink,
+                    textAlign = TextAlign.Center,
+                )
 
-                        Spacer(Modifier.height(Space.lg))
+                Spacer(Modifier.height(Space.lg))
 
-                        ResultFigures(
-                            sourceBytes = result.sourceBytes,
-                            outputBytes = result.outputBytes,
-                            savedBytes = savedBytes,
-                            percent = percent,
-                        )
+                ResultFigures(
+                    sourceBytes = result.sourceBytes,
+                    outputBytes = result.outputBytes,
+                    savedBytes = savedBytes,
+                    percent = percent,
+                )
 
-                        Spacer(Modifier.height(Space.sm))
+                Spacer(Modifier.height(Space.sm))
 
-                        Text(
-                            text = stringResource(
-                                R.string.result_meta,
-                                presetTitle(result.preset),
-                                Fmt.elapsed(result.elapsedMs),
-                            ),
-                            style = VidsizeType.caption,
-                            color = VidsizeColor.Faint,
-                            textAlign = TextAlign.Center,
-                        )
+                Text(
+                    text = stringResource(
+                        R.string.result_meta,
+                        presetTitle(result.preset),
+                        Fmt.elapsed(result.elapsedMs),
+                    ),
+                    style = VidsizeType.caption,
+                    color = VidsizeColor.Faint,
+                    textAlign = TextAlign.Center,
+                )
 
-                        Spacer(Modifier.height(Space.xl))
+                Spacer(Modifier.height(Space.lg))
 
-                        PrimaryButton(
-                            text = stringResource(R.string.result_share),
-                            onClick = { shareVideo(context, result.outputUri) },
-                            modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = R.drawable.ic_share,
-                        )
+                PrimaryButton(
+                    text = stringResource(R.string.result_share),
+                    onClick = { shareVideo(context, result.outputUri) },
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = R.drawable.ic_share,
+                )
 
-                        Spacer(Modifier.height(Space.xs))
+                Spacer(Modifier.height(Space.xs))
 
-                        SecondaryButton(
-                            text = stringResource(R.string.result_show_in_gallery),
-                            onClick = { showInGallery(context, result.outputUri) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                SecondaryButton(
+                    text = stringResource(R.string.result_show_in_gallery),
+                    onClick = { showInGallery(context, result.outputUri) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-                        Spacer(Modifier.height(Space.xxs))
+                Spacer(Modifier.height(Space.xxs))
 
-                        SecondaryButton(
-                            text = stringResource(R.string.result_open),
-                            onClick = { openVideo(context, result.outputUri) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                SecondaryButton(
+                    text = stringResource(R.string.result_open),
+                    onClick = { openVideo(context, result.outputUri) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-                        Spacer(Modifier.height(Space.xxs))
+                Spacer(Modifier.height(Space.xxs))
 
-                        TertiaryButton(
-                            text = stringResource(R.string.result_another),
-                            onClick = onCompressAnother,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                TertiaryButton(
+                    text = stringResource(R.string.result_another),
+                    onClick = onCompressAnother,
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-                        Spacer(Modifier.height(Space.xs))
+                Spacer(Modifier.height(Space.xs))
 
-                        Text(
-                            text = stringResource(R.string.result_location),
-                            style = VidsizeType.micro,
-                            color = VidsizeColor.Faint,
-                            textAlign = TextAlign.Center,
-                        )
+                Text(
+                    text = stringResource(R.string.result_location),
+                    style = VidsizeType.micro,
+                    color = VidsizeColor.Faint,
+                    textAlign = TextAlign.Center,
+                )
 
-                    }
-
-                    // The advertisement lives below every primary action, with a
-                    // full gutter of separation so a thumb travelling to
-                    // "Compress another video" cannot land on the creative.
-                    if (adsVisible) {
-                        Spacer(Modifier.height(Space.xl))
-                        NativeAdCard(modifier = Modifier.padding(horizontal = Space.lg))
-                    }
-
-                    Spacer(Modifier.height(Space.lg))
+                // A full gutter of separation so a thumb travelling to
+                // "Compress another video" cannot land on the creative.
+                if (adsVisible) {
+                    Spacer(Modifier.height(Space.xxl))
+                    NativeAdCard(modifier = Modifier.fillMaxWidth())
                 }
+
+                // The page scrolls, and this trailing space is what guarantees
+                // the native call-to-action can be brought clear of the
+                // navigation bar instead of resting under it.
+                Spacer(Modifier.height(Space.xxxl))
             }
         }
     }
@@ -216,17 +214,6 @@ fun ResultSheet(
 /* ------------------------------------------------------------------------- */
 /* Pieces                                                                     */
 /* ------------------------------------------------------------------------- */
-
-@Composable
-private fun SheetHandle() {
-    Box(
-        modifier = Modifier
-            .width(40.dp)
-            .height(4.dp)
-            .clip(VidsizeShape.chip)
-            .background(VidsizeColor.Border),
-    )
-}
 
 @Composable
 private fun SuccessMark() {

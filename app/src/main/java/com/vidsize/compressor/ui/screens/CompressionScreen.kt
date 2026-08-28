@@ -122,6 +122,11 @@ fun CompressionScreen(
         if (busy) starting = false
     }
 
+    // One flag for "a job is on screen". Everything that must be disabled while
+    // the overlay is up reads this, so the preparing and running phases can
+    // never disagree about what is interactive.
+    val processing = busy || starting
+
     // Asked for at the moment of first use rather than at launch. A denial is
     // not fatal: the service still runs, it just cannot show progress.
     val notificationPermission = rememberLauncherForActivityResult(
@@ -151,11 +156,6 @@ fun CompressionScreen(
         probeFailed = probed == null
     }
 
-    // While an export is running, swallow the back gesture: the user cancels
-    // deliberately with the button instead of losing work by accident.
-    BackHandler(enabled = busy || starting) { }
-    BackHandler(enabled = !busy && !starting && result == null) { onBack() }
-
     fun startCompression() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -172,13 +172,35 @@ fun CompressionScreen(
         result?.let(onCompleted)
     }
 
+    // The result is a full screen, not a dialog over a dimmed compression
+    // screen. Rendering it in place of this screen's content is what makes it a
+    // real page: normal background, normal insets, and a page that can scroll
+    // far enough to expose the whole native creative.
+    val finished = result
+    if (finished != null) {
+        ResultScreen(
+            result = finished,
+            onBack = { CompressionJobState.reset() },
+            onCompressAnother = {
+                CompressionJobState.reset()
+                onBack()
+            },
+        )
+        return
+    }
+
+    // While an export is running, swallow the back gesture: the user cancels
+    // deliberately with the button instead of losing work by accident.
+    BackHandler(enabled = processing) { }
+    BackHandler(enabled = !processing) { onBack() }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(VidsizeColor.Background),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            CompressionTopBar(onBack = onBack, enabled = !busy && !starting)
+            CompressionTopBar(onBack = onBack, enabled = !processing)
 
             Column(
                 modifier = Modifier
@@ -200,8 +222,10 @@ fun CompressionScreen(
             }
 
             // Fixed top banner: separated from Back by non-clickable intro copy,
-            // and far away from the primary COMPRESS button.
-            CompressionBannerAd(active = !busy)
+            // and far away from the primary COMPRESS button. Switched off for the
+            // whole processing phase - preparing included - so this one and the
+            // banner inside ProcessingOverlay are never live at the same time.
+            CompressionBannerAd(active = !processing)
 
             // Without this divider the scrolling preset rows come to rest flush
             // against the banner's bottom edge, which is an accidental-click
@@ -237,7 +261,7 @@ fun CompressionScreen(
                         estimateBytes = plan?.estimatedOutputBytes,
                         sourceBytes = currentInfo?.sourceBytes ?: 0L,
                         viable = plan?.viable ?: true,
-                        enabled = !busy && !starting,
+                        enabled = !processing,
                         onClick = { if (plan?.viable != false) preset = option },
                     )
                     Spacer(Modifier.height(Space.xs))
@@ -321,11 +345,10 @@ fun CompressionScreen(
                     if (probeFailed) R.string.cta_select_video else R.string.cta_compress,
                 ),
                 enabled = if (probeFailed) {
-                    !busy && !starting
+                    !processing
                 } else {
                     info != null &&
-                        !busy &&
-                        !starting &&
+                        !processing &&
                         selectedPlan?.viable == true &&
                         storage?.hasRoom != false
                 },
@@ -335,40 +358,22 @@ fun CompressionScreen(
             )
         }
 
+        // ONE call site. Two branches of an if/else put this composable in two
+        // different composition slots, so crossing from "starting" to "running"
+        // tore the panel down and built a new one - every animation inside it
+        // restarted and the ring appeared to go back to the beginning. The panel
+        // now lives for exactly as long as the job does.
         val running = jobStatus as? CompressionJobState.Status.Running
-        if (running != null) {
+        if (processing) {
             ProcessingOverlay(
-                progress = running.progress,
-                progressKnown = running.progressKnown,
-                onCancel = {
-                    starting = false
-                    CompressionService.cancel(context)
-                },
-            )
-        } else if (starting) {
-            // The service has not reported Running yet. Show the same overlay in
-            // its indeterminate state so the tap is never followed by silence.
-            ProcessingOverlay(
-                progress = 0f,
-                progressKnown = false,
+                progress = running?.progress ?: 0f,
+                progressKnown = running?.progressKnown == true,
                 onCancel = {
                     starting = false
                     CompressionService.cancel(context)
                 },
             )
         }
-    }
-
-    val finished = result
-    if (finished != null) {
-        ResultSheet(
-            result = finished,
-            onDismiss = { CompressionJobState.reset() },
-            onCompressAnother = {
-                CompressionJobState.reset()
-                onBack()
-            },
-        )
     }
 }
 

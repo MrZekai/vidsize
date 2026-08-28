@@ -27,9 +27,18 @@ import com.vidsize.compressor.ui.theme.VidsizeType
  * progress parameter has changed signature across Material 3 releases. A Canvas
  * has neither problem and gives us the exact stroke width and cap we want.
  *
+ * ## v0.8.4: no pseudo-progress
+ *
+ * The old `indeterminateSweep` flag drew a fixed 72-degree accent arc while the
+ * encoder was still starting up. On a real device that reads as "20% done", and
+ * when the first real figure arrived the arc collapsed back towards zero and
+ * grew again - which looked like the job had restarted. There is now no arc at
+ * all until a real figure exists: [trackOnly] draws the neutral background ring
+ * and nothing else, and the accent arc always represents reported progress.
+ *
  * @param progress 0f..1f. Values outside that range are clamped.
- * @param indeterminateSweep when the encoder has not reported a figure yet, the
- *        ring shows a fixed hint arc instead of pretending to know.
+ * @param trackOnly draw only the neutral track. Used before the first real
+ *        encoder figure arrives. Never animates, never sweeps.
  */
 @Composable
 fun ProgressRing(
@@ -37,7 +46,7 @@ fun ProgressRing(
     modifier: Modifier = Modifier,
     size: Dp = 132.dp,
     strokeWidth: Dp = 10.dp,
-    indeterminateSweep: Boolean = false,
+    trackOnly: Boolean = false,
     centreLabel: String? = null,
 ) {
     val safe = progress.coerceIn(0f, 1f)
@@ -64,17 +73,22 @@ fun ProgressRing(
                 style = Stroke(width = stroke, cap = StrokeCap.Round),
             )
 
-            val sweep = if (indeterminateSweep) 72f else 360f * animated
-            if (sweep > 0f) {
-                drawArc(
-                    brush = VidsizeColor.PrimaryGradient,
-                    startAngle = -90f,
-                    sweepAngle = sweep,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = stroke, cap = StrokeCap.Round),
-                )
+            // No accent arc until real progress exists. The geometry of the
+            // track is identical in both states, so the ring never jumps when
+            // the first figure arrives.
+            if (!trackOnly) {
+                val sweep = 360f * animated
+                if (sweep > 0f) {
+                    drawArc(
+                        brush = VidsizeColor.PrimaryGradient,
+                        startAngle = -90f,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = stroke, cap = StrokeCap.Round),
+                    )
+                }
             }
         }
 
