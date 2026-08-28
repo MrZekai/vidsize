@@ -9,33 +9,49 @@ import kotlin.math.roundToInt
 
 object CompressionPlanner {
     private const val MIN_VIDEO_BITRATE = 350_000
-
-    // If a preset keeps the exact source resolution, Media3 may be able to keep
-    // much more of the original encoded stream than the requested encoder
-    // bitrate formula alone suggests. Do not promise an unrealistically tiny
-    // file in that case. This affects DISPLAYED ESTIMATE ONLY; the actual
-    // compression/transcoding pipeline is intentionally untouched.
-    private const val SAME_RESOLUTION_ESTIMATE_FLOOR_RATIO = 0.90
-    private const val TRANSCODE_ESTIMATE_HEADROOM = 1.08
+    private const val ESTIMATE_HEADROOM = 1.10
+    private const val FORCE_TRANSCODE_DELTA_PX = 2
 
     fun plan(info: VideoInfo, preset: CompressionPreset): CompressionPlan {
         require(info.durationMs > 0L) { "Video duration must be positive." }
         require(info.width > 0 && info.height > 0) { "Video dimensions must be positive." }
 
-        val sourceBitrate = info.sourceBitrate?.takeIf { it > 0 }
-            ?: inferSourceBitrate(info)
+        // Base size prediction on the real file bytes/duration first. This keeps
+        // the estimate tied to the file the user actually selected instead of
+        // trusting container bitrate metadata that varies between camera apps.
+        val sourceTotalBitrate = inferSourceTotalBitrate(info)
+        val outputAudioBitrate = if (info.hasAudio) preset.audioBitrate else 0
 
-        val factorTarget = (sourceBitrate * preset.sourceBitrateFactor).toInt()
-        val videoBitrate = min(factorTarget, preset.bitrateCap)
+        // Each preset owns a distinct total-bitrate budget.
+        val targetTotalBitrate = (sourceTotalBitrate * preset.sourceBitrateFactor).toInt()
+        val requestedVideoBitrate = (targetTotalBitrate - outputAudioBitrate)
             .coerceAtLeast(MIN_VIDEO_BITRATE)
-            .coerceAtMost(sourceBitrate)
+        val videoBitrate = min(requestedVideoBitrate, preset.bitrateCap)
+            .coerceAtMost(sourceTotalBitrate)
+            .coerceAtLeast(MIN_VIDEO_BITRATE.coerceAtMost(sourceTotalBitrate))
 
-        // Preset maxHeight means the familiar 1080p/720p/480p short edge.
-        // For portrait input the Presentation effect still needs a target HEIGHT,
-        // so preserve aspect ratio and convert the short-edge ceiling to the
-        // corresponding long-edge height (1080x1920 -> 720x1280, not 405x720).
         val sourceShortEdge = min(info.width, info.height)
-        val targetShortEdge = min(sourceShortEdge, preset.maxHeight)
+        val requestedShortEdge = min(sourceShortEdge, preset.maxHeight)
+        val outputTotalBitrate = videoBitrate + outputAudioBitrate
+        val bitrateReductionRequested =
+            outputTotalBitrate < (sourceTotalBitrate * 0.98).toInt()
+
+        // For a single MediaItem Media3 can avoid transcoding when it decides no
+        // video transformation is necessary. If only bitrate changes while the
+        // dimensions stay byte-for-byte identical, the requested encoder bitrate
+        // can therefore be bypassed. A genuine 2px short-edge resize is visually
+        // negligible but makes transcoding necessary and keeps actual output near
+        // the selected preset's bitrate budget.
+        val targetShortEdge = if (
+            bitrateReductionRequested &&
+            requestedShortEdge == sourceShortEdge &&
+            sourceShortEdge > FORCE_TRANSCODE_DELTA_PX + 2
+        ) {
+            (sourceShortEdge - FORCE_TRANSCODE_DELTA_PX).toEvenAtLeastTwo()
+        } else {
+            requestedShortEdge.toEvenAtLeastTwo()
+        }
+
         val rawTargetHeight = if (info.height > info.width) {
             (info.height.toDouble() * targetShortEdge.toDouble() / info.width.toDouble())
                 .roundToInt()
@@ -44,41 +60,31 @@ object CompressionPlanner {
         }
         val targetHeight = rawTargetHeight.toEvenAtLeastTwo()
 
-        val estimatedAudioBitrate = if (info.hasAudio) preset.audioBitrate else 0
-        val estimatedBits = (videoBitrate + estimatedAudioBitrate) * info.durationSeconds
-        val bitrateEstimate = ((estimatedBits / 8.0) * TRANSCODE_ESTIMATE_HEADROOM)
+        // MediaCodec bitrate is a target, not a byte-exact promise. 10% headroom
+        // covers normal encoder/container variation without collapsing presets.
+        val estimatedBits = outputTotalBitrate * info.durationSeconds
+        val estimatedBytes = ((estimatedBits / 8.0) * ESTIMATE_HEADROOM)
             .toLong()
             .coerceAtLeast(1L)
-
-        // Important: this is an estimate correction, NOT forced extra compression.
-        // When the selected preset keeps the video's short edge unchanged, the
-        // pipeline can legitimately finish much closer to the original file size.
-        // In that case use a conservative floor so e.g. a 101 MB source is not
-        // advertised as ~36 MB when the real result is around 90 MB.
-        val sameResolution = targetShortEdge == sourceShortEdge
-        val sameResolutionFloor = if (sameResolution && info.sourceBytes > 0L) {
-            (info.sourceBytes * SAME_RESOLUTION_ESTIMATE_FLOOR_RATIO).toLong()
-        } else {
-            0L
-        }
-        val estimatedBytes = maxOf(bitrateEstimate, sameResolutionFloor)
             .coerceAtMost(info.sourceBytes.takeIf { it > 0L } ?: Long.MAX_VALUE)
-            .coerceAtLeast(1L)
 
         return CompressionPlan(
             preset = preset,
             targetHeight = targetHeight,
             videoBitrate = videoBitrate,
-            audioBitrate = preset.audioBitrate,
+            audioBitrate = outputAudioBitrate,
             estimatedOutputBytes = estimatedBytes,
         )
     }
 
-    private fun inferSourceBitrate(info: VideoInfo): Int {
-        if (info.sourceBytes > 0 && info.durationSeconds > 0) {
+    private fun inferSourceTotalBitrate(info: VideoInfo): Int {
+        if (info.sourceBytes > 0L && info.durationSeconds > 0.0) {
             return ((info.sourceBytes * 8.0) / info.durationSeconds)
                 .toInt()
                 .coerceAtLeast(MIN_VIDEO_BITRATE)
+        }
+        info.sourceBitrate?.takeIf { it > 0 }?.let {
+            return it.coerceAtLeast(MIN_VIDEO_BITRATE)
         }
         return when {
             max(info.width, info.height) >= 2160 -> 20_000_000

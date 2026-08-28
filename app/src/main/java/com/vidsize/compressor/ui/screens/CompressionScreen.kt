@@ -158,9 +158,7 @@ fun CompressionScreen(
 
             Column(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = Space.gutter),
             ) {
                 Text(
@@ -174,7 +172,20 @@ fun CompressionScreen(
                     style = VidsizeType.body,
                     color = VidsizeColor.Muted,
                 )
+                Spacer(Modifier.height(Space.sm))
+            }
 
+            // Fixed top banner: separated from Back by non-clickable intro copy,
+            // and far away from the primary COMPRESS button.
+            CompressionBannerAd(active = !busy)
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Space.gutter),
+            ) {
                 Spacer(Modifier.height(Space.lg))
 
                 SelectedVideoCard(videoUri = videoUri, info = info, failed = probeFailed)
@@ -259,10 +270,6 @@ fun CompressionScreen(
 
                 Spacer(Modifier.height(Space.xl))
             }
-
-            // Keep the slot geometry stable, but destroy/pause the creative
-            // while the processing scrim is covering this screen.
-            CompressionBannerAd(active = !busy)
 
             CompressionActionBar(
                 text = stringResource(
