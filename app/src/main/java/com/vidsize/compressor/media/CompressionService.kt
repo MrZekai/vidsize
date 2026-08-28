@@ -49,17 +49,23 @@ import kotlin.math.roundToInt
  *    time-limited and the system calls `onTimeout`; failing to stop promptly
  *    throws a fatal `RemoteServiceException`. The API 35 timeout callback is handled below.
  *  - **One job at a time.** A second start request while a job is running is
- *    ignored rather than queued — batch is a deliberate V1.1 feature, not an
- *    accident of concurrency.
+ *    ignored rather than queued.
+ *  - **stopSelf(startId), not stopSelf().** A bare `stopSelf()` queued at the end
+ *    of job 1 could tear the service down *after* job 2 had already started,
+ *    cancelling it and leaving the UI stuck on a progress overlay that never
+ *    advances.
  */
 class CompressionService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var job: Job? = null
+    private var latestStartId: Int = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
+
         when (intent?.action) {
             ACTION_CANCEL -> {
                 cancelJob()
@@ -72,7 +78,7 @@ class CompressionService : Service() {
             ?.let { name -> runCatching { CompressionPreset.valueOf(name) }.getOrNull() }
 
         if (uri == null || preset == null) {
-            stopSelf()
+            stopSelf(startId)
             return START_NOT_STICKY
         }
 
@@ -82,8 +88,13 @@ class CompressionService : Service() {
         startForegroundSafely(buildNotification(progressPercent = null))
         if (job?.isActive == true) return START_NOT_STICKY
 
-        CompressionJobState.markRunning()
+        // The encoder has not reported anything yet: probe, Transformer setup and
+        // the first PROGRESS_STATE_AVAILABLE can take many seconds on a large
+        // file. Showing a stationary "0%" for that long reads as a hang, so the
+        // overlay starts in its indeterminate state instead.
+        CompressionJobState.markRunning(progressKnown = false)
 
+        val currentStartId = startId
         job = scope.launch {
             runCatching {
                 CompressionEngine.compress(
@@ -108,6 +119,8 @@ class CompressionService : Service() {
                             CompressionJobState.FailureReason.INVALID_VIDEO
                         throwable is NoCompressionSavingsException ->
                             CompressionJobState.FailureReason.NO_SAVINGS
+                        throwable is OutOfSpaceException ->
+                            CompressionJobState.FailureReason.OUT_OF_SPACE
                         throwable.isOutOfSpace() ->
                             CompressionJobState.FailureReason.OUT_OF_SPACE
                         else ->
@@ -119,14 +132,13 @@ class CompressionService : Service() {
                     )
                 }
             }
-            stopSelfSafely()
+            stopSelfSafely(currentStartId)
         }
 
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
-        job?.cancel()
         scope.cancel()
         super.onDestroy()
     }
@@ -144,7 +156,7 @@ class CompressionService : Service() {
     private fun cancelJob() {
         job?.cancel()
         CompressionJobState.reset()
-        stopSelfSafely()
+        stopSelfSafely(latestStartId)
     }
 
     // -- notification ---------------------------------------------------------
@@ -251,10 +263,10 @@ class CompressionService : Service() {
         )
     }
 
-    private fun stopSelfSafely() {
+    private fun stopSelfSafely(startId: Int) {
         runCatching {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            stopSelf(startId)
         }
     }
 
@@ -307,14 +319,32 @@ class CompressionService : Service() {
 }
 
 /**
- * Disk-full detection is message-based on purpose: the underlying cause surfaces
- * from several layers (muxer, file system, MediaStore) with different types, and
- * the user only needs to know which of two actions to take.
+ * Disk-full detection walks the whole cause chain on purpose.
+ *
+ * Media3 surfaces failures as `ExportException`, whose own message is the error
+ * code ("Muxer error"). The ENOSPC text lives two levels down in the
+ * `IOException` it wraps, so a message-only check classified every out-of-space
+ * failure as GENERIC and told the user to try a different compression level.
  */
 private fun Throwable.isOutOfSpace(): Boolean {
-    val text = (message ?: "").lowercase(Locale.US)
-    return text.contains("enospc") ||
-        text.contains("no space") ||
-        text.contains("not enough space") ||
-        text.contains("disk full")
+    var current: Throwable? = this
+    var depth = 0
+    while (current != null && depth < 8) {
+        if (current is android.system.ErrnoException &&
+            current.errno == android.system.OsConstants.ENOSPC
+        ) {
+            return true
+        }
+        val text = (current.message ?: "").lowercase(Locale.US)
+        if (text.contains("enospc") ||
+            text.contains("no space") ||
+            text.contains("not enough space") ||
+            text.contains("disk full")
+        ) {
+            return true
+        }
+        current = current.cause
+        depth++
+    }
+    return false
 }

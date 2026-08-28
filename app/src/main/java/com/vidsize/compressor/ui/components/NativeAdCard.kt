@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -31,11 +32,22 @@ import com.vidsize.compressor.ui.theme.VidsizeColor
 import com.vidsize.compressor.ui.theme.VidsizeShape
 
 /**
- * The large Native Advanced ad on the compression result sheet.
+ * Height of the ad slot, reserved from the moment the sheet opens.
  *
- * Renders **nothing at all** until an ad is actually in hand — no placeholder,
- * no reserved grey rectangle. If there is no fill the sheet simply has one less
- * card, which is both better looking and what AdMob's policy expects.
+ * The result sheet is bottom-anchored, so anything that grows inside it pushes
+ * every button **upward**. Rendering nothing until the creative arrived meant
+ * SHARE / Show in Gallery / Open / Compress another all jumped 300-plus dp under
+ * a thumb that was already travelling towards them - the accidental-click
+ * pattern AdMob's policy is written about. The slot is now held open for the
+ * lifetime of the sheet whether or not there is fill.
+ *
+ * Measured from `native_ad_result.xml`: 14dp padding x2 + badge row 28 + media
+ * 176 + 12 + icon/headline 44 + CTA 14 + 52.
+ */
+private val AdSlotMinHeight = 340.dp
+
+/**
+ * The large Native Advanced ad on the compression result sheet.
  *
  * The SDK owns every click: the only interactive elements are the asset views
  * registered on [NativeAdView] before `setNativeAd`. Nothing here attaches a
@@ -51,7 +63,7 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .height(320.dp)
+                .height(AdSlotMinHeight)
                 .clip(VidsizeShape.extraLarge)
                 .background(VidsizeColor.SurfaceMuted),
         )
@@ -75,7 +87,7 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
                         nativeAd = loaded
                     }
                 },
-                onFailed = { /* No fill: the card stays absent. */ },
+                onFailed = { /* No fill: the reserved slot simply stays empty. */ },
             )
         }
         onDispose {
@@ -85,23 +97,29 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
         }
     }
 
-    val ad = nativeAd ?: return
+    val ad = nativeAd
 
-    AndroidView(
-        modifier = modifier.fillMaxWidth(),
-        factory = { viewContext ->
-            (LayoutInflater.from(viewContext)
-                .inflate(R.layout.native_ad_result, null) as NativeAdView)
-                .also { it.bind(ad) }
-        },
-        update = { /* Assets are intentionally bound once per NativeAd instance. */ },
-    )
+    // The Box is always present at the reserved height, so no-fill and late fill
+    // both leave the surrounding layout exactly where it was.
+    Box(modifier = modifier.fillMaxWidth().heightIn(min = AdSlotMinHeight)) {
+        if (ad != null) {
+            AndroidView(
+                modifier = Modifier.fillMaxWidth(),
+                factory = { viewContext ->
+                    (LayoutInflater.from(viewContext)
+                        .inflate(R.layout.native_ad_result, null) as NativeAdView)
+                        .also { it.bind(ad) }
+                },
+                update = { /* Assets are intentionally bound once per NativeAd instance. */ },
+            )
+        }
+    }
 }
 
 /**
  * Binds the ad's assets and registers each view with the SDK.
  *
- * Every optional asset is hidden when the creative does not supply it — showing
+ * Every optional asset is hidden when the creative does not supply it - showing
  * an empty advertiser line or a zero-star rating would misrepresent the ad.
  */
 private fun NativeAdView.bind(ad: NativeAd) {

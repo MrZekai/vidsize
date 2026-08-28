@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - 'qa/**'
+      - 'fix/**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -60,7 +61,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 10' app/build.gradle.kts
+          grep -q 'versionCode = 11' app/build.gradle.kts
+          grep -q 'versionName = "0.8.3"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -71,14 +73,8 @@ jobs:
           grep -q 'AdIds.homeBanner' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           grep -q 'CompressionBannerAd(active = !busy)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
           test "$(grep -c 'CompressionBannerAd(active = !busy)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt)" -eq 1
-          grep -q 'real704pExampleDoesNotCollapseBalancedAndSmaller' app/src/test/java/com/vidsize/compressor/media/CompressionPlannerTest.kt
-          grep -q 'real720pExampleDoesNotCollapseBalancedAndSmaller' app/src/test/java/com/vidsize/compressor/media/CompressionPlannerTest.kt
-          ! grep -q 'SAME_RESOLUTION_ESTIMATE_FLOOR_RATIO' app/src/main/java/com/vidsize/compressor/media/CompressionPlanner.kt
           grep -q 'setAdSize(AdSize.BANNER)' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           ! grep -q 'getLargeAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
-          grep -q 'FORCE_TRANSCODE_DELTA_PX = 2' app/src/main/java/com/vidsize/compressor/media/CompressionPlanner.kt
-          grep -q 'progressKnown: Boolean = true' app/src/main/java/com/vidsize/compressor/media/CompressionJobState.kt
-          grep -q 'suppressAppOpenOnReturn' app/src/main/java/com/vidsize/compressor/ui/screens/ResultSheet.kt
           grep -q 'ic_launcher_monochrome' app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
           test -f store/assets/icon-512.png
           test -f docs/index.html
@@ -87,21 +83,118 @@ jobs:
           cmp -s docs/terms.html app/src/main/assets/legal/terms.html
           cmp -s docs/index.html app/src/main/assets/legal/index.html
 
+      - name: v0.8.3 audit-fix regression guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          PLANNER=app/src/main/java/com/vidsize/compressor/media/CompressionPlanner.kt
+          PRESET=app/src/main/java/com/vidsize/compressor/model/CompressionPreset.kt
+          ENGINE=app/src/main/java/com/vidsize/compressor/media/CompressionEngine.kt
+          SERVICE=app/src/main/java/com/vidsize/compressor/media/CompressionService.kt
+          SCREEN=app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          OVERLAY=app/src/main/java/com/vidsize/compressor/ui/screens/ProcessingOverlay.kt
+          NATIVE=app/src/main/java/com/vidsize/compressor/ui/components/NativeAdCard.kt
+          TESTS=app/src/test/java/com/vidsize/compressor/media/CompressionPlannerTest.kt
+
+          # Strip KDoc/line comments so these guards test code, not prose.
+          # Written through a temp file, never a pipe: `set -o pipefail` plus
+          # `grep -q` makes the upstream grep die with SIGPIPE and fails the step
+          # even when the pattern was found.
+          BUF="$(mktemp)"
+          codeof()  { grep -vE '^[[:space:]]*(\*|/\*|//)' "$1" > "$BUF"; }
+          has()     { codeof "$1"; grep -Fq -- "$2" "$BUF"; }
+          nothas()  { codeof "$1"; ! grep -Fq -- "$2" "$BUF"; }
+          hasre()   { codeof "$1"; grep -Eq -- "$2" "$BUF"; }
+          nothasre(){ codeof "$1"; ! grep -Eq -- "$2" "$BUF"; }
+
+          # BLOCKER 1.1 - the shared absolute video-bitrate floor must never return.
+          nothas "$PLANNER" 'const val MIN_VIDEO_BITRATE'
+          has    "$PRESET"  'minSourceShare'
+          has    "$PLANNER" 'minSourceShare'
+
+          # 1.1 - the estimate must not be clamped to the source size again.
+          nothas "$PLANNER" 'coerceAtMost(info.sourceBytes'
+          has    "$PLANNER" 'viable ='
+
+          # 1.2 - the parametrised ordering test must exist and cover low bitrate.
+          grep -Fq 'presetsAreStrictlyOrderedAcrossTheWholeBitrateRange' "$TESTS"
+          grep -Fq 'LOW-BITRATE' "$TESTS"
+          grep -Fq 'real704pExampleDoesNotCollapseBalancedAndSmaller' "$TESTS"
+          grep -Fq 'real720pExampleDoesNotCollapseBalancedAndSmaller' "$TESTS"
+
+          # 2.1 - the native ad slot must stay reserved.
+          has "$NATIVE" 'heightIn(min = AdSlotMinHeight)'
+
+          # 3.1 - the indeterminate ring must actually be wired.
+          has "$SERVICE" 'markRunning(progressKnown = false)'
+          has "$OVERLAY" 'indeterminateSweep = !progressKnown'
+          grep -Fq 'progressKnown: Boolean = true' app/src/main/java/com/vidsize/compressor/media/CompressionJobState.kt
+
+          # 3.2 - the MediaStore copy must stay cancellable.
+          has    "$ENGINE" 'ensureActive()'
+          nothas "$ENGINE" 'copyTo(out)'
+
+          # 3.3 / 3.4 - start feedback and stale-state reset.
+          has "$SCREEN" 'var starting by remember'
+          has "$SCREEN" 'CompressionJobState.reset()'
+
+          # 4.1 - out-of-space detection must walk the cause chain.
+          has "$SERVICE" 'current.cause'
+          has "$SERVICE" 'ErrnoException'
+
+          # 4.2 - stopSelf must be start-id scoped.
+          nothasre "$SERVICE" 'stopSelf\(\)'
+          has      "$SERVICE" 'stopSelf(startId)'
+
+          # 5.3 - R8 keep rules for the native ad layout.
+          grep -Fq 'nativead' app/proguard-rules.pro
+
+          # localisation completeness for the new string
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -Fq 'preset_not_viable' "$f" || { echo "missing preset_not_viable in $f" >&2; exit 1; }
+          done
+
       - name: Debug QA gate
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
 
       - name: Release-like closed-test R8/AAB gate
         run: gradle :app:lintClosedTest :app:bundleClosedTest --stacktrace
 
+      # The production guard used to be untested: bundleRelease never ran in CI,
+      # so nothing proved verifyProductionAdConfig actually fires.
+      - name: Production ad guard must FAIL without real AdMob IDs
+        shell: bash
+        run: |
+          set +e
+          gradle :app:bundleRelease --stacktrace
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'verifyProductionAdConfig did not fire - release built with no AdMob IDs.' >&2
+            exit 1
+          fi
+          echo "Production guard fired as expected (exit ${status})."
+
+      - name: Release build must SUCCEED with placeholder AdMob IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:bundleRelease --stacktrace \
+            -PVIDSIZE_ADMOB_APP_ID=ca-app-pub-3940256099942544~3347511713 \
+            -PVIDSIZE_HOME_BANNER_AD_UNIT_ID=ca-app-pub-3940256099942544/9214589741 \
+            -PVIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID=ca-app-pub-3940256099942544/9214589741 \
+            -PVIDSIZE_NATIVE_RESULT_AD_UNIT_ID=ca-app-pub-3940256099942544/2247696110 \
+            -PVIDSIZE_APP_OPEN_AD_UNIT_ID=ca-app-pub-3940256099942544/9257395921
+
       - name: Create exact source audit ZIP
         shell: bash
-        run: git archive --format=zip --output=vidsize-v082-source-audit.zip HEAD
+        run: git archive --format=zip --output=vidsize-v083-source-audit.zip HEAD
 
       - name: Upload QA APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v082-qa-apk
+          name: vidsize-v083-qa-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
@@ -109,7 +202,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v082-closed-test-UNSIGNED-audit-aab
+          name: vidsize-v083-closed-test-UNSIGNED-audit-aab
           path: app/build/outputs/bundle/closedTest/*.aab
           if-no-files-found: warn
 
@@ -117,15 +210,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v082-source-audit
-          path: vidsize-v082-source-audit.zip
+          name: vidsize-v083-source-audit
+          path: vidsize-v083-source-audit.zip
           if-no-files-found: warn
 
       - name: Upload lint reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v082-lint
+          name: vidsize-v083-lint
           path: |
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-closedTest.html

@@ -26,7 +26,9 @@ import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.VideoEncoderSettings
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -38,6 +40,14 @@ object CompressionEngine {
 
     private const val PROGRESS_POLL_MS = 300L
     private const val PENDING_EXPIRY_MILLIS = 24L * 60L * 60L * 1000L
+    private const val COPY_BUFFER_BYTES = 256 * 1024
+
+    /**
+     * Share of the reported 0..1 progress that belongs to the encode. The
+     * remainder belongs to the MediaStore copy, which on a 400 MB output takes
+     * long enough that leaving the ring pinned at 100% reads as a hang.
+     */
+    private const val ENCODE_PROGRESS_SHARE = 0.90f
 
     suspend fun compress(
         context: Context,
@@ -47,6 +57,15 @@ object CompressionEngine {
     ): CompressionResult {
         val info = withContext(Dispatchers.IO) { VideoProbe.probe(context, input) }
         val plan = CompressionPlanner.plan(info, preset)
+
+        // Fail before the encode, not four minutes into it. The UI already
+        // blocks this, but a share-sheet entry or a stale pre-flight check can
+        // still reach here.
+        if (!plan.viable) throw NoCompressionSavingsException()
+
+        val storage = StorageGuard.check(context, plan.estimatedOutputBytes, info.sourceBytes)
+        if (!storage.hasRoom) throw OutOfSpaceException()
+
         val started = System.currentTimeMillis()
         val temp = File(context.cacheDir, "vidsize_${System.nanoTime()}.mp4")
 
@@ -59,7 +78,9 @@ object CompressionEngine {
                 audioBitrate = plan.audioBitrate,
                 targetHeight = plan.targetHeight,
                 hasAudio = info.hasAudio,
-                onProgress = onProgress,
+                onProgress = onProgress?.let { report ->
+                    { fraction -> report(fraction * ENCODE_PROGRESS_SHARE) }
+                },
             )
             val actual = temp.length().takeIf { it > 0 } ?: export.fileSizeBytes
             require(actual > 0) { "Compression finished without a readable output file." }
@@ -70,7 +91,11 @@ object CompressionEngine {
                 throw NoCompressionSavingsException()
             }
 
-            val published = withContext(Dispatchers.IO) { publish(context, temp) }
+            val published = publish(context, temp) { fraction ->
+                onProgress?.invoke(
+                    ENCODE_PROGRESS_SHARE + fraction * (1f - ENCODE_PROGRESS_SHARE),
+                )
+            }
             return CompressionResult(
                 outputUri = published,
                 sourceBytes = info.sourceBytes,
@@ -97,14 +122,19 @@ object CompressionEngine {
             .setBitrate(videoBitrate)
             .setiFrameIntervalSeconds(2f)
             .build()
-        val audioSettings = AudioEncoderSettings.Builder()
-            .setBitrate(audioBitrate)
-            .build()
-        val encoderFactory = DefaultEncoderFactory.Builder(context)
+        val encoderFactoryBuilder = DefaultEncoderFactory.Builder(context)
             .setEnableFallback(true)
             .setRequestedVideoEncoderSettings(videoSettings)
-            .setRequestedAudioEncoderSettings(audioSettings)
-            .build()
+
+        // A zero-bitrate AudioEncoderSettings is meaningless and would be passed
+        // straight to MediaFormat if the source turns out to have an audio track
+        // that MediaMetadataRetriever failed to report.
+        if (audioBitrate > 0) {
+            encoderFactoryBuilder.setRequestedAudioEncoderSettings(
+                AudioEncoderSettings.Builder().setBitrate(audioBitrate).build(),
+            )
+        }
+        val encoderFactory = encoderFactoryBuilder.build()
 
         lateinit var transformer: Transformer
         val listener = object : Transformer.Listener {
@@ -173,7 +203,19 @@ object CompressionEngine {
         }
     }
 
-    private fun publish(context: Context, source: File): Uri {
+    /**
+     * Copies the encoded temp file into MediaStore.
+     *
+     * Written as a cancellable manual copy rather than `copyTo`: `copyTo` has no
+     * suspension point, so a Cancel pressed during this phase used to run the
+     * copy to completion, flip IS_PENDING to 0, and leave an orphan file in the
+     * gallery that the app had no history row for.
+     */
+    private suspend fun publish(
+        context: Context,
+        source: File,
+        onProgress: (Float) -> Unit,
+    ): Uri = withContext(Dispatchers.IO) {
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, "Vidsize_${System.currentTimeMillis()}.mp4")
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
@@ -188,16 +230,39 @@ object CompressionEngine {
         val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val uri = requireNotNull(resolver.insert(collection, values))
         try {
+            val total = source.length().coerceAtLeast(1L)
             resolver.openOutputStream(uri, "w")!!.use { out ->
-                source.inputStream().use { it.copyTo(out) }
+                source.inputStream().use { input ->
+                    val buffer = ByteArray(COPY_BUFFER_BYTES)
+                    var copied = 0L
+                    var lastReported = -1
+                    while (true) {
+                        ensureActive()
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        out.write(buffer, 0, read)
+                        copied += read
+                        val percent = ((copied * 100L) / total).toInt()
+                        if (percent != lastReported) {
+                            lastReported = percent
+                            onProgress(percent / 100f)
+                        }
+                    }
+                    out.flush()
+                }
             }
             values.clear()
             values.put(MediaStore.Video.Media.IS_PENDING, 0)
             values.putNull(MediaStore.MediaColumns.DATE_EXPIRES)
             resolver.update(uri, values, null, null)
-            return uri
+            uri
+        } catch (cancellation: CancellationException) {
+            // Cancelled mid-copy: remove the half-written row so the user never
+            // finds a file in the gallery from a job they cancelled.
+            runCatching { resolver.delete(uri, null, null) }
+            throw cancellation
         } catch (t: Throwable) {
-            resolver.delete(uri, null, null)
+            runCatching { resolver.delete(uri, null, null) }
             throw t
         }
     }

@@ -94,4 +94,5 @@
     <string name="notification_done_body">Tu vídeo comprimido se guardó en Movies/Vidsize.</string>
     <string name="ad_badge">Anuncio</string>
     <string name="result_show_in_gallery">Ver en la galería</string>
+    <string name="preset_not_viable">Sin ahorro real</string>
 </resources>

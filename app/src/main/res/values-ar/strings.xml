@@ -97,4 +97,5 @@
     <string name="notification_done_body">تم حفظ الفيديو المضغوط في Movies/Vidsize.</string>
     <string name="ad_badge">إعلان</string>
     <string name="result_show_in_gallery">عرض في المعرض</string>
+    <string name="preset_not_viable">لا يوجد توفير فعلي</string>
 </resources>

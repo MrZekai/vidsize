@@ -123,4 +123,5 @@
     </plurals>
     <string name="ad_badge">Ad</string>
     <string name="result_show_in_gallery">Show in Gallery</string>
+    <string name="preset_not_viable">No real saving</string>
 </resources>

@@ -93,4 +93,5 @@
     <string name="notification_done_body">Dein komprimiertes Video wurde unter Movies/Vidsize gespeichert.</string>
     <string name="ad_badge">Anzeige</string>
     <string name="result_show_in_gallery">In Galerie anzeigen</string>
+    <string name="preset_not_viable">Keine echte Ersparnis</string>
 </resources>

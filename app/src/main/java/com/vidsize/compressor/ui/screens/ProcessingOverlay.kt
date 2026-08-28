@@ -40,6 +40,10 @@ import kotlin.math.roundToInt
  * No ad is ever shown on this surface. A full-screen ad over a running task is
  * the placement AdMob's policy calls out explicitly, and it is the single
  * loudest complaint in this category's one-star reviews.
+ *
+ * [progressKnown] is now actually wired: until the encoder reports its first
+ * figure the ring shows a hint arc with no number, instead of a stationary "0%"
+ * that on a large file sat there for ten seconds or more.
  */
 @Composable
 fun ProcessingOverlay(
@@ -70,8 +74,12 @@ fun ProcessingOverlay(
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 ProgressRing(
                     progress = progress,
-                    indeterminateSweep = false,
-                    centreLabel = "${(progress.coerceIn(0f, 1f) * 100f).roundToInt()}%",
+                    indeterminateSweep = !progressKnown,
+                    centreLabel = if (progressKnown) {
+                        "${(progress.coerceIn(0f, 1f) * 100f).roundToInt()}%"
+                    } else {
+                        null
+                    },
                 )
             }
 
@@ -89,8 +97,10 @@ fun ProcessingOverlay(
 
             Text(
                 text = when {
-                    progress <= 0.001f -> stringResource(R.string.processing_preparing)
-                    progress >= 0.99f -> stringResource(R.string.processing_finishing)
+                    !progressKnown -> stringResource(R.string.processing_preparing)
+                    // The last 10% of the reported figure is the MediaStore copy,
+                    // not the encode. Saying "saving" there is accurate.
+                    progress >= 0.90f -> stringResource(R.string.processing_finishing)
                     else -> stringResource(R.string.processing_body)
                 },
                 modifier = Modifier.fillMaxWidth(),

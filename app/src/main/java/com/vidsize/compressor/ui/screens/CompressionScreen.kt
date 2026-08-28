@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -53,6 +54,7 @@ import com.vidsize.compressor.media.CompressionService
 import com.vidsize.compressor.media.StorageGuard
 import com.vidsize.compressor.media.VideoProbe
 import com.vidsize.compressor.media.rememberVideoThumbnail
+import com.vidsize.compressor.model.CompressionPlan
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
 import com.vidsize.compressor.model.VideoInfo
@@ -78,12 +80,16 @@ import kotlinx.coroutines.withContext
  *
  * Structure mirrors Home: a fixed bar at the top, one scrolling body, and a
  * fixed action bar at the bottom that clears the navigation bar. The primary
- * action never scrolls out of reach — on a 360dp phone with a long preset list
+ * action never scrolls out of reach - on a 360dp phone with a long preset list
  * that is the difference between a considered product and a form.
  *
  * Progress is real, not decorative: [CompressionService] reports encoder progress
- * and this screen renders it. When the encoder has not produced a figure yet the
- * ring shows a hint arc rather than a fake percentage.
+ * and this screen renders it. Until the encoder has produced a figure the ring
+ * shows a hint arc rather than a stationary "0%".
+ *
+ * A preset whose plan is not [CompressionPlan.viable] is shown but not
+ * selectable: running it would mean several minutes of work ending in a
+ * "compression didn't finish" error.
  */
 @Composable
 fun CompressionScreen(
@@ -98,12 +104,23 @@ fun CompressionScreen(
     var probeFailed by remember(videoUri) { mutableStateOf(false) }
     var preset by remember(videoUri) { mutableStateOf(CompressionPreset.BALANCED) }
 
+    // True between the tap on COMPRESS and the service reporting Running. Without
+    // it the button stays enabled and the screen looks inert for the duration of
+    // the service start plus the probe.
+    var starting by remember(videoUri) { mutableStateOf(false) }
+
     // The job lives in CompressionService, not in this screen, so that leaving
     // the app does not kill it. The screen is a pure view over that state.
     val jobStatus = CompressionJobState.status
     val busy = jobStatus is CompressionJobState.Status.Running
     val result = (jobStatus as? CompressionJobState.Status.Done)?.result
     val failure = jobStatus as? CompressionJobState.Status.Failed
+
+    // Never write state during composition: clear the local "starting" latch
+    // from an effect once the service has actually reported Running.
+    LaunchedEffect(busy) {
+        if (busy) starting = false
+    }
 
     // Asked for at the moment of first use rather than at launch. A denial is
     // not fatal: the service still runs, it just cannot show progress.
@@ -113,14 +130,20 @@ fun CompressionScreen(
 
     // Pre-flight: what this preset is likely to produce, and whether the device
     // has room for it. Recomputed when the user switches preset.
-    val selectedEstimate = info?.let {
-        CompressionPlanner.plan(it, preset).estimatedOutputBytes
-    }
-    val storage = remember(selectedEstimate, context) {
-        selectedEstimate?.let { StorageGuard.check(context, it) }
+    val selectedPlan: CompressionPlan? = info?.let { CompressionPlanner.plan(it, preset) }
+    val storage = remember(selectedPlan?.estimatedOutputBytes, info?.sourceBytes, context) {
+        selectedPlan?.let {
+            StorageGuard.check(context, it.estimatedOutputBytes, info?.sourceBytes ?: 0L)
+        }
     }
 
     LaunchedEffect(videoUri) {
+        // CompressionJobState is a process singleton. Without this, a Failed or
+        // Done state left over from the previous video is rendered against the
+        // new one before the user has touched anything.
+        if (CompressionJobState.status !is CompressionJobState.Status.Running) {
+            CompressionJobState.reset()
+        }
         val probed = runCatching {
             withContext(Dispatchers.IO) { VideoProbe.probe(context, videoUri) }
         }.getOrNull()
@@ -130,8 +153,8 @@ fun CompressionScreen(
 
     // While an export is running, swallow the back gesture: the user cancels
     // deliberately with the button instead of losing work by accident.
-    BackHandler(enabled = busy) { }
-    BackHandler(enabled = !busy && result == null) { onBack() }
+    BackHandler(enabled = busy || starting) { }
+    BackHandler(enabled = !busy && !starting && result == null) { onBack() }
 
     fun startCompression() {
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -140,6 +163,7 @@ fun CompressionScreen(
         ) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        starting = true
         CompressionService.start(context, videoUri, preset)
     }
 
@@ -154,7 +178,7 @@ fun CompressionScreen(
             .background(VidsizeColor.Background),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            CompressionTopBar(onBack = onBack, enabled = !busy)
+            CompressionTopBar(onBack = onBack, enabled = !busy && !starting)
 
             Column(
                 modifier = Modifier
@@ -179,6 +203,12 @@ fun CompressionScreen(
             // and far away from the primary COMPRESS button.
             CompressionBannerAd(active = !busy)
 
+            // Without this divider the scrolling preset rows come to rest flush
+            // against the banner's bottom edge, which is an accidental-click
+            // surface the moment the user scrolls.
+            HairLine()
+            Spacer(Modifier.height(Space.xs))
+
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -197,17 +227,18 @@ fun CompressionScreen(
                 Spacer(Modifier.height(Space.sm))
 
                 val currentInfo = info
+                var anyViable = false
                 CompressionPreset.entries.forEach { option ->
-                    val estimate = currentInfo?.let {
-                        CompressionPlanner.plan(it, option).estimatedOutputBytes
-                    }
+                    val plan = currentInfo?.let { CompressionPlanner.plan(it, option) }
+                    if (plan?.viable == true) anyViable = true
                     PresetRow(
                         preset = option,
                         selected = option == preset,
-                        estimateBytes = estimate,
+                        estimateBytes = plan?.estimatedOutputBytes,
                         sourceBytes = currentInfo?.sourceBytes ?: 0L,
-                        enabled = !busy,
-                        onClick = { preset = option },
+                        viable = plan?.viable ?: true,
+                        enabled = !busy && !starting,
+                        onClick = { if (plan?.viable != false) preset = option },
                     )
                     Spacer(Modifier.height(Space.xs))
                 }
@@ -226,6 +257,20 @@ fun CompressionScreen(
                         tone = NoticeTone.Error,
                         title = stringResource(R.string.error_title),
                         body = stringResource(R.string.error_invalid_video),
+                    )
+                } else if (currentInfo != null && !anyViable) {
+                    Spacer(Modifier.height(Space.md))
+                    NoticeCard(
+                        tone = NoticeTone.Blocking,
+                        title = stringResource(R.string.error_title),
+                        body = stringResource(R.string.error_no_savings),
+                    )
+                } else if (selectedPlan != null && !selectedPlan.viable) {
+                    Spacer(Modifier.height(Space.md))
+                    NoticeCard(
+                        tone = NoticeTone.Info,
+                        title = stringResource(R.string.preset_not_viable),
+                        body = stringResource(R.string.error_no_savings),
                     )
                 } else if (storage != null && !storage.hasRoom) {
                     Spacer(Modifier.height(Space.md))
@@ -276,9 +321,13 @@ fun CompressionScreen(
                     if (probeFailed) R.string.cta_select_video else R.string.cta_compress,
                 ),
                 enabled = if (probeFailed) {
-                    !busy
+                    !busy && !starting
                 } else {
-                    info != null && !busy && storage?.hasRoom != false
+                    info != null &&
+                        !busy &&
+                        !starting &&
+                        selectedPlan?.viable == true &&
+                        storage?.hasRoom != false
                 },
                 onClick = {
                     if (probeFailed) onSelectAnother() else startCompression()
@@ -291,7 +340,21 @@ fun CompressionScreen(
             ProcessingOverlay(
                 progress = running.progress,
                 progressKnown = running.progressKnown,
-                onCancel = { CompressionService.cancel(context) },
+                onCancel = {
+                    starting = false
+                    CompressionService.cancel(context)
+                },
+            )
+        } else if (starting) {
+            // The service has not reported Running yet. Show the same overlay in
+            // its indeterminate state so the tap is never followed by silence.
+            ProcessingOverlay(
+                progress = 0f,
+                progressKnown = false,
+                onCancel = {
+                    starting = false
+                    CompressionService.cancel(context)
+                },
             )
         }
     }
@@ -470,6 +533,7 @@ private fun PresetRow(
     selected: Boolean,
     estimateBytes: Long?,
     sourceBytes: Long,
+    viable: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
@@ -480,21 +544,23 @@ private fun PresetRow(
     }
 
     VidsizeCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (viable) 1f else 0.55f),
         onClick = onClick,
-        clickEnabled = enabled,
+        clickEnabled = enabled && viable,
         role = Role.RadioButton,
         shape = VidsizeShape.large,
-        color = if (selected) VidsizeColor.IndigoSoft else VidsizeColor.Surface,
-        border = if (selected) VidsizeColor.Indigo else VidsizeColor.Border,
-        elevation = if (selected) 8.dp else 4.dp,
+        color = if (selected && viable) VidsizeColor.IndigoSoft else VidsizeColor.Surface,
+        border = if (selected && viable) VidsizeColor.Indigo else VidsizeColor.Border,
+        elevation = if (selected && viable) 8.dp else 4.dp,
         contentPadding = Space.md,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SelectionDot(selected = selected)
+            SelectionDot(selected = selected && viable)
 
             Spacer(Modifier.width(Space.sm))
 
@@ -511,7 +577,7 @@ private fun PresetRow(
                     color = VidsizeColor.Muted,
                 )
 
-                if (fraction > 0f) {
+                if (viable && fraction > 0f) {
                     Spacer(Modifier.height(Space.xs))
                     SizeBar(fraction = fraction, selected = selected)
                 }
@@ -523,14 +589,20 @@ private fun PresetRow(
                 Eyebrow(text = stringResource(R.string.estimate_short))
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text = if (estimateBytes != null) {
-                        stringResource(R.string.estimate_value, Fmt.estimate(estimateBytes))
-                    } else {
-                        "—"
+                    text = when {
+                        !viable -> stringResource(R.string.preset_not_viable)
+                        estimateBytes != null ->
+                            stringResource(R.string.estimate_value, Fmt.estimate(estimateBytes))
+                        else -> "—"
                     },
-                    style = VidsizeType.cardTitle,
-                    color = if (selected) VidsizeColor.Indigo else VidsizeColor.Ink,
-                    maxLines = 1,
+                    style = if (viable) VidsizeType.cardTitle else VidsizeType.supporting,
+                    color = when {
+                        !viable -> VidsizeColor.Faint
+                        selected -> VidsizeColor.Indigo
+                        else -> VidsizeColor.Ink
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -682,6 +754,7 @@ private fun PresetRowPreview() {
                 selected = true,
                 estimateBytes = 612L * 1024L * 1024L,
                 sourceBytes = 1024L * 1024L * 1024L,
+                viable = true,
                 enabled = true,
                 onClick = {},
             )
@@ -690,6 +763,16 @@ private fun PresetRowPreview() {
                 selected = false,
                 estimateBytes = 320L * 1024L * 1024L,
                 sourceBytes = 1024L * 1024L * 1024L,
+                viable = true,
+                enabled = true,
+                onClick = {},
+            )
+            PresetRow(
+                preset = CompressionPreset.SMALLEST,
+                selected = false,
+                estimateBytes = 1_000L * 1024L * 1024L,
+                sourceBytes = 1024L * 1024L * 1024L,
+                viable = false,
                 enabled = true,
                 onClick = {},
             )

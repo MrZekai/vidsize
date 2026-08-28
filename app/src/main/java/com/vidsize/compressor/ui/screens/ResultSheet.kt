@@ -60,10 +60,14 @@ import com.vidsize.compressor.ui.theme.Space
  * no experimental Material API in its path — this screen must not break on a
  * Material 3 point release.
  *
- * Ad placement follows the plan exactly: the Native Advanced card sits
- * **below** all actions, after the user has seen the outcome. Nothing full-screen fires
- * here, and the ad's space is reserved so the buttons never move under a thumb
- * that is already travelling towards them.
+ * Ad placement: the Native Advanced card sits **below** all actions, after the
+ * user has seen the outcome. Nothing full-screen fires here.
+ *
+ * The slot's height is reserved by [NativeAdCard] from the moment the sheet
+ * opens. This sheet is bottom-anchored, so anything that appears inside it
+ * pushes every button upward; before the slot was reserved, a creative arriving
+ * a second after the sheet opened moved "Compress another video" out from under
+ * a thumb already travelling towards it and put the ad's CTA there instead.
  */
 @Composable
 fun ResultSheet(
