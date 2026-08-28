@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -28,6 +29,18 @@ import com.vidsize.compressor.ui.theme.VidsizeColor
 
 private val BannerWidth = 320.dp
 private val BannerHeight = 50.dp
+
+/**
+ * Dead space kept between an anchored banner and whatever borders it - the
+ * scrolling content above, and the system navigation area below.
+ *
+ * With gesture navigation `navigationBarsPadding()` is only about 24dp, so a
+ * home-swipe that starts a little high, or a thumb reaching for the back button
+ * on a three-button bar, lands very close to the creative. This buffer is
+ * app-coloured and has no click handler of its own, so it is a genuine miss
+ * region rather than a visual gap.
+ */
+private val SystemEdgeBuffer = 12.dp
 
 @Composable
 fun HomeBannerAd(modifier: Modifier = Modifier) {
@@ -71,6 +84,7 @@ private fun FixedBannerAd(
             .fillMaxWidth()
             .background(VidsizeColor.Surface)
             .navigationBarsPadding()
+            .padding(vertical = SystemEdgeBuffer)
     } else {
         modifier
             .fillMaxWidth()

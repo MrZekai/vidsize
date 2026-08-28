@@ -61,8 +61,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 12' app/build.gradle.kts
-          grep -q 'versionName = "0.8.4"' app/build.gradle.kts
+          grep -q 'versionCode = 13' app/build.gradle.kts
+          grep -q 'versionName = "0.8.5"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -83,7 +83,7 @@ jobs:
           cmp -s docs/terms.html app/src/main/assets/legal/terms.html
           cmp -s docs/index.html app/src/main/assets/legal/index.html
 
-      - name: v0.8.3 compression + v0.8.4 UI regression guards
+      - name: v0.8.3 compression + v0.8.4 UI + v0.8.5 quality/ad guards
         shell: bash
         run: |
           set -euo pipefail
@@ -95,6 +95,9 @@ jobs:
           OVERLAY=app/src/main/java/com/vidsize/compressor/ui/screens/ProcessingOverlay.kt
           NATIVE=app/src/main/java/com/vidsize/compressor/ui/components/NativeAdCard.kt
           RESULT=app/src/main/java/com/vidsize/compressor/ui/screens/ResultScreen.kt
+          HOME=app/src/main/java/com/vidsize/compressor/ui/screens/HomeScreen.kt
+          PROBE=app/src/main/java/com/vidsize/compressor/media/VideoProbe.kt
+          INFO=app/src/main/java/com/vidsize/compressor/model/VideoInfo.kt
           RING=app/src/main/java/com/vidsize/compressor/ui/components/ProgressRing.kt
           BANNER=app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           TESTS=app/src/test/java/com/vidsize/compressor/media/CompressionPlannerTest.kt
@@ -221,6 +224,59 @@ jobs:
           # no new permissions may sneak in with a UI change
           test "$(grep -c 'uses-permission' app/src/main/AndroidManifest.xml)" -eq 5
 
+          # ==================== v0.8.5 guards ====================
+
+          # Q2 - the flat per-preset bitrate cap is gone. On 16 Mbps phone
+          # footage it, not sourceBitrateFactor, decided the output, so a
+          # quality-first Balanced produced 31% of the source.
+          nothas "$PRESET"  'bitrateCap'
+          nothas "$PLANNER" 'preset.bitrateCap'
+          has    "$PRESET"  'qualityBitsPerPixel'
+          has    "$PRESET"  'bitrateCeiling'
+          has    "$PLANNER" 'qualityCeiling'
+          has    "$PLANNER" 'targetWidth'
+
+          # Q2 - the ceiling must react to frame rate and to the source codec.
+          has "$PLANNER" 'frameRate'
+          has "$PLANNER" 'EFFICIENT_CODEC_CEILING_FACTOR'
+          has "$INFO"    'frameRate'
+          has "$INFO"    'usesEfficientCodec'
+          has "$PROBE"   'METADATA_KEY_VIDEO_FRAME_COUNT'
+          has "$PROBE"   'MediaExtractor'
+
+          # Q2 - the v0.8.3 low-bitrate protections must remain untouched.
+          has "$PRESET"  'minSourceShare'
+          has "$PLANNER" 'minSourceShare'
+          nothas "$PLANNER" 'const val MIN_VIDEO_BITRATE'
+          nothas "$PLANNER" 'coerceAtMost(info.sourceBytes'
+          grep -Fq 'lowBitrateSourcesAreUntouchedByTheQualityCeiling' "$TESTS"
+          grep -Fq 'highBitrate1080pIsNoLongerPinnedToTheOldFlatCap' "$TESTS"
+          grep -Fq 'higherFrameRateRaisesTheQualityCeiling' "$TESTS"
+          grep -Fq 'efficientSourceCodecRaisesTheQualityCeiling' "$TESTS"
+
+          # Q1 - the native ad is a labelled section between the primary action
+          # and the secondary ones, not a footer after everything.
+          has "$RESULT" 'R.string.ad_label'
+          has "$RESULT" 'HairLine()'
+          AD_LINE="$(grep -n 'NativeAdCard(' "$RESULT" | head -1 | cut -d: -f1)"
+          ANOTHER_LINE="$(grep -n 'R.string.result_another' "$RESULT" | head -1 | cut -d: -f1)"
+          LOCATION_LINE="$(grep -n 'R.string.result_location' "$RESULT" | head -1 | cut -d: -f1)"
+          SHARE_LINE="$(grep -n 'R.string.result_share' "$RESULT" | head -1 | cut -d: -f1)"
+          test "$SHARE_LINE" -lt "$AD_LINE"
+          test "$AD_LINE" -lt "$ANOTHER_LINE"
+          test "$AD_LINE" -lt "$LOCATION_LINE"
+
+          # Q3 - the anchored home banner keeps a divider and a dead buffer
+          # between the creative and the system navigation area.
+          has "$BANNER" 'SystemEdgeBuffer'
+          has "$BANNER" 'navigationBarsPadding()'
+          has "$HOME"   'HairLine()'
+
+          # Q4 - the v0.8.4 processing transition must not have been touched.
+          test "$(grep -c 'ProcessingOverlay(' "$SCREEN")" -eq 1
+          has "$OVERLAY" 'trackOnly = !progressKnown'
+          has "$OVERLAY" 'CompressionBannerAd('
+
       - name: Debug QA gate
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
 
@@ -255,13 +311,13 @@ jobs:
 
       - name: Create exact source audit ZIP
         shell: bash
-        run: git archive --format=zip --output=vidsize-v084-source-audit.zip HEAD
+        run: git archive --format=zip --output=vidsize-v085-source-audit.zip HEAD
 
       - name: Upload QA APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v084-qa-apk
+          name: vidsize-v085-qa-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
@@ -269,7 +325,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v084-closed-test-UNSIGNED-audit-aab
+          name: vidsize-v085-closed-test-UNSIGNED-audit-aab
           path: app/build/outputs/bundle/closedTest/*.aab
           if-no-files-found: warn
 
@@ -277,15 +333,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v084-source-audit
-          path: vidsize-v084-source-audit.zip
+          name: vidsize-v085-source-audit
+          path: vidsize-v085-source-audit.zip
           if-no-files-found: warn
 
       - name: Upload lint reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v084-lint
+          name: vidsize-v085-lint
           path: |
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-closedTest.html

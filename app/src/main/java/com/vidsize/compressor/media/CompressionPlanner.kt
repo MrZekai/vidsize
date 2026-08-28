@@ -19,18 +19,41 @@ import kotlin.math.roundToInt
  * are strictly ordered across the presets, so the clamp can never collapse two
  * presets onto the same value.
  *
- * The removed shared constant `MIN_VIDEO_BITRATE = 350_000` was what broke this:
- * for any source under ~683 kbps all three presets hit the same floor and the
- * user saw three identical estimates, followed a few minutes later by a
- * "compression didn't finish" error.
+ *  - `requested`  = f x S - audio        -> f is strictly ordered, audio is not
+ *                                           increasing, so this is too.
+ *  - `lowerBound` = minSourceShare x S   -> strictly ordered.
+ *  - `upperBound` = min(qualityCeiling, bitrateCeiling)
+ *                   qualityCeiling scales with targetPixels (non-increasing
+ *                   across presets) and qualityBitsPerPixel (strictly
+ *                   decreasing), so it is strictly decreasing; bitrateCeiling is
+ *                   strictly decreasing; and the pointwise min of two strictly
+ *                   decreasing sequences is strictly decreasing.
+ *
+ * The removed constant `MIN_VIDEO_BITRATE = 350_000` was what broke this before
+ * v0.8.3: for any source under ~683 kbps all three presets hit the same floor.
+ *
+ * ## v0.8.5: the cap is a quality target, not a flat number
+ *
+ * v0.8.4 gave each preset one absolute cap. On a 16 Mbps 1080p phone clip
+ * Balanced's 5 Mbps cap bound long before its 70%-of-source policy did, so the
+ * output was 31% of the source from a preset that promises quality first. The
+ * ceiling is now derived from the output the preset actually intends to produce:
+ *
+ *     ceiling = targetWidth x targetHeight x fps x qualityBitsPerPixel x codecFactor
+ *
+ * That is bits per pixel per frame, the standard way to express encoder quality.
+ * It respects resolution and frame rate, which a flat cap could not, and it
+ * leaves low-bitrate sources completely untouched: down there `requested` and
+ * `lowerBound` bind, never the ceiling, so every v0.8.3 low-bitrate regression
+ * case produces byte-identical numbers.
  *
  * ## The estimate
  *
  * Two separate factors instead of one vague 1.10 "headroom":
  *  - [CONTAINER_OVERHEAD] - MP4 moov atom and sample tables.
  *  - [ENCODER_VARIANCE]   - hardware VBR overshoot. Calibrate this from device
- *                           measurements (see the audit's T3 test); 1.08 is the
- *                           starting point, not a measured constant.
+ *                           measurements; 1.08 is a starting point, not a
+ *                           measured constant.
  *
  * Clips shorter than [SHORT_CLIP_SECONDS] use [SHORT_CLIP_VARIANCE] instead:
  * with one or two keyframes the rate control never converges and the container
@@ -56,13 +79,26 @@ object CompressionPlanner {
     private const val MAX_AUDIO_SOURCE_SHARE = 0.15
     private const val MIN_AUDIO_BITRATE = 64_000
 
+    /** Used when the probe could not read a frame count. */
+    private const val DEFAULT_FRAME_RATE = 30.0
+    private const val MIN_FRAME_RATE = 15.0
+    private const val MAX_FRAME_RATE = 120.0
+
+    /**
+     * How much more H.264 bitrate an HEVC/VP9/AV1 source needs to keep its
+     * quality. These codecs are roughly 30-50% more efficient, so matching what
+     * the viewer already has means giving the AVC output more bits than the
+     * source figure alone would suggest.
+     */
+    private const val EFFICIENT_CODEC_CEILING_FACTOR = 1.30
+
     /**
      * Media3 can transmux instead of transcode when nothing about the video
      * changes. In practice `DefaultEncoderFactory.videoNeedsEncoding()` already
      * forces a transcode because custom `VideoEncoderSettings` are supplied, so
      * this nudge is belt-and-braces. It costs a pointless GPU resample and
-     * produces non-16-aligned sizes; remove it once device test T1 confirms the
-     * requested bitrate reaches the encoder without it.
+     * produces non-16-aligned sizes; remove it only once a device test confirms
+     * the requested bitrate reaches the encoder without it.
      */
     private const val FORCE_TRANSCODE_DELTA_PX = 2
 
@@ -86,25 +122,10 @@ object CompressionPlanner {
             0
         }
 
-        val requestedVideoBitrate =
-            (sourceTotalBitrate * preset.sourceBitrateFactor).toInt() - outputAudioBitrate
-        val lowerBound = (sourceTotalBitrate * preset.minSourceShare).toInt()
-        val upperBound = preset.bitrateCap
-
-        // median(requested, lowerBound, upperBound). All three are strictly
-        // ordered across presets, so the result is too. Do not add a shared
-        // absolute floor here: that is what collapsed the presets before.
-        val videoBitrate = min(max(requestedVideoBitrate, lowerBound), upperBound)
-
-        val outputTotalBitrate = videoBitrate + outputAudioBitrate
-
         val sourceShortEdge = min(info.width, info.height)
         val requestedShortEdge = min(sourceShortEdge, preset.maxShortEdge)
-        val bitrateReductionRequested =
-            outputTotalBitrate < (sourceTotalBitrate * 0.98).toInt()
 
         val targetShortEdge = if (
-            bitrateReductionRequested &&
             requestedShortEdge == sourceShortEdge &&
             sourceShortEdge > FORCE_TRANSCODE_DELTA_PX + 2
         ) {
@@ -113,13 +134,45 @@ object CompressionPlanner {
             requestedShortEdge.toEvenAtLeastTwo()
         }
 
-        val rawTargetHeight = if (info.height > info.width) {
-            (info.height.toDouble() * targetShortEdge.toDouble() / info.width.toDouble())
+        // The short edge is the width on portrait footage and the height on
+        // landscape or square footage. Both edges are needed for the pixel count
+        // the quality ceiling is built from.
+        val targetWidth: Int
+        val targetHeight: Int
+        if (info.height > info.width) {
+            targetWidth = targetShortEdge
+            targetHeight = (info.height.toDouble() * targetShortEdge / info.width.toDouble())
                 .roundToInt()
+                .toEvenAtLeastTwo()
         } else {
-            targetShortEdge
+            targetHeight = targetShortEdge
+            targetWidth = (info.width.toDouble() * targetShortEdge / info.height.toDouble())
+                .roundToInt()
+                .toEvenAtLeastTwo()
         }
-        val targetHeight = rawTargetHeight.toEvenAtLeastTwo()
+
+        val frameRate = info.frameRate
+            .takeIf { it > 0.0 }
+            ?.coerceIn(MIN_FRAME_RATE, MAX_FRAME_RATE)
+            ?: DEFAULT_FRAME_RATE
+        val codecFactor = if (info.usesEfficientCodec) EFFICIENT_CODEC_CEILING_FACTOR else 1.0
+
+        val qualityCeiling = (
+            targetWidth.toDouble() * targetHeight.toDouble() *
+                frameRate * preset.qualityBitsPerPixel * codecFactor
+            ).toInt()
+
+        val requestedVideoBitrate =
+            (sourceTotalBitrate * preset.sourceBitrateFactor).toInt() - outputAudioBitrate
+        val lowerBound = (sourceTotalBitrate * preset.minSourceShare).toInt()
+        val upperBound = min(qualityCeiling, preset.bitrateCeiling)
+
+        // median(requested, lowerBound, upperBound). All three are strictly
+        // ordered across presets, so the result is too. Do not add a shared
+        // absolute floor here: that is what collapsed the presets before v0.8.3.
+        val videoBitrate = min(max(requestedVideoBitrate, lowerBound), upperBound)
+
+        val outputTotalBitrate = videoBitrate + outputAudioBitrate
 
         val variance = if (info.durationSeconds < SHORT_CLIP_SECONDS) {
             SHORT_CLIP_VARIANCE
@@ -139,6 +192,7 @@ object CompressionPlanner {
 
         return CompressionPlan(
             preset = preset,
+            targetWidth = targetWidth,
             targetHeight = targetHeight,
             videoBitrate = videoBitrate,
             audioBitrate = outputAudioBitrate,

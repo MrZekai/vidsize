@@ -2,6 +2,7 @@ package com.vidsize.compressor.model
 
 data class CompressionPlan(
     val preset: CompressionPreset,
+    val targetWidth: Int,
     val targetHeight: Int,
     val videoBitrate: Int,
     val audioBitrate: Int,

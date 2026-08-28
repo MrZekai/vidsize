@@ -41,6 +41,7 @@ import com.vidsize.compressor.data.history.HistorySummary
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
+import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.HomeBannerAd
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
@@ -125,7 +126,16 @@ fun HomeScreen(
         }
 
         // Monetization stays visible without interrupting the user's workflow.
-        // The scrollable content remains above this consent-gated adaptive banner.
+        // The scrollable content remains above this consent-gated banner.
+        //
+        // The banner stays anchored rather than scrolling with the content. In
+        // the content it would end up beside the Select Video button, the Clear
+        // history action or the history rows - all of them app controls, which is
+        // a worse accidental-click neighbourhood than the system navigation area,
+        // and it would scroll out of view entirely. What the anchored placement
+        // did lack was separation, so it now carries a divider above it and a
+        // 12dp dead buffer on both sides (see SystemEdgeBuffer).
+        HairLine()
         HomeBannerAd()
     }
 

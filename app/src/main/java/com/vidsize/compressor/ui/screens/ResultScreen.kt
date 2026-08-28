@@ -38,6 +38,8 @@ import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
+import com.vidsize.compressor.ui.components.Eyebrow
+import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.NativeAdCard
 import com.vidsize.compressor.ui.components.PrimaryButton
@@ -70,6 +72,23 @@ import com.vidsize.compressor.ui.theme.Space
  * Back closes the result and returns to the compression screen for the same
  * video; [onBack] is responsible for clearing the finished job state so no stale
  * `Done` can be rendered against the next video.
+ *
+ * ## v0.8.5: the ad is a section, not a footer
+ *
+ * v0.8.4 still placed the Native Advanced card after every action and the
+ * save-location line, which put its top edge about 580dp into the scroll. On a
+ * 360x640 phone that is entirely below the fold; on a 393x852 phone about 39% of
+ * the card is visible and the call-to-action never is. An ad seen only in
+ * fragments is worthless to the advertiser and clutter to the user.
+ *
+ * The page now keeps the summary and the one action most people want - Share -
+ * above the ad, gives the ad its own labelled section bounded by hairlines, then
+ * continues with the secondary actions. Three things follow: the top of the
+ * creative moves to about 405dp, so it is visible immediately on a normal phone
+ * and complete on a large one; there is real content below the ad, so scrolling
+ * to the rest of it is a natural movement rather than something the user has no
+ * reason to make; and no Vidsize control sits closer to the creative than a
+ * divider plus 24dp.
  */
 @Composable
 fun ResultScreen(
@@ -153,8 +172,10 @@ fun ResultScreen(
                     textAlign = TextAlign.Center,
                 )
 
-                Spacer(Modifier.height(Space.lg))
+                Spacer(Modifier.height(Space.md))
 
+                // The action almost everyone wants next stays above the ad, so
+                // the common path never has to scroll past a creative.
                 PrimaryButton(
                     text = stringResource(R.string.result_share),
                     onClick = { shareVideo(context, result.outputUri) },
@@ -162,7 +183,25 @@ fun ResultScreen(
                     leadingIcon = R.drawable.ic_share,
                 )
 
-                Spacer(Modifier.height(Space.xs))
+                if (adsVisible) {
+                    // A divider, a label and 24dp of dead space above; a divider
+                    // and 32dp below. The creative's boundary is unambiguous in
+                    // both directions and no control is ever flush with it.
+                    Spacer(Modifier.height(Space.xl))
+                    HairLine()
+                    Spacer(Modifier.height(Space.sm))
+                    Eyebrow(
+                        text = stringResource(R.string.ad_label),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(Space.xs))
+                    NativeAdCard(modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(Space.md))
+                    HairLine()
+                    Spacer(Modifier.height(Space.xxl))
+                } else {
+                    Spacer(Modifier.height(Space.xs))
+                }
 
                 SecondaryButton(
                     text = stringResource(R.string.result_show_in_gallery),
@@ -195,17 +234,9 @@ fun ResultScreen(
                     textAlign = TextAlign.Center,
                 )
 
-                // A full gutter of separation so a thumb travelling to
-                // "Compress another video" cannot land on the creative.
-                if (adsVisible) {
-                    Spacer(Modifier.height(Space.xxl))
-                    NativeAdCard(modifier = Modifier.fillMaxWidth())
-                }
-
-                // The page scrolls, and this trailing space is what guarantees
-                // the native call-to-action can be brought clear of the
-                // navigation bar instead of resting under it.
-                Spacer(Modifier.height(Space.xxxl))
+                // Trailing space so the last control clears the navigation bar
+                // and the page never ends flush against the system edge.
+                Spacer(Modifier.height(Space.xxl))
             }
         }
     }

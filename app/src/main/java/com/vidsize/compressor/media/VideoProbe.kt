@@ -1,6 +1,8 @@
 package com.vidsize.compressor.media
 
 import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.vidsize.compressor.model.VideoInfo
@@ -60,9 +62,62 @@ object VideoProbe {
                 sourceBytes = bytes,
                 sourceBitrate = bitrate,
                 hasAudio = hasAudio,
+                frameRate = readFrameRate(retriever, duration),
+                usesEfficientCodec = usesEfficientCodec(context, uri),
             )
         } finally {
             retriever.release()
         }
     }
+
+    /**
+     * Frames per second, from the container's own frame count.
+     *
+     * `METADATA_KEY_VIDEO_FRAME_COUNT` is the only frame figure that is reliable
+     * across camera apps - `METADATA_KEY_CAPTURE_FRAMERATE` is only populated for
+     * slow-motion capture. For variable frame rate footage this is the average,
+     * which is the right number for a bitrate budget anyway.
+     *
+     * Returns 0.0 when it cannot be determined; the planner falls back to 30 fps
+     * rather than inventing a figure from the resolution.
+     */
+    private fun readFrameRate(retriever: MediaMetadataRetriever, durationMs: Long): Double {
+        if (durationMs <= 0L) return 0.0
+        val frames = runCatching {
+            retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)
+                ?.toIntOrNull()
+        }.getOrNull() ?: return 0.0
+        if (frames <= 0) return 0.0
+        return frames * 1000.0 / durationMs
+    }
+
+    /**
+     * True when the source codec is materially more efficient than the H.264
+     * Vidsize produces.
+     *
+     * `MediaMetadataRetriever` only exposes the *container* mime type, so the
+     * video track has to be read with `MediaExtractor`. Every failure mode -
+     * unreadable URI, DRM, an exotic container - degrades to false, which simply
+     * means the output is budgeted as if the source were already H.264.
+     */
+    private fun usesEfficientCodec(context: Context, uri: Uri): Boolean = runCatching {
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(context, uri, null)
+            for (index in 0 until extractor.trackCount) {
+                val mime = extractor.getTrackFormat(index)
+                    .getString(MediaFormat.KEY_MIME)
+                    .orEmpty()
+                if (mime.startsWith("video/")) {
+                    return@runCatching mime == MediaFormat.MIMETYPE_VIDEO_HEVC ||
+                        mime == MediaFormat.MIMETYPE_VIDEO_VP9 ||
+                        mime == MediaFormat.MIMETYPE_VIDEO_AV1
+                }
+            }
+            false
+        } finally {
+            extractor.release()
+        }
+    }.getOrDefault(false)
 }

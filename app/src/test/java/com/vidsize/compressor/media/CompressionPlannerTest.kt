@@ -234,6 +234,121 @@ class CompressionPlannerTest {
         )
     }
 
+    /* --------------------------------------------------------------------- */
+    /* v0.8.5 - quality ceiling                                               */
+    /* --------------------------------------------------------------------- */
+
+    /**
+     * The case that motivated v0.8.5: a 114 MB, 56 s, ~16 Mbps 1080p phone clip.
+     *
+     * Under v0.8.4 both Balanced and Smaller were pinned to their flat caps
+     * (5.0 and 2.2 Mbps), so `sourceBitrateFactor` never ran at all and a
+     * quality-first preset produced 31% of the source. Balanced must now be
+     * governed by what 1080p30 actually needs, not by a constant.
+     */
+    @Test
+    fun highBitrate1080pIsNoLongerPinnedToTheOldFlatCap() {
+        val clip = VideoInfo(56_000, 1920, 1080, 114_000_000L, null, true, frameRate = 30.0)
+        val b = CompressionPlanner.plan(clip, CompressionPreset.BALANCED)
+        assertTrue(
+            "Balanced must clear the old 5 Mbps cap (was ${b.videoBitrate})",
+            b.videoBitrate > 5_000_000,
+        )
+        assertTrue(
+            "Balanced at 1080p30 should land near 8 Mbps (was ${b.videoBitrate})",
+            b.videoBitrate in 7_000_000..9_500_000,
+        )
+        val share = b.estimatedOutputBytes.toDouble() / clip.sourceBytes.toDouble()
+        assertTrue("Balanced should keep about half the source (was $share)", share > 0.45)
+    }
+
+    /** Frame rate has to move the ceiling; a flat cap could not express this. */
+    @Test
+    fun higherFrameRateRaisesTheQualityCeiling() {
+        val at30 = VideoInfo(56_000, 1920, 1080, 114_000_000L, null, true, frameRate = 30.0)
+        val at60 = at30.copy(frameRate = 60.0)
+        val b30 = CompressionPlanner.plan(at30, CompressionPreset.BALANCED)
+        val b60 = CompressionPlanner.plan(at60, CompressionPreset.BALANCED)
+        assertTrue(
+            "1080p60 must get more bits than 1080p30 (${b60.videoBitrate} vs ${b30.videoBitrate})",
+            b60.videoBitrate > b30.videoBitrate,
+        )
+    }
+
+    /** An HEVC source needs more H.264 bits to hold the same quality. */
+    @Test
+    fun efficientSourceCodecRaisesTheQualityCeiling() {
+        val avc = VideoInfo(56_000, 1920, 1080, 114_000_000L, null, true, frameRate = 30.0)
+        val hevc = avc.copy(usesEfficientCodec = true)
+        val a = CompressionPlanner.plan(avc, CompressionPreset.BALANCED)
+        val h = CompressionPlanner.plan(hevc, CompressionPreset.BALANCED)
+        assertTrue(
+            "HEVC source must be budgeted higher (${h.videoBitrate} vs ${a.videoBitrate})",
+            h.videoBitrate > a.videoBitrate,
+        )
+    }
+
+    /** A missing frame count must not collapse the ceiling to zero. */
+    @Test
+    fun unknownFrameRateFallsBackToThirty() {
+        val unknown = VideoInfo(56_000, 1920, 1080, 114_000_000L, null, true, frameRate = 0.0)
+        val explicit = unknown.copy(frameRate = 30.0)
+        assertEquals(
+            CompressionPlanner.plan(explicit, CompressionPreset.BALANCED).videoBitrate,
+            CompressionPlanner.plan(unknown, CompressionPreset.BALANCED).videoBitrate,
+        )
+    }
+
+    /** The ceiling is derived from the target geometry, so both edges are real. */
+    @Test
+    fun targetGeometryIsReportedForBothEdges() {
+        val portrait = VideoInfo(60_000, 1080, 1920, 90_000_000L, null, true, frameRate = 30.0)
+        val smaller = CompressionPlanner.plan(portrait, CompressionPreset.SMALLER)
+        assertEquals(720, smaller.targetWidth)
+        assertEquals(1280, smaller.targetHeight)
+
+        val landscape = VideoInfo(60_000, 1920, 1080, 90_000_000L, null, true, frameRate = 30.0)
+        val land = CompressionPlanner.plan(landscape, CompressionPreset.SMALLER)
+        assertEquals(720, land.targetHeight)
+        assertEquals(1280, land.targetWidth)
+    }
+
+    /**
+     * The whole point of deriving the ceiling from the *output* is that
+     * low-bitrate sources never reach it. These are the three regressions fixed
+     * in v0.8.3; their numbers must not move at all.
+     */
+    @Test
+    fun lowBitrateSourcesAreUntouchedByTheQualityCeiling() {
+        val lowBitrate = listOf(
+            Case("LOW-BITRATE 480x854 18MB/300s", 480, 854, 300_000, 18_000_000L),
+            Case("LOW-BITRATE 640x360 2.8MB/60s", 640, 360, 60_000, 2_800_000L),
+            Case("LOW-BITRATE 360x640 5MB/120s", 360, 640, 120_000, 5_000_000L),
+        )
+        // Values captured from v0.8.4, which the quality ceiling must not alter.
+        val expectedTotals = mapOf(
+            "LOW-BITRATE 480x854 18MB/300s" to listOf(336_000, 240_000, 168_000),
+            "LOW-BITRATE 640x360 2.8MB/60s" to listOf(261_333, 186_666, 138_666),
+            "LOW-BITRATE 360x640 5MB/120s" to listOf(233_333, 166_666, 130_666),
+        )
+        lowBitrate.forEach { case ->
+            val info = case.info()
+            val totals = CompressionPreset.entries.map {
+                val plan = CompressionPlanner.plan(info, it)
+                plan.videoBitrate + plan.audioBitrate
+            }
+            val expected = expectedTotals.getValue(case.label)
+            totals.forEachIndexed { index, actual ->
+                val want = expected[index]
+                assertTrue(
+                    "${case.label}/${CompressionPreset.entries[index]}: total moved " +
+                        "from $want to $actual",
+                    kotlin.math.abs(actual - want) <= 2_000,
+                )
+            }
+        }
+    }
+
     @Test
     fun invalidDimensionsAreRejectedInsteadOfBecomingOnePixel() {
         try {
