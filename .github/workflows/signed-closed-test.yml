@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      VIDSIZE_UPLOAD_KEYSTORE_PATH: ${{ runner.temp }}/vidsize-play-upload.p12
       VIDSIZE_UPLOAD_STORE_PASSWORD: ${{ secrets.VIDSIZE_UPLOAD_STORE_PASSWORD }}
       VIDSIZE_UPLOAD_KEY_ALIAS: ${{ secrets.VIDSIZE_UPLOAD_KEY_ALIAS }}
       VIDSIZE_UPLOAD_KEY_PASSWORD: ${{ secrets.VIDSIZE_UPLOAD_KEY_PASSWORD }}
@@ -26,6 +25,12 @@ jobs:
     steps:
       - name: Checkout exact main source
         uses: actions/checkout@v5
+
+      - name: Prepare secure signing path
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "VIDSIZE_UPLOAD_KEYSTORE_PATH=$RUNNER_TEMP/vidsize-play-upload.p12" >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
