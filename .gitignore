@@ -7,3 +7,9 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Google Play upload signing material - NEVER commit private keys.
+.signing/
+**/vidsize-play-upload.jks
+**/vidsize-play-upload.keystore
+**/vidsize-play-upload.p12

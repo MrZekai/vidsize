@@ -1,0 +1,173 @@
+name: Play Closed Test - Signed AAB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vidsize-play-closed-test-signed
+  cancel-in-progress: false
+
+jobs:
+  signed-closed-test:
+    name: Build and verify signed closed-test AAB
+    runs-on: ubuntu-latest
+
+    env:
+      VIDSIZE_UPLOAD_KEYSTORE_PATH: ${{ runner.temp }}/vidsize-play-upload.p12
+      VIDSIZE_UPLOAD_STORE_PASSWORD: ${{ secrets.VIDSIZE_UPLOAD_STORE_PASSWORD }}
+      VIDSIZE_UPLOAD_KEY_ALIAS: ${{ secrets.VIDSIZE_UPLOAD_KEY_ALIAS }}
+      VIDSIZE_UPLOAD_KEY_PASSWORD: ${{ secrets.VIDSIZE_UPLOAD_KEY_PASSWORD }}
+      VIDSIZE_UPLOAD_KEYSTORE_TYPE: ${{ secrets.VIDSIZE_UPLOAD_KEYSTORE_TYPE }}
+      VIDSIZE_UPLOAD_CERT_SHA256: ${{ secrets.VIDSIZE_UPLOAD_CERT_SHA256 }}
+
+    steps:
+      - name: Checkout exact main source
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Gradle 9.5
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Validate release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'applicationId = "com.vidsize.compressor"' app/build.gradle.kts
+          grep -Fq 'versionCode = 13' app/build.gradle.kts
+          grep -Fq 'versionName = "0.8.5"' app/build.gradle.kts
+          grep -Fq 'buildConfigField("boolean", "USE_TEST_ADS", "true")' app/build.gradle.kts
+          grep -Fq 'verifyClosedTestSigningConfig' app/build.gradle.kts
+          echo "Commit: $(git rev-parse HEAD)"
+
+      - name: Validate signing secrets
+        shell: bash
+        env:
+          VIDSIZE_UPLOAD_KEYSTORE_B64: ${{ secrets.VIDSIZE_UPLOAD_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          for value in \
+            "$VIDSIZE_UPLOAD_KEYSTORE_B64" \
+            "$VIDSIZE_UPLOAD_STORE_PASSWORD" \
+            "$VIDSIZE_UPLOAD_KEY_ALIAS" \
+            "$VIDSIZE_UPLOAD_KEY_PASSWORD" \
+            "$VIDSIZE_UPLOAD_KEYSTORE_TYPE" \
+            "$VIDSIZE_UPLOAD_CERT_SHA256"
+          do
+            test -n "$value" || {
+              echo "Required Play upload signing secret is missing." >&2
+              exit 1
+            }
+          done
+
+          printf '%s' "$VIDSIZE_UPLOAD_KEYSTORE_B64" | base64 --decode \
+            > "$VIDSIZE_UPLOAD_KEYSTORE_PATH"
+          chmod 600 "$VIDSIZE_UPLOAD_KEYSTORE_PATH"
+          test -s "$VIDSIZE_UPLOAD_KEYSTORE_PATH"
+
+          actual="$(
+            keytool -list -v \
+              -keystore "$VIDSIZE_UPLOAD_KEYSTORE_PATH" \
+              -storetype "$VIDSIZE_UPLOAD_KEYSTORE_TYPE" \
+              -storepass "$VIDSIZE_UPLOAD_STORE_PASSWORD" \
+              -alias "$VIDSIZE_UPLOAD_KEY_ALIAS" 2>/dev/null \
+            | awk '/SHA256:/{print $2; exit}'
+          )"
+
+          test -n "$actual"
+          if [ "$actual" != "$VIDSIZE_UPLOAD_CERT_SHA256" ]; then
+            echo "Upload certificate fingerprint mismatch." >&2
+            echo "Expected: $VIDSIZE_UPLOAD_CERT_SHA256" >&2
+            echo "Actual  : $actual" >&2
+            exit 1
+          fi
+
+          echo "Upload certificate SHA256 verified: $actual"
+
+      - name: Unit tests and signed closed-test R8 gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle \
+            :app:testDebugUnitTest \
+            :app:lintClosedTest \
+            :app:verifyClosedTestSigningConfig \
+            :app:bundleClosedTest \
+            --stacktrace
+
+      - name: Verify AAB signature and signer certificate
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          aab="$(
+            find app/build/outputs/bundle/closedTest \
+              -maxdepth 1 -type f -name '*.aab' -print -quit
+          )"
+          test -n "$aab"
+          test -s "$aab"
+
+          jarsigner -verify -verbose -certs "$aab" >/dev/null
+
+          bundle_fp="$(
+            keytool -printcert -jarfile "$aab" 2>/dev/null \
+            | awk '/SHA256:/{print $2; exit}'
+          )"
+
+          test -n "$bundle_fp"
+          if [ "$bundle_fp" != "$VIDSIZE_UPLOAD_CERT_SHA256" ]; then
+            echo "Signed AAB certificate mismatch." >&2
+            echo "Expected: $VIDSIZE_UPLOAD_CERT_SHA256" >&2
+            echo "Actual  : $bundle_fp" >&2
+            exit 1
+          fi
+
+          version_name="$(awk -F'"' '/versionName = /{print $2; exit}' app/build.gradle.kts)"
+          version_code="$(awk '/versionCode = /{print $3; exit}' app/build.gradle.kts)"
+          compact="${version_name//./}"
+
+          mkdir -p release
+          output="release/Vidsize-v${version_name}-closed-test-SIGNED.aab"
+          cp "$aab" "$output"
+
+          sha256="$(sha256sum "$output" | awk '{print $1}')"
+
+          {
+            echo "Application ID: com.vidsize.compressor"
+            echo "Version name: $version_name"
+            echo "Version code: $version_code"
+            echo "Commit: $(git rev-parse HEAD)"
+            echo "Upload certificate SHA256: $bundle_fp"
+            echo "AAB SHA256: $sha256"
+            echo "Ads mode: Google test ads (closedTest)"
+            echo "R8: enabled"
+            echo "Resource shrinking: enabled"
+          } > release/SIGNING-REPORT.txt
+
+          echo "artifact=vidsize-v${compact}-closed-test-SIGNED-aab" >> "$GITHUB_OUTPUT"
+          echo "file=$output" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+
+          echo "Signed AAB: $output"
+          echo "AAB SHA256: $sha256"
+
+      - name: Upload Play-ready signed AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.artifact }}
+          path: |
+            ${{ steps.meta.outputs.file }}
+            release/SIGNING-REPORT.txt
+          if-no-files-found: error
+          retention-days: 30

@@ -23,6 +23,36 @@ val appOpenAdUnitId: String =
 
 val googleTestAdMobAppId = "ca-app-pub-3940256099942544~3347511713"
 
+// Play Upload Key material is reconstructed only inside the signed GitHub
+// Actions workflow. No private signing material is committed to the repository.
+// The ordinary QA/audit workflow intentionally leaves closedTest unsigned.
+val uploadKeystorePath: String =
+    (providers.gradleProperty("VIDSIZE_UPLOAD_KEYSTORE_PATH").orNull
+        ?: System.getenv("VIDSIZE_UPLOAD_KEYSTORE_PATH")
+        ?: "")
+val uploadStorePassword: String =
+    (providers.gradleProperty("VIDSIZE_UPLOAD_STORE_PASSWORD").orNull
+        ?: System.getenv("VIDSIZE_UPLOAD_STORE_PASSWORD")
+        ?: "")
+val uploadKeyAlias: String =
+    (providers.gradleProperty("VIDSIZE_UPLOAD_KEY_ALIAS").orNull
+        ?: System.getenv("VIDSIZE_UPLOAD_KEY_ALIAS")
+        ?: "")
+val uploadKeyPassword: String =
+    (providers.gradleProperty("VIDSIZE_UPLOAD_KEY_PASSWORD").orNull
+        ?: System.getenv("VIDSIZE_UPLOAD_KEY_PASSWORD")
+        ?: "")
+val uploadKeystoreType: String =
+    (providers.gradleProperty("VIDSIZE_UPLOAD_KEYSTORE_TYPE").orNull
+        ?: System.getenv("VIDSIZE_UPLOAD_KEYSTORE_TYPE")
+        ?: "PKCS12")
+
+val uploadSigningConfigured =
+    uploadKeystorePath.isNotBlank() &&
+        uploadStorePassword.isNotBlank() &&
+        uploadKeyAlias.isNotBlank() &&
+        uploadKeyPassword.isNotBlank()
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -55,6 +85,18 @@ android {
             keyAlias = "vidsizeqa"
             keyPassword = "vidsize-qa-debug-2026"
         }
+
+        // Only exists when all required secret-backed values are available.
+        // This keeps the normal audit AAB explicitly unsigned.
+        if (uploadSigningConfigured) {
+            create("playUpload") {
+                storeFile = file(uploadKeystorePath)
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+                storeType = uploadKeystoreType
+            }
+        }
     }
 
     buildTypes {
@@ -82,6 +124,12 @@ android {
             matchingFallbacks += listOf("release")
             buildConfigField("boolean", "USE_TEST_ADS", "true")
             manifestPlaceholders["ADMOB_APP_ID"] = googleTestAdMobAppId
+
+            // The dedicated signed workflow supplies these values.
+            // Without them, this variant remains unsigned for the audit gate.
+            if (uploadSigningConfigured) {
+                signingConfig = signingConfigs.getByName("playUpload")
+            }
         }
     }
 
@@ -117,6 +165,26 @@ dependencies {
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")
     testImplementation("junit:junit:4.13.2")
     debugImplementation("androidx.compose.ui:ui-tooling:1.11.4")
+}
+
+// Dedicated signed-closed-test workflow calls this before bundleClosedTest.
+// It is NOT wired into the ordinary audit bundle task because that audit AAB
+// is intentionally unsigned and must continue to build without repository secrets.
+tasks.register("verifyClosedTestSigningConfig") {
+    group = "verification"
+    description = "Fail unless the Play upload signing material is present and readable."
+    doLast {
+        check(uploadSigningConfigured) {
+            "Closed-test upload signing is not fully configured."
+        }
+        check(file(uploadKeystorePath).isFile) {
+            "Closed-test upload keystore does not exist: $uploadKeystorePath"
+        }
+        check(uploadKeystoreType.equals("PKCS12", ignoreCase = true) ||
+            uploadKeystoreType.equals("JKS", ignoreCase = true)) {
+            "Unsupported upload keystore type: $uploadKeystoreType"
+        }
+    }
 }
 
 val verifyProductionAdConfig = tasks.register("verifyProductionAdConfig") {
