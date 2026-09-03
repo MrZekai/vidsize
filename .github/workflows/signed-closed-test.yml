@@ -49,9 +49,12 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'applicationId = "com.vidsize.compressor"' app/build.gradle.kts
-          grep -Fq 'versionCode = 13' app/build.gradle.kts
-          grep -Fq 'versionName = "0.8.5"' app/build.gradle.kts
+          grep -Fq 'versionCode = 14' app/build.gradle.kts
+          grep -Fq 'versionName = "0.8.6"' app/build.gradle.kts
           grep -Fq 'buildConfigField("boolean", "USE_TEST_ADS", "true")' app/build.gradle.kts
+          grep -Fq 'buildConfigField("boolean", "ENABLE_ADS", "false")' app/build.gradle.kts
+          grep -Fq 'isMinifyEnabled = false' app/build.gradle.kts
+          grep -Fq 'isShrinkResources = false' app/build.gradle.kts
           grep -Fq 'verifyClosedTestSigningConfig' app/build.gradle.kts
           echo "Commit: $(git rev-parse HEAD)"
 
@@ -99,7 +102,7 @@ jobs:
 
           echo "Upload certificate SHA256 verified: $actual"
 
-      - name: Unit tests and signed closed-test R8 gate
+      - name: Unit tests and signed closed-test runtime gate
         shell: bash
         run: |
           set -euo pipefail
@@ -155,9 +158,9 @@ jobs:
             echo "Commit: $(git rev-parse HEAD)"
             echo "Upload certificate SHA256: $bundle_fp"
             echo "AAB SHA256: $sha256"
-            echo "Ads mode: Google test ads (closedTest)"
-            echo "R8: enabled"
-            echo "Resource shrinking: enabled"
+            echo "Ads mode: disabled for closedTest startup-stability hotfix"
+            echo "R8: disabled for closedTest hotfix"
+            echo "Resource shrinking: disabled for closedTest hotfix"
           } > release/SIGNING-REPORT.txt
 
           echo "artifact=vidsize-v${compact}-closed-test-SIGNED-aab" >> "$GITHUB_OUTPUT"

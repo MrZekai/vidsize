@@ -66,11 +66,13 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.8.5"
+        versionCode = 14
+        versionName = "0.8.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+
+        buildConfigField("boolean", "ENABLE_ADS", "true")
 
         buildConfigField("String", "NATIVE_RESULT_AD_UNIT_ID", "\"$nativeResultAdUnitId\"")
         buildConfigField("String", "HOME_BANNER_AD_UNIT_ID", "\"$homeBannerAdUnitId\"")
@@ -123,6 +125,9 @@ android {
             initWith(getByName("release"))
             matchingFallbacks += listOf("release")
             buildConfigField("boolean", "USE_TEST_ADS", "true")
+            buildConfigField("boolean", "ENABLE_ADS", "false")
+            isMinifyEnabled = false
+            isShrinkResources = false
             manifestPlaceholders["ADMOB_APP_ID"] = googleTestAdMobAppId
 
             // The dedicated signed workflow supplies these values.

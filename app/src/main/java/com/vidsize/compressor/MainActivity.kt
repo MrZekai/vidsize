@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
 
         // Consent first, ads second. Nothing requests an ad until UMP allows it
         // and Mobile Ads has completed initialization.
-        ConsentManager.gatherConsent(this)
+        if (BuildConfig.ENABLE_ADS) ConsentManager.gatherConsent(this)
 
         setContent {
             val adsReady = ConsentManager.adsAllowed
