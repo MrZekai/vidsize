@@ -49,10 +49,10 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'applicationId = "com.vidsize.compressor"' app/build.gradle.kts
-          grep -Fq 'versionCode = 14' app/build.gradle.kts
-          grep -Fq 'versionName = "0.8.6"' app/build.gradle.kts
+          grep -Fq 'versionCode = 15' app/build.gradle.kts
+          grep -Fq 'versionName = "0.8.7"' app/build.gradle.kts
           grep -Fq 'buildConfigField("boolean", "USE_TEST_ADS", "true")' app/build.gradle.kts
-          grep -Fq 'buildConfigField("boolean", "ENABLE_ADS", "false")' app/build.gradle.kts
+          grep -Fq 'buildConfigField("boolean", "ENABLE_ADS", "true")' app/build.gradle.kts
           grep -Fq 'isMinifyEnabled = false' app/build.gradle.kts
           grep -Fq 'isShrinkResources = false' app/build.gradle.kts
           grep -Fq 'verifyClosedTestSigningConfig' app/build.gradle.kts
