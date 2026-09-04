@@ -158,9 +158,9 @@ jobs:
             echo "Commit: $(git rev-parse HEAD)"
             echo "Upload certificate SHA256: $bundle_fp"
             echo "AAB SHA256: $sha256"
-            echo "Ads mode: disabled for closedTest startup-stability hotfix"
-            echo "R8: disabled for closedTest hotfix"
-            echo "Resource shrinking: disabled for closedTest hotfix"
+            echo "Ads mode: Google test ads enabled for diagnostic closedTest"
+            echo "R8: disabled for diagnostic closedTest"
+            echo "Resource shrinking: disabled for diagnostic closedTest"
           } > release/SIGNING-REPORT.txt
 
           echo "artifact=vidsize-v${compact}-closed-test-SIGNED-aab" >> "$GITHUB_OUTPUT"

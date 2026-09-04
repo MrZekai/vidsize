@@ -66,8 +66,8 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.8.6"
+        versionCode = 15
+        versionName = "0.8.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -125,7 +125,7 @@ android {
             initWith(getByName("release"))
             matchingFallbacks += listOf("release")
             buildConfigField("boolean", "USE_TEST_ADS", "true")
-            buildConfigField("boolean", "ENABLE_ADS", "false")
+            buildConfigField("boolean", "ENABLE_ADS", "true")
             isMinifyEnabled = false
             isShrinkResources = false
             manifestPlaceholders["ADMOB_APP_ID"] = googleTestAdMobAppId
