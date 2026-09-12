@@ -94,4 +94,15 @@
     <string name="ad_badge">Reklam</string>
     <string name="result_show_in_gallery">Galeride Göster</string>
     <string name="preset_not_viable">Gerçek kazanç yok</string>
+
+    <!-- v0.8.8: QA v0.8.7 fixes -->
+    <string name="error_unreadable_title">Bu video okunamıyor</string>
+    <string name="notice_no_savings_title">Zaten iyi sıkıştırılmış</string>
+    <string name="error_encoder_unsupported">Cihazının video kodlayıcısı bu videoyu daha düşük çözünürlükte bile işleyemedi. Lütfen başka bir video seç.</string>
+    <string name="cta_blocked_no_savings">Hiçbir sıkıştırma düzeyi bu dosyayı belirgin şekilde küçültemez.</string>
+    <string name="cta_blocked_no_space">Bu videoyu sıkıştırmak için depolama alanı boşalt.</string>
+    <string name="cta_blocked_level">Devam etmek için farklı bir sıkıştırma düzeyi seç.</string>
+    <string name="cta_pick_another">Başka bir video seç</string>
+    <string name="preset_not_viable_hint">Bu video bu düzey için zaten yeterince küçük.</string>
+    <string name="result_recent_hint">Bu videoyu ana ekrandaki Son bölümünden dilediğin zaman yeniden açabilirsin.</string>
 </resources>

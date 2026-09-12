@@ -178,7 +178,14 @@ class CompressionPlannerTest {
         val x = CompressionPlanner.plan(clip, CompressionPreset.SMALLEST)
         assertTrue(s.estimatedOutputBytes < b.estimatedOutputBytes * 0.80)
         assertTrue(x.estimatedOutputBytes < s.estimatedOutputBytes)
-        assertTrue(b.targetHeight < clip.height)
+        // v0.8.8: Balanced separates itself by bitrate here, not by quietly
+        // losing 2px off the short edge (QA v0.8.7 BUG-03). A 704px short edge
+        // is under both Balanced's 1080 cap and Smaller's 720 cap, so only
+        // Smallest downscales - the separation between the first two is
+        // entirely bitrate, which is exactly what this test is named for.
+        assertEquals(clip.height, b.targetHeight)
+        assertEquals(clip.height, s.targetHeight)
+        assertTrue(x.targetHeight < clip.height)
     }
 
     @Test
@@ -192,10 +199,91 @@ class CompressionPlannerTest {
         assertTrue(b.targetHeight < clip.height)
     }
 
+    /**
+     * ## v0.8.8 - QA v0.8.7 BUG-03
+     *
+     * This test asserted the opposite until v0.8.8. The planner used to shrink
+     * the short edge by 2px whenever the preset was not already downscaling, so
+     * that Media3 would transcode rather than transmux, and this test locked
+     * that behaviour in.
+     *
+     * It was the wrong guarantee. Every output lost 4x2 px, 1920x1080 became
+     * 1916x1078, the display aspect ratio moved off 16:9, the loss compounded
+     * on re-compression, and the app's own "1080p" badge became a lie. The
+     * transcode was never at risk: a `Presentation` effect is always attached
+     * and non-default `VideoEncoderSettings` are always supplied, and either one
+     * alone forces `TransformerUtil.shouldTranscodeVideo` to return true.
+     *
+     * A bitrate-only reduction must now keep the source geometry exactly.
+     */
     @Test
-    fun sameResolutionBitrateReductionForcesRealResize() {
+    fun bitrateOnlyReductionKeepsTheSourceResolutionExactly() {
         val b = CompressionPlanner.plan(sample, CompressionPreset.BALANCED)
-        assertTrue(b.targetHeight < sample.height)
+        assertEquals(1920, b.targetWidth)
+        assertEquals(1080, b.targetHeight)
+    }
+
+    /** The same guarantee on portrait footage, and on a non-16:9 ratio. */
+    @Test
+    fun portraitAndOddRatioSourcesAlsoKeepTheirExactGeometry() {
+        val portrait = VideoInfo(30_000, 1080, 1920, 60_000_000L, null, true)
+        val p = CompressionPlanner.plan(portrait, CompressionPreset.BALANCED)
+        assertEquals(1080, p.targetWidth)
+        assertEquals(1920, p.targetHeight)
+
+        // The WhatsApp/streaming SD size from the QA resolution matrix.
+        val sd = VideoInfo(8_000, 854, 480, 1_700_000L, null, true)
+        val s = CompressionPlanner.plan(sd, CompressionPreset.BALANCED)
+        assertEquals(854, s.targetWidth)
+        assertEquals(480, s.targetHeight)
+    }
+
+    /**
+     * Re-compressing an already-compressed file must not shrink it again.
+     *
+     * QA v0.8.7 BUG-03 measured the compounding directly:
+     * 1280x720 -> 1276x718 -> 1272x716.
+     */
+    @Test
+    fun recompressionDoesNotCompoundAResolutionLoss() {
+        var width = 1280
+        var height = 720
+        repeat(3) {
+            val plan = CompressionPlanner.plan(
+                VideoInfo(60_000, width, height, 12_000_000L, null, true),
+                CompressionPreset.BALANCED,
+            )
+            width = plan.targetWidth
+            height = plan.targetHeight
+        }
+        assertEquals(1280, width)
+        assertEquals(720, height)
+    }
+
+    /**
+     * The display aspect ratio must survive the round trip.
+     *
+     * 1916x1078 is 1.77736 against 16:9's 1.77778 - small, but it is what made
+     * every output's DAR metadata read 958:539 instead of 16:9.
+     */
+    @Test
+    fun displayAspectRatioIsPreserved() {
+        listOf(
+            Triple(1920, 1080, 16.0 / 9.0),
+            Triple(1280, 720, 16.0 / 9.0),
+            Triple(640, 480, 4.0 / 3.0),
+            Triple(320, 240, 4.0 / 3.0),
+        ).forEach { (w, h, ratio) ->
+            val plan = CompressionPlanner.plan(
+                VideoInfo(30_000, w, h, 20_000_000L, null, true),
+                CompressionPreset.BALANCED,
+            )
+            val actual = plan.targetWidth.toDouble() / plan.targetHeight.toDouble()
+            assertTrue(
+                "${w}x$h produced ${plan.targetWidth}x${plan.targetHeight} (ratio $actual)",
+                kotlin.math.abs(actual - ratio) < 0.0005,
+            )
+        }
     }
 
     @Test

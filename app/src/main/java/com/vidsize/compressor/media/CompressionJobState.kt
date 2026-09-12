@@ -14,6 +14,14 @@ object CompressionJobState {
         OUT_OF_SPACE,
         INVALID_VIDEO,
         NO_SAVINGS,
+
+        /**
+         * The device's own video encoder refused every configuration Vidsize
+         * offered, including the conservative fallbacks. Distinct from GENERIC
+         * because the advice differs: a different compression level will not
+         * help, but a smaller source or a different video will.
+         */
+        ENCODER_UNSUPPORTED,
         GENERIC,
     }
 

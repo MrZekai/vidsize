@@ -44,5 +44,14 @@ data class HistorySummary(
 interface HistoryRepository {
     fun summary(): HistorySummary
     fun add(entry: CompressionHistoryEntry)
+
+    /**
+     * Removes one row by id.
+     *
+     * Added in v0.8.8 for QA BUG-07: a row whose file the user deleted outside
+     * the app has to leave storage, not just be filtered out of the view, or the
+     * "Storage saved" total keeps counting it on every launch.
+     */
+    fun remove(id: Long)
     fun clear()
 }

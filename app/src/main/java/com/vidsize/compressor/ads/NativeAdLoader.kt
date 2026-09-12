@@ -14,7 +14,10 @@ object NativeAdLoader {
         onLoaded: (NativeAd) -> Unit,
         onFailed: () -> Unit,
     ) {
-        if (!ConsentManager.adsAllowed) {
+        // QA v0.8.7 BUG-02: a build with no real identifiers must not reach the
+        // AdMob SDK at all. The sample native unit is what rendered the
+        // "native ad validator" debug popup over the result screen.
+        if (!AdSlots.requestable) {
             onFailed()
             return
         }

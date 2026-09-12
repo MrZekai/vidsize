@@ -1,6 +1,8 @@
 package com.vidsize.compressor.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,11 +33,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
+import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.data.history.CompressionHistoryEntry
 import com.vidsize.compressor.data.history.HistorySummary
 import com.vidsize.compressor.ui.components.Eyebrow
@@ -73,6 +77,8 @@ fun HomeScreen(
     summary: HistorySummary,
     onSelectVideo: () -> Unit,
     onClearHistory: () -> Unit,
+    onOpenEntry: (CompressionHistoryEntry) -> Unit = {},
+    onShareEntry: (CompressionHistoryEntry) -> Unit = {},
 ) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
@@ -116,7 +122,11 @@ fun HomeScreen(
 
             Spacer(Modifier.height(Space.sm))
 
-            RecentPanel(entries = summary.entries)
+            RecentPanel(
+                entries = summary.entries,
+                onOpenEntry = onOpenEntry,
+                onShareEntry = onShareEntry,
+            )
 
             Spacer(Modifier.height(Space.sm))
 
@@ -135,8 +145,13 @@ fun HomeScreen(
         // and it would scroll out of view entirely. What the anchored placement
         // did lack was separation, so it now carries a divider above it and a
         // 12dp dead buffer on both sides (see SystemEdgeBuffer).
-        HairLine()
-        HomeBannerAd()
+        // The divider exists to separate the creative from the content above it.
+        // With ads off there is no creative, so a dangling rule at the bottom of
+        // the screen would be a decoration with no meaning.
+        if (AdSlots.enabled) {
+            HairLine()
+            HomeBannerAd()
+        }
     }
 
     if (showSettings) {
@@ -327,7 +342,11 @@ private fun TrustItem(
 /* ------------------------------------------------------------------------- */
 
 @Composable
-private fun RecentPanel(entries: List<CompressionHistoryEntry>) {
+private fun RecentPanel(
+    entries: List<CompressionHistoryEntry>,
+    onOpenEntry: (CompressionHistoryEntry) -> Unit,
+    onShareEntry: (CompressionHistoryEntry) -> Unit,
+) {
     VidsizeCard(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = Space.md,
@@ -369,16 +388,51 @@ private fun RecentPanel(entries: List<CompressionHistoryEntry>) {
         } else {
             entries.take(MAX_RECENT_ROWS).forEachIndexed { index, entry ->
                 if (index > 0) Spacer(Modifier.height(Space.sm))
-                RecentRow(entry)
+                RecentRow(
+                    entry = entry,
+                    onOpen = { onOpenEntry(entry) },
+                    onShare = { onShareEntry(entry) },
+                )
             }
         }
     }
 }
 
+/**
+ * One row of the Recent list.
+ *
+ * ## QA v0.8.7 BUG-06
+ *
+ * These rows looked exactly like list items - icon, title, supporting line,
+ * trailing pill - and were completely inert. The accessibility tree confirmed no
+ * clickable ancestor anywhere in the row, while the empty state promised "your
+ * compressed videos will show up here". Combined with the result screen burying
+ * "Show in Gallery" and "Open Video" beneath a full-height native ad, a user who
+ * left the result screen had no route back to their file at all.
+ *
+ * The row is now the route back: a tap opens the video in the device's player, a
+ * long press shares it, and the trailing chevron makes the affordance visible
+ * rather than implied. Rows are only ever rendered for files that still exist -
+ * [HistoryController.refresh] prunes the rest - so a tap can no longer be a
+ * no-op.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun RecentRow(entry: CompressionHistoryEntry) {
+private fun RecentRow(
+    entry: CompressionHistoryEntry,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(VidsizeShape.small)
+            .combinedClickable(
+                role = Role.Button,
+                onClick = onOpen,
+                onLongClick = onShare,
+            )
+            .padding(vertical = Space.xxs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -427,6 +481,16 @@ private fun RecentRow(entry: CompressionHistoryEntry) {
             background = VidsizeColor.MintSoft,
             border = VidsizeColor.MintBorder,
             foreground = VidsizeColor.Mint,
+        )
+
+        // Makes the row's interactivity visible instead of leaving the user to
+        // guess, which is what BUG-06 was really about.
+        Spacer(Modifier.width(Space.xxs))
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_right),
+            contentDescription = null,
+            tint = VidsizeColor.Faint,
+            modifier = Modifier.size(18.dp),
         )
     }
 }

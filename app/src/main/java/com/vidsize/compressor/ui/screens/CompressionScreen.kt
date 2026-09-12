@@ -24,8 +24,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,11 +44,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.R
 import com.vidsize.compressor.media.CompressionJobState
 import com.vidsize.compressor.media.CompressionPlanner
@@ -133,12 +135,36 @@ fun CompressionScreen(
         ActivityResultContracts.RequestPermission(),
     ) { }
 
-    // Pre-flight: what this preset is likely to produce, and whether the device
-    // has room for it. Recomputed when the user switches preset.
-    val selectedPlan: CompressionPlan? = info?.let { CompressionPlanner.plan(it, preset) }
+    // Pre-flight: what every preset is likely to produce, and whether the device
+    // has room for the selected one.
+    //
+    // All three plans are computed up front rather than inside the row loop, so
+    // "is anything viable at all?" is known *before* the screen is laid out. In
+    // v0.8.7 that answer only existed after the loop had already run, which is
+    // why the explanation for a dead COMPRESS button could only be appended
+    // below the preset list - and therefore below the fold (QA BUG-05).
+    val plans: Map<CompressionPreset, CompressionPlan>? = info?.let { probed ->
+        CompressionPreset.entries.associateWith { CompressionPlanner.plan(probed, it) }
+    }
+    val selectedPlan: CompressionPlan? = plans?.get(preset)
+    val anyViable = plans?.values?.any { it.viable } ?: true
     val storage = remember(selectedPlan?.estimatedOutputBytes, info?.sourceBytes, context) {
         selectedPlan?.let {
             StorageGuard.check(context, it.estimatedOutputBytes, info?.sourceBytes ?: 0L)
+        }
+    }
+    val currentInfo = info
+    val blockedByStorage = storage != null && !storage.hasRoom
+
+    // Never leave the selection parked on a level that cannot run while another
+    // one can. v0.8.7 defaulted to Balanced and stayed there, so a source whose
+    // Balanced plan was not viable presented a disabled button with no hint that
+    // a different level would have worked.
+    LaunchedEffect(plans) {
+        val available = plans ?: return@LaunchedEffect
+        val current = available[preset]
+        if (current != null && !current.viable) {
+            available.entries.firstOrNull { it.value.viable }?.let { preset = it.key }
         }
     }
 
@@ -244,59 +270,31 @@ fun CompressionScreen(
 
                 SelectedVideoCard(videoUri = videoUri, info = info, failed = probeFailed)
 
-                Spacer(Modifier.height(Space.xl))
-
-                SectionHeader(title = stringResource(R.string.section_level))
-
-                Spacer(Modifier.height(Space.sm))
-
-                val currentInfo = info
-                var anyViable = false
-                CompressionPreset.entries.forEach { option ->
-                    val plan = currentInfo?.let { CompressionPlanner.plan(it, option) }
-                    if (plan?.viable == true) anyViable = true
-                    PresetRow(
-                        preset = option,
-                        selected = option == preset,
-                        estimateBytes = plan?.estimatedOutputBytes,
-                        sourceBytes = currentInfo?.sourceBytes ?: 0L,
-                        viable = plan?.viable ?: true,
-                        enabled = !processing,
-                        onClick = { if (plan?.viable != false) preset = option },
-                    )
-                    Spacer(Modifier.height(Space.xs))
-                }
-
-                Spacer(Modifier.height(Space.xxs))
-
-                Text(
-                    text = stringResource(R.string.estimate_note),
-                    style = VidsizeType.caption,
-                    color = VidsizeColor.Faint,
-                )
-
+                // QA v0.8.7 BUG-04 and BUG-05.
+                //
+                // Anything that blocks the primary action is rendered here -
+                // directly under the selected-video card and above the preset
+                // list - because that is the only position on a 360x800dp phone
+                // that is guaranteed to be on screen without scrolling. In
+                // v0.8.7 all of these sat after the preset rows and the estimate
+                // note, so a user whose file could not be compressed saw a
+                // COMPRESS VIDEO button that did nothing and no explanation
+                // anywhere they would look.
                 if (probeFailed) {
                     Spacer(Modifier.height(Space.md))
                     NoticeCard(
                         tone = NoticeTone.Error,
-                        title = stringResource(R.string.error_title),
+                        title = stringResource(R.string.error_unreadable_title),
                         body = stringResource(R.string.error_invalid_video),
                     )
                 } else if (currentInfo != null && !anyViable) {
                     Spacer(Modifier.height(Space.md))
                     NoticeCard(
                         tone = NoticeTone.Blocking,
-                        title = stringResource(R.string.error_title),
+                        title = stringResource(R.string.notice_no_savings_title),
                         body = stringResource(R.string.error_no_savings),
                     )
-                } else if (selectedPlan != null && !selectedPlan.viable) {
-                    Spacer(Modifier.height(Space.md))
-                    NoticeCard(
-                        tone = NoticeTone.Info,
-                        title = stringResource(R.string.preset_not_viable),
-                        body = stringResource(R.string.error_no_savings),
-                    )
-                } else if (storage != null && !storage.hasRoom) {
+                } else if (blockedByStorage && storage != null) {
                     Spacer(Modifier.height(Space.md))
                     NoticeCard(
                         tone = NoticeTone.Blocking,
@@ -316,24 +314,37 @@ fun CompressionScreen(
                     )
                 }
 
-                if (failure != null) {
-                    Spacer(Modifier.height(Space.md))
-                    NoticeCard(
-                        tone = NoticeTone.Error,
-                        title = stringResource(R.string.error_title),
-                        body = stringResource(
-                            when (failure.reason) {
-                                CompressionJobState.FailureReason.OUT_OF_SPACE ->
-                                    R.string.error_storage
-                                CompressionJobState.FailureReason.INVALID_VIDEO ->
-                                    R.string.error_invalid_video
-                                CompressionJobState.FailureReason.NO_SAVINGS ->
-                                    R.string.error_no_savings
-                                CompressionJobState.FailureReason.GENERIC ->
-                                    R.string.error_generic
-                            },
-                        ),
-                        detail = failure.debugMessage.takeIf { BuildConfig.DEBUG },
+                // A file with no readable video has no compression levels to
+                // offer. v0.8.7 still drew all three rows, still highlighted
+                // Balanced with a selection tick, and still showed three "—"
+                // estimates, which read as "this will work" (QA BUG-04).
+                if (!probeFailed) {
+                    Spacer(Modifier.height(Space.xl))
+
+                    SectionHeader(title = stringResource(R.string.section_level))
+
+                    Spacer(Modifier.height(Space.sm))
+
+                    CompressionPreset.entries.forEach { option ->
+                        val plan = plans?.get(option)
+                        PresetRow(
+                            preset = option,
+                            selected = option == preset,
+                            estimateBytes = plan?.estimatedOutputBytes,
+                            sourceBytes = currentInfo?.sourceBytes ?: 0L,
+                            viable = plan?.viable ?: true,
+                            enabled = !processing,
+                            onClick = { if (plan?.viable != false) preset = option },
+                        )
+                        Spacer(Modifier.height(Space.xs))
+                    }
+
+                    Spacer(Modifier.height(Space.xxs))
+
+                    Text(
+                        text = stringResource(R.string.estimate_note),
+                        style = VidsizeType.caption,
+                        color = VidsizeColor.Faint,
                     )
                 }
 
@@ -351,6 +362,17 @@ fun CompressionScreen(
                         !processing &&
                         selectedPlan?.viable == true &&
                         storage?.hasRoom != false
+                },
+                // A button that cannot run must say so on itself rather than
+                // relying on a notice the user may never scroll to.
+                hint = when {
+                    probeFailed -> null
+                    info == null -> null
+                    processing -> null
+                    !anyViable -> stringResource(R.string.cta_blocked_no_savings)
+                    blockedByStorage -> stringResource(R.string.cta_blocked_no_space)
+                    selectedPlan?.viable == false -> stringResource(R.string.cta_blocked_level)
+                    else -> null
                 },
                 onClick = {
                     if (probeFailed) onSelectAnother() else startCompression()
@@ -374,7 +396,101 @@ fun CompressionScreen(
                 },
             )
         }
+
+        // QA v0.8.7 BUG-05 - the single most important change in this release.
+        //
+        // A failure used to be a card appended to the bottom of a scrolling
+        // column, which on the test device was entirely below the fold. Combined
+        // with a failure that arrives within a few hundred milliseconds - too
+        // fast for the progress panel to register as having appeared - the
+        // observable behaviour of a failed compression was *nothing at all*.
+        //
+        // A failure is now a modal dialog. It cannot be off screen, it cannot be
+        // scrolled past, and it cannot be mistaken for the app ignoring the tap.
+        if (failure != null) {
+            FailureDialog(
+                failure = failure,
+                onDismiss = { CompressionJobState.reset() },
+                onSelectAnother = {
+                    CompressionJobState.reset()
+                    onSelectAnother()
+                },
+            )
+        }
     }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Failure                                                                    */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * Modal, unmissable report of a failed compression.
+ *
+ * Each reason gets its own body text and its own advice, because "try a
+ * different compression level" is actively misleading for two of them: a device
+ * whose encoder refused the format will refuse it at every level, and a file
+ * with no readable video has no level that helps.
+ */
+@Composable
+private fun FailureDialog(
+    failure: CompressionJobState.Status.Failed,
+    onDismiss: () -> Unit,
+    onSelectAnother: () -> Unit,
+) {
+    val bodyRes = when (failure.reason) {
+        CompressionJobState.FailureReason.OUT_OF_SPACE -> R.string.error_storage
+        CompressionJobState.FailureReason.INVALID_VIDEO -> R.string.error_invalid_video
+        CompressionJobState.FailureReason.NO_SAVINGS -> R.string.error_no_savings
+        CompressionJobState.FailureReason.ENCODER_UNSUPPORTED -> R.string.error_encoder_unsupported
+        CompressionJobState.FailureReason.GENERIC -> R.string.error_generic
+    }
+
+    // Picking another video is the useful next step for the two reasons where
+    // retrying this one cannot succeed.
+    val offerAnotherVideo = failure.reason == CompressionJobState.FailureReason.INVALID_VIDEO ||
+        failure.reason == CompressionJobState.FailureReason.ENCODER_UNSUPPORTED ||
+        failure.reason == CompressionJobState.FailureReason.NO_SAVINGS
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.error_title)) },
+        text = {
+            Column {
+                Text(stringResource(bodyRes))
+
+                // Shown in every build, not just debug. When a user reports
+                // "it does nothing", this one line is the difference between a
+                // reproducible bug and a shrug - and it is the reason QA had to
+                // read logcat to characterise BUG-05 at all.
+                val detail = failure.debugMessage
+                if (!detail.isNullOrBlank()) {
+                    Spacer(Modifier.height(Space.xs))
+                    Text(
+                        text = detail,
+                        style = VidsizeType.micro,
+                        color = VidsizeColor.Faint,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = if (offerAnotherVideo) onSelectAnother else onDismiss) {
+                Text(
+                    stringResource(
+                        if (offerAnotherVideo) R.string.cta_pick_another else R.string.try_again,
+                    ),
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        },
+    )
 }
 
 /* ------------------------------------------------------------------------- */
@@ -400,11 +516,20 @@ private fun CompressionTopBar(onBack: () -> Unit, enabled: Boolean) {
     }
 }
 
+/**
+ * The bottom action bar.
+ *
+ * [hint] is the fix for the worst part of QA v0.8.7 BUG-05: a full-width,
+ * brand-gradient button that reads as the one thing to press, is disabled, and
+ * says nothing about why. The reason now sits immediately above it, inside the
+ * fixed bar, so it is on screen whenever the button is.
+ */
 @Composable
 private fun CompressionActionBar(
     text: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    hint: String? = null,
 ) {
     Column(
         modifier = Modifier
@@ -418,6 +543,16 @@ private fun CompressionActionBar(
                 .navigationBarsPadding()
                 .padding(horizontal = Space.gutter, vertical = Space.sm),
         ) {
+            if (hint != null) {
+                Text(
+                    text = hint,
+                    style = VidsizeType.caption,
+                    color = VidsizeColor.Danger,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(Space.xs))
+            }
             PrimaryButton(
                 text = text,
                 onClick = onClick,
@@ -585,6 +720,18 @@ private fun PresetRow(
                 if (viable && fraction > 0f) {
                     Spacer(Modifier.height(Space.xs))
                     SizeBar(fraction = fraction, selected = selected)
+                }
+
+                // QA v0.8.7 UX finding: a greyed-out level with no explanation.
+                // Greying it out is right - running it would waste minutes for
+                // nothing - but the user is owed the one-line reason.
+                if (!viable) {
+                    Spacer(Modifier.height(Space.xxs))
+                    Text(
+                        text = stringResource(R.string.preset_not_viable_hint),
+                        style = VidsizeType.caption,
+                        color = VidsizeColor.Faint,
+                    )
                 }
             }
 

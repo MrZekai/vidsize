@@ -23,6 +23,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
+import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.model.CompressionPreset
@@ -51,6 +57,16 @@ import com.vidsize.compressor.ui.theme.VidsizeShape
 import com.vidsize.compressor.ui.theme.VidsizeTheme
 import com.vidsize.compressor.ui.theme.VidsizeType
 import com.vidsize.compressor.ui.theme.Space
+import kotlinx.coroutines.delay
+
+/**
+ * How long this screen refuses taps after it appears.
+ *
+ * Long enough to absorb a touch that was already travelling towards the
+ * progress dialog's Cancel button (QA v0.8.7 BUG-08), short enough that a user
+ * who deliberately reaches for SHARE never notices it.
+ */
+private const val ARRIVAL_GUARD_MS = 450L
 
 /**
  * Result page.
@@ -81,14 +97,26 @@ import com.vidsize.compressor.ui.theme.Space
  * the card is visible and the call-to-action never is. An ad seen only in
  * fragments is worthless to the advertiser and clutter to the user.
  *
- * The page now keeps the summary and the one action most people want - Share -
- * above the ad, gives the ad its own labelled section bounded by hairlines, then
- * continues with the secondary actions. Three things follow: the top of the
- * creative moves to about 405dp, so it is visible immediately on a normal phone
- * and complete on a large one; there is real content below the ad, so scrolling
- * to the rest of it is a natural movement rather than something the user has no
- * reason to make; and no Vidsize control sits closer to the creative than a
- * divider plus 24dp.
+ * The page gave the ad its own labelled section bounded by hairlines, with the
+ * summary and Share above it.
+ *
+ * ## v0.8.8: every way back to the file comes before the ad
+ *
+ * QA v0.8.7 found that the v0.8.5 arrangement still put "Show in Gallery" and
+ * "Open Video" *below* a full-height native creative. On a 720x1600 device that
+ * is entirely off screen, so in practice those two actions did not exist - and
+ * because the Recent rows on Home were inert as well (BUG-06), leaving this
+ * screen meant losing every in-app route back to the compressed file.
+ *
+ * The order is now: figures, save location, Share, Show in Gallery, Open Video,
+ * then the ad section, then "Compress another video". Everything that leads the
+ * user to their file is above the fold; the ad keeps a labelled section with
+ * real content after it, and it is no longer between the user and the thing
+ * they just made.
+ *
+ * The save location moved up here too - the QA pass noted the app only ever
+ * told the user where the file went in the completion notification, which a
+ * user who stays in the app never sees.
  */
 @Composable
 fun ResultScreen(
@@ -97,9 +125,24 @@ fun ResultScreen(
     onCompressAnother: () -> Unit,
 ) {
     val context = LocalContext.current
-    val adsVisible = ConsentManager.adsAllowed || LocalInspectionMode.current
+    val adsVisible = AdSlots.enabled && ConsentManager.adsAllowed || LocalInspectionMode.current
     val savedBytes = (result.sourceBytes - result.outputBytes).coerceAtLeast(0L)
     val percent = Fmt.percentSmaller(result.sourceBytes, result.outputBytes)
+
+    // QA v0.8.7 BUG-08: a tap aimed at the progress dialog's Cancel button
+    // landed on whatever this screen rendered at those coordinates the instant
+    // the dialog closed - in v0.8.7 a full-width native ad, which opened a Play
+    // Store install sheet.
+    //
+    // This screen appears by replacing a modal the user may have been reaching
+    // for, so for its first fraction of a second nothing here accepts a tap.
+    // A touch already in flight is absorbed instead of being routed to an
+    // action the user never chose.
+    var interactive by remember(result.outputUri) { mutableStateOf(false) }
+    LaunchedEffect(result.outputUri) {
+        delay(ARRIVAL_GUARD_MS)
+        interactive = true
+    }
 
     BackHandler { onBack() }
 
@@ -172,6 +215,19 @@ fun ResultScreen(
                     textAlign = TextAlign.Center,
                 )
 
+                Spacer(Modifier.height(Space.xs))
+
+                // QA v0.8.7 UX finding: "the app never says where the file was
+                // saved". The location was only in the completion notification,
+                // which a user who stays in the app never sees. It now sits with
+                // the figures, above every action.
+                Text(
+                    text = stringResource(R.string.result_location),
+                    style = VidsizeType.caption,
+                    color = VidsizeColor.Muted,
+                    textAlign = TextAlign.Center,
+                )
+
                 Spacer(Modifier.height(Space.md))
 
                 // The action almost everyone wants next stays above the ad, so
@@ -180,7 +236,35 @@ fun ResultScreen(
                     text = stringResource(R.string.result_share),
                     onClick = { shareVideo(context, result.outputUri) },
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = interactive,
                     leadingIcon = R.drawable.ic_share,
+                )
+
+                // QA v0.8.7 BUG-06 and the "ad density on the result screen"
+                // finding, fixed together by moving both secondary actions ABOVE
+                // the ad section.
+                //
+                // In v0.8.7 "Show in Gallery" and "Open Video" sat below a
+                // full-height native creative. On a 720x1600 device that put
+                // them entirely off screen, so most users never discovered them
+                // - and since the recent list was inert too, leaving this screen
+                // meant losing every in-app route back to the file.
+                Spacer(Modifier.height(Space.xxs))
+
+                SecondaryButton(
+                    text = stringResource(R.string.result_show_in_gallery),
+                    onClick = { showInGallery(context, result.outputUri) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = interactive,
+                )
+
+                Spacer(Modifier.height(Space.xxs))
+
+                SecondaryButton(
+                    text = stringResource(R.string.result_open),
+                    onClick = { openVideo(context, result.outputUri) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = interactive,
                 )
 
                 if (adsVisible) {
@@ -203,32 +287,17 @@ fun ResultScreen(
                     Spacer(Modifier.height(Space.xs))
                 }
 
-                SecondaryButton(
-                    text = stringResource(R.string.result_show_in_gallery),
-                    onClick = { showInGallery(context, result.outputUri) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(Space.xxs))
-
-                SecondaryButton(
-                    text = stringResource(R.string.result_open),
-                    onClick = { openVideo(context, result.outputUri) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(Space.xxs))
-
                 TertiaryButton(
                     text = stringResource(R.string.result_another),
                     onClick = onCompressAnother,
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = interactive,
                 )
 
                 Spacer(Modifier.height(Space.xs))
 
                 Text(
-                    text = stringResource(R.string.result_location),
+                    text = stringResource(R.string.result_recent_hint),
                     style = VidsizeType.micro,
                     color = VidsizeColor.Faint,
                     textAlign = TextAlign.Center,

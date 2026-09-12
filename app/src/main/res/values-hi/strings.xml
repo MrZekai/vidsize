@@ -94,4 +94,15 @@
     <string name="ad_badge">विज्ञापन</string>
     <string name="result_show_in_gallery">गैलरी में दिखाएँ</string>
     <string name="preset_not_viable">कोई वास्तविक बचत नहीं</string>
+
+    <!-- v0.8.8: QA v0.8.7 fixes -->
+    <string name="error_unreadable_title">यह वीडियो पढ़ा नहीं जा सका</string>
+    <string name="notice_no_savings_title">पहले से अच्छी तरह कंप्रेस्ड</string>
+    <string name="error_encoder_unsupported">आपके फ़ोन का वीडियो एन्कोडर इस वीडियो को कम रिज़ॉल्यूशन पर भी प्रोसेस नहीं कर सका। कृपया कोई और वीडियो चुनें।</string>
+    <string name="cta_blocked_no_savings">कोई भी कंप्रेशन लेवल इस फ़ाइल को उल्लेखनीय रूप से छोटा नहीं करेगा।</string>
+    <string name="cta_blocked_no_space">इस वीडियो को कंप्रेस करने के लिए स्टोरेज खाली करें।</string>
+    <string name="cta_blocked_level">जारी रखने के लिए दूसरा कंप्रेशन लेवल चुनें।</string>
+    <string name="cta_pick_another">कोई और वीडियो चुनें</string>
+    <string name="preset_not_viable_hint">यह वीडियो इस लेवल के लिए पहले से ही काफ़ी छोटा है।</string>
+    <string name="result_recent_hint">आप इस वीडियो को होम स्क्रीन के “हाल के” सेक्शन से कभी भी दोबारा खोल सकते हैं।</string>
 </resources>

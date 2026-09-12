@@ -23,6 +23,45 @@ val appOpenAdUnitId: String =
 
 val googleTestAdMobAppId = "ca-app-pub-3940256099942544~3347511713"
 
+/**
+ * Google's public sample publisher. Any identifier containing it renders
+ * Google's own "Test Ad" placeholder creative and earns the developer nothing,
+ * and the sample *native* unit is what draws the "AdMob native ad validator"
+ * debug popup over the result screen (QA v0.8.7 BUG-01 and BUG-02).
+ *
+ * It may appear in a debug build only, and only when a developer explicitly
+ * opts in with -PVIDSIZE_ENABLE_TEST_ADS=true.
+ */
+val googleSamplePublisher = "3940256099942544"
+
+/**
+ * True only when a complete set of the developer's OWN AdMob identifiers is
+ * available. This is the single switch that decides whether the ads SDK is ever
+ * allowed to start.
+ *
+ * When it is false the app ships with ads fully OFF: `ENABLE_ADS` is false,
+ * `MobileAds.initialize` is never called, [AdIds] returns null for every slot,
+ * and every ad composable renders nothing and reserves no space. That is what
+ * closes BUG-01 (every user saw "Test Ad" banners) and BUG-02 (the debug
+ * validator popup covered the SHARE VIDEO button) without inventing identifiers
+ * that do not belong to this app.
+ */
+val productionAdIds = listOf(
+    admobAppId,
+    homeBannerAdUnitId,
+    compressionBannerAdUnitId,
+    nativeResultAdUnitId,
+    appOpenAdUnitId,
+)
+val adsConfigured = productionAdIds.none { it.isBlank() } &&
+    productionAdIds.none { it.contains(googleSamplePublisher) }
+
+/** Opt-in escape hatch so a developer can still exercise ad layout locally. */
+val enableTestAdsInDebug: Boolean =
+    (providers.gradleProperty("VIDSIZE_ENABLE_TEST_ADS").orNull
+        ?: System.getenv("VIDSIZE_ENABLE_TEST_ADS")
+        ?: "false").equals("true", ignoreCase = true)
+
 // Play Upload Key material is reconstructed only inside the signed GitHub
 // Actions workflow. No private signing material is committed to the repository.
 // The ordinary QA/audit workflow intentionally leaves closedTest unsigned.
@@ -66,13 +105,16 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.8.7"
+        versionCode = 16
+        versionName = "0.8.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
 
-        buildConfigField("boolean", "ENABLE_ADS", "true")
+        // Overridden per build type below. The default is deliberately the safe
+        // one: a variant that forgets to declare its stance gets no ads at all
+        // rather than Google's sample creatives.
+        buildConfigField("boolean", "ENABLE_ADS", "false")
 
         buildConfigField("String", "NATIVE_RESULT_AD_UNIT_ID", "\"$nativeResultAdUnitId\"")
         buildConfigField("String", "HOME_BANNER_AD_UNIT_ID", "\"$homeBannerAdUnitId\"")
@@ -105,13 +147,28 @@ android {
         debug {
             signingConfig = signingConfigs.getByName("qaDebug")
             buildConfigField("boolean", "USE_TEST_ADS", "true")
+            // Off unless a developer opts in explicitly. A QA tester installing
+            // the debug APK must never be shown Google's sample creatives and
+            // must never see the native ad validator popup.
+            buildConfigField("boolean", "ENABLE_ADS", "$enableTestAdsInDebug")
             manifestPlaceholders["ADMOB_APP_ID"] = googleTestAdMobAppId
         }
 
         release {
             buildConfigField("boolean", "USE_TEST_ADS", "false")
+            buildConfigField("boolean", "ENABLE_ADS", "$adsConfigured")
+            // The developer's own App ID whenever one is supplied.
+            //
+            // The fallback only ever applies to a build where ENABLE_ADS is
+            // false (that is what `adsConfigured` decides, and
+            // verifyAdsOffWithPlaceholderAppId proves it), so the SDK is never
+            // initialised and this value is never used to request anything. It
+            // keeps the placeholder that this app has already shipped and booted
+            // with rather than introducing an untested one: the Mobile Ads SDK
+            // crashes at process start if the meta-data is absent, so the safe
+            // move is a known-good string, not an empty or novel one.
             manifestPlaceholders["ADMOB_APP_ID"] =
-                admobAppId.ifBlank { "MISSING_PRODUCTION_ADMOB_APP_ID" }
+                admobAppId.ifBlank { googleTestAdMobAppId }
 
             isMinifyEnabled = true
             isShrinkResources = true
@@ -125,10 +182,14 @@ android {
             initWith(getByName("release"))
             matchingFallbacks += listOf("release")
             buildConfigField("boolean", "USE_TEST_ADS", "true")
-            buildConfigField("boolean", "ENABLE_ADS", "true")
+            // The closed-test / Play upload variant NEVER shows an ad. v0.8.7
+            // shipped Google's sample units to real testers; this variant now
+            // cannot request an ad at all, whatever identifiers are present.
+            buildConfigField("boolean", "ENABLE_ADS", "false")
             isMinifyEnabled = false
             isShrinkResources = false
-            manifestPlaceholders["ADMOB_APP_ID"] = googleTestAdMobAppId
+            manifestPlaceholders["ADMOB_APP_ID"] =
+                admobAppId.ifBlank { googleTestAdMobAppId }
 
             // The dedicated signed workflow supplies these values.
             // Without them, this variant remains unsigned for the audit gate.
@@ -196,16 +257,54 @@ val verifyProductionAdConfig = tasks.register("verifyProductionAdConfig") {
     group = "verification"
     description = "Fail production packaging when real AdMob identifiers are missing."
     doLast {
-        val missing = linkedMapOf(
+        val configured = linkedMapOf(
             "VIDSIZE_ADMOB_APP_ID" to admobAppId,
             "VIDSIZE_HOME_BANNER_AD_UNIT_ID" to homeBannerAdUnitId,
             "VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID" to compressionBannerAdUnitId,
             "VIDSIZE_NATIVE_RESULT_AD_UNIT_ID" to nativeResultAdUnitId,
             "VIDSIZE_APP_OPEN_AD_UNIT_ID" to appOpenAdUnitId,
-        ).filterValues { it.isBlank() }.keys
+        )
 
+        val missing = configured.filterValues { it.isBlank() }.keys
         check(missing.isEmpty()) {
             "Production AdMob configuration is incomplete: ${missing.joinToString()}"
+        }
+
+        // QA v0.8.7 BUG-01: the shipped build carried Google's sample publisher,
+        // so every user saw "Test Ad" and the developer earned nothing. A
+        // release can never again be packaged with one of those identifiers.
+        val sample = configured.filterValues { it.contains(googleSamplePublisher) }.keys
+        check(sample.isEmpty()) {
+            "Google sample AdMob identifiers cannot be shipped: ${sample.joinToString()}"
+        }
+    }
+}
+
+/**
+ * QA v0.8.7 BUG-01 / BUG-02 structural guard.
+ *
+ * Ads may only be enabled when the developer's own identifiers are present. If
+ * they are not, the app must be packaged with the SDK switched off rather than
+ * falling back to Google's sample units. This task makes that invariant a build
+ * failure instead of a code-review habit.
+ */
+val verifyAdsOffWithoutRealIds = tasks.register("verifyAdsOffWithoutRealIds") {
+    group = "verification"
+    description = "Fail if ads could be enabled without a complete set of real AdMob identifiers."
+    doLast {
+        if (!adsConfigured) {
+            check(!enableTestAdsInDebug) {
+                "VIDSIZE_ENABLE_TEST_ADS=true is a local-only debug switch and must " +
+                    "not be set for a packaged build."
+            }
+        }
+
+        // The placeholder App ID in the manifest is only safe because nothing
+        // ever starts the SDK. Assert that pairing rather than trusting it.
+        val usingPlaceholderAppId = admobAppId.isBlank() ||
+            admobAppId.contains(googleSamplePublisher)
+        check(!usingPlaceholderAppId || !adsConfigured) {
+            "A placeholder AdMob App ID must never ship with ads enabled."
         }
     }
 }
@@ -214,4 +313,10 @@ tasks.matching {
     it.name == "bundleRelease" || it.name == "assembleRelease"
 }.configureEach {
     dependsOn(verifyProductionAdConfig)
+}
+
+tasks.matching {
+    it.name == "bundleClosedTest" || it.name == "assembleClosedTest"
+}.configureEach {
+    dependsOn(verifyAdsOffWithoutRealIds)
 }

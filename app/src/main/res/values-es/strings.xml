@@ -95,4 +95,15 @@
     <string name="ad_badge">Anuncio</string>
     <string name="result_show_in_gallery">Ver en la galería</string>
     <string name="preset_not_viable">Sin ahorro real</string>
+
+    <!-- v0.8.8: QA v0.8.7 fixes -->
+    <string name="error_unreadable_title">No se puede leer este vídeo</string>
+    <string name="notice_no_savings_title">Ya está bien comprimido</string>
+    <string name="error_encoder_unsupported">El codificador de vídeo de tu dispositivo no pudo procesar este vídeo, ni siquiera con menor resolución. Elige otro vídeo.</string>
+    <string name="cta_blocked_no_savings">Ningún nivel de compresión reduciría este archivo de forma apreciable.</string>
+    <string name="cta_blocked_no_space">Libera espacio para comprimir este vídeo.</string>
+    <string name="cta_blocked_level">Elige otro nivel de compresión para continuar.</string>
+    <string name="cta_pick_another">Elegir otro vídeo</string>
+    <string name="preset_not_viable_hint">Este vídeo ya es lo bastante pequeño para este nivel.</string>
+    <string name="result_recent_hint">Puedes volver a abrir este vídeo cuando quieras desde Reciente en la pantalla de inicio.</string>
 </resources>

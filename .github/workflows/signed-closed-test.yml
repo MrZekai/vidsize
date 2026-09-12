@@ -49,13 +49,14 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'applicationId = "com.vidsize.compressor"' app/build.gradle.kts
-          grep -Fq 'versionCode = 15' app/build.gradle.kts
-          grep -Fq 'versionName = "0.8.7"' app/build.gradle.kts
+          grep -Fq 'versionCode = 16' app/build.gradle.kts
+          grep -Fq 'versionName = "0.8.8"' app/build.gradle.kts
           grep -Fq 'buildConfigField("boolean", "USE_TEST_ADS", "true")' app/build.gradle.kts
-          grep -Fq 'buildConfigField("boolean", "ENABLE_ADS", "true")' app/build.gradle.kts
+          grep -Fq 'buildConfigField("boolean", "ENABLE_ADS", "false")' app/build.gradle.kts
           grep -Fq 'isMinifyEnabled = false' app/build.gradle.kts
           grep -Fq 'isShrinkResources = false' app/build.gradle.kts
           grep -Fq 'verifyClosedTestSigningConfig' app/build.gradle.kts
+          grep -Fq 'verifyAdsOffWithoutRealIds' app/build.gradle.kts
           echo "Commit: $(git rev-parse HEAD)"
 
       - name: Validate signing secrets
@@ -110,6 +111,7 @@ jobs:
             :app:testDebugUnitTest \
             :app:lintClosedTest \
             :app:verifyClosedTestSigningConfig \
+            :app:verifyAdsOffWithoutRealIds \
             :app:bundleClosedTest \
             --stacktrace
 
@@ -158,9 +160,9 @@ jobs:
             echo "Commit: $(git rev-parse HEAD)"
             echo "Upload certificate SHA256: $bundle_fp"
             echo "AAB SHA256: $sha256"
-            echo "Ads mode: Google test ads enabled for diagnostic closedTest"
-            echo "R8: disabled for diagnostic closedTest"
-            echo "Resource shrinking: disabled for diagnostic closedTest"
+            echo "Ads mode: disabled for closedTest startup-stability hotfix"
+            echo "R8: disabled for closedTest hotfix"
+            echo "Resource shrinking: disabled for closedTest hotfix"
           } > release/SIGNING-REPORT.txt
 
           echo "artifact=vidsize-v${compact}-closed-test-SIGNED-aab" >> "$GITHUB_OUTPUT"

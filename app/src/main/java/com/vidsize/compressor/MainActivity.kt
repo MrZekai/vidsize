@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.ENABLE_ADS) ConsentManager.gatherConsent(this)
 
         setContent {
-            val adsReady = ConsentManager.adsAllowed
+            val adsReady = BuildConfig.ENABLE_ADS && ConsentManager.adsAllowed
             LaunchedEffect(adsReady) {
                 if (adsReady) {
                     (application as VidsizeApplication).appOpenAdManager.preload()
@@ -57,8 +57,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // No delay and no forced display: this only preloads when consent and
-        // SDK initialization have already completed.
-        (application as VidsizeApplication).appOpenAdManager.preload()
+        // SDK initialization have already completed. With ENABLE_ADS false the
+        // manager short-circuits, so the ads SDK is never touched.
+        if (BuildConfig.ENABLE_ADS) {
+            (application as VidsizeApplication).appOpenAdManager.preload()
+        }
     }
 
     /**

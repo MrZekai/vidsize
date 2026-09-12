@@ -39,7 +39,7 @@ class AppOpenAdManager(
 
     fun onAppForeground(activity: Activity?) {
         if (activity == null) return
-        if (!ConsentManager.adsAllowed) {
+        if (!AdSlots.requestable) {
             discardLoadedAd()
             return
         }
@@ -64,7 +64,7 @@ class AppOpenAdManager(
     }
 
     private fun loadIfNeeded() {
-        if (!ConsentManager.adsAllowed) {
+        if (!AdSlots.requestable) {
             discardLoadedAd()
             return
         }

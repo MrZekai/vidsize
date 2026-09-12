@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
+import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ui.components.CompressionBannerAd
 import com.vidsize.compressor.ui.components.ProgressRing
@@ -121,6 +122,25 @@ fun ProcessingOverlay(
             // Everything else carries its own horizontal padding.
             contentPadding = 0.dp,
         ) {
+            // QA v0.8.7 UX finding: "ads inside the modal progress dialog".
+            //
+            // The banner used to sit directly above Cancel - an ad with a
+            // tappable OPEN button immediately adjacent to the only escape
+            // control in a modal dialog. It is now at the top of the panel,
+            // with the ring, the status copy and 24dp of clearance between it
+            // and Cancel, so a thumb reaching for Cancel travels away from the
+            // creative rather than through it.
+            if (AdSlots.enabled && !adsBlocked) {
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    if (maxWidth >= StandardBannerWidth) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Spacer(Modifier.height(Space.md))
+                            CompressionBannerAd(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -166,24 +186,7 @@ fun ProcessingOverlay(
                 )
             }
 
-            if (adsBlocked) {
-                Spacer(Modifier.height(Space.xl))
-            } else {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                    if (maxWidth >= StandardBannerWidth) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            // 24dp of clear space on both sides: the banner is
-                            // never flush with the copy above it or the Cancel
-                            // button below it.
-                            Spacer(Modifier.height(Space.xl))
-                            CompressionBannerAd(modifier = Modifier.fillMaxWidth())
-                            Spacer(Modifier.height(Space.xl))
-                        }
-                    } else {
-                        Spacer(Modifier.height(Space.xl))
-                    }
-                }
-            }
+            Spacer(Modifier.height(Space.xl))
 
             Column(
                 modifier = Modifier

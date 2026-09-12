@@ -156,12 +156,13 @@ fun TertiaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     color: Color = VidsizeColor.Indigo,
 ) {
     Box(
         modifier = modifier
             .clip(VidsizeShape.medium)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .defaultMinSize(minHeight = 48.dp)
             .padding(horizontal = Space.md, vertical = Space.sm),
         contentAlignment = Alignment.Center,
@@ -169,7 +170,7 @@ fun TertiaryButton(
         Text(
             text = text,
             style = VidsizeType.button,
-            color = color,
+            color = if (enabled) color else VidsizeColor.Faint,
             textAlign = TextAlign.Center,
         )
     }

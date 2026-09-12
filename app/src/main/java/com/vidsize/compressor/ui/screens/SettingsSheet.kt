@@ -46,6 +46,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.R
+import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.ui.components.HairLine
@@ -165,15 +166,19 @@ fun SettingsSheet(
 
                     Spacer(Modifier.height(Space.md))
 
-                    InfoRow(
-                        icon = R.drawable.ic_info,
-                        tint = VidsizeColor.Cyan,
-                        tintSoft = VidsizeColor.CyanSoft,
-                        title = stringResource(R.string.settings_ads_title),
-                        body = stringResource(R.string.settings_ads_body),
-                    )
+                    // Claiming "supported by ads" in a build that shows none
+                    // would be inaccurate copy, so the row follows the switch.
+                    if (AdSlots.enabled) {
+                        InfoRow(
+                            icon = R.drawable.ic_info,
+                            tint = VidsizeColor.Cyan,
+                            tintSoft = VidsizeColor.CyanSoft,
+                            title = stringResource(R.string.settings_ads_title),
+                            body = stringResource(R.string.settings_ads_body),
+                        )
 
-                    Spacer(Modifier.height(Space.md))
+                        Spacer(Modifier.height(Space.md))
+                    }
 
                     ActionRow(
                         icon = R.drawable.ic_delete,
@@ -206,7 +211,7 @@ fun SettingsSheet(
                         onClick = { legalPageName = LegalPage.Terms.name },
                     )
 
-                    if (ConsentManager.privacyOptionsRequired) {
+                    if (AdSlots.enabled && ConsentManager.privacyOptionsRequired) {
                         LinkRow(
                             label = stringResource(R.string.settings_ad_privacy),
                             onClick = {

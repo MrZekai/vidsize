@@ -42,6 +42,12 @@ class PrefsHistoryRepository(context: Context) : HistoryRepository {
         writeEntries(current)
     }
 
+    override fun remove(id: Long) {
+        val current = readEntries()
+        val remaining = current.filterNot { it.id == id }
+        if (remaining.size != current.size) writeEntries(remaining)
+    }
+
     override fun clear() {
         prefs.edit().remove(KEY_ENTRIES).apply()
     }

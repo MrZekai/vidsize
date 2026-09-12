@@ -68,9 +68,37 @@ object CompressionPlanner {
     private const val MIN_INFERRED_SOURCE_BITRATE = 120_000
 
     private const val CONTAINER_OVERHEAD = 1.02
-    private const val ENCODER_VARIANCE = 1.08
+
+    /**
+     * Hardware VBR overshoot.
+     *
+     * ## v0.8.8 recalibration - QA v0.8.7 BUG-09
+     *
+     * 1.08 was documented as "a starting point, not a measured constant", and
+     * the QA pass measured it. Both runs overshot in the same direction:
+     *
+     *  - 1920x1080: estimated ~15.7 MB, produced 17.4 MB (+10.8%)
+     *  - 1280x720:  estimated ~4.8 MB,  produced 5.6 MB  (+16.7%)
+     *
+     * A one-directional error is a calibration error, not noise: at 1.08 the
+     * estimate was systematically optimistic, which is the worse direction for
+     * a storage tool because the user plans around it. Multiplying the old
+     * factor through the measured overshoot gives 1.08 x 1.108 = 1.197 and
+     * 1.08 x 1.167 = 1.260; 1.22 sits between them, which leaves the 1080p case
+     * marginally conservative and the 720p case marginally optimistic instead of
+     * both being optimistic.
+     *
+     * This is still a *device* characteristic measured on one device. It is
+     * deliberately a single named constant so the next QA pass can move it
+     * again, and [CompressionPlan.estimatedOutputBytes] is still presented as
+     * "≈" with an "estimates only" note rather than as a promise.
+     */
+    private const val ENCODER_VARIANCE = 1.22
+
     private const val SHORT_CLIP_SECONDS = 4.0
-    private const val SHORT_CLIP_VARIANCE = 1.35
+
+    /** Short clips overshoot more, so this moves with [ENCODER_VARIANCE]. */
+    private const val SHORT_CLIP_VARIANCE = 1.52
 
     /** A preset must beat this share of the source to be worth running. */
     private const val VIABLE_RATIO = 0.92
@@ -93,15 +121,34 @@ object CompressionPlanner {
     private const val EFFICIENT_CODEC_CEILING_FACTOR = 1.30
 
     /**
-     * Media3 can transmux instead of transcode when nothing about the video
-     * changes. In practice `DefaultEncoderFactory.videoNeedsEncoding()` already
-     * forces a transcode because custom `VideoEncoderSettings` are supplied, so
-     * this nudge is belt-and-braces. It costs a pointless GPU resample and
-     * produces non-16-aligned sizes; remove it only once a device test confirms
-     * the requested bitrate reaches the encoder without it.
+     * ## v0.8.8: the 2px "force transcode" nudge is gone
+     *
+     * Up to v0.8.7 the planner subtracted 2px from the short edge whenever the
+     * preset was not already downscaling, to make sure Media3 transcoded rather
+     * than transmuxed. It cost far more than it bought (QA v0.8.7 BUG-03):
+     *
+     *  - Every output lost 4px horizontally and 2px vertically, so a 1920x1080
+     *    source became 1916x1078 and its display aspect ratio moved from 16:9
+     *    to 958:539. The "1080p" label the app itself showed was then wrong.
+     *  - The loss compounded per pass: 1280x720 -> 1276x718 -> 1272x716.
+     *  - The derived long edge was arbitrary rather than aligned. A 854x480
+     *    source produced 850x478, and a width that is not even a multiple of 4
+     *    is a plausible cause of the encoder aborting in QA v0.8.7 BUG-05.
+     *
+     * It was never needed. `TransformerUtil.shouldTranscodeVideo` transcodes
+     * when either of two conditions holds, and Vidsize satisfies both on every
+     * job:
+     *
+     *  1. `encoderFactory.videoNeedsEncoding()` is true, because
+     *     [CompressionEngine] always supplies non-default `VideoEncoderSettings`
+     *     (a bitrate and an I-frame interval).
+     *  2. `editedMediaItem.effects.videoEffects` is non-empty, because a
+     *     `Presentation` effect is always attached.
+     *
+     * So the output now keeps the source geometry exactly, and the only thing
+     * that may move it is the device encoder's own alignment, applied in
+     * [EncoderSupport.fitToEncoder] where it belongs.
      */
-    private const val FORCE_TRANSCODE_DELTA_PX = 2
-
     fun plan(info: VideoInfo, preset: CompressionPreset): CompressionPlan {
         require(info.durationMs > 0L) { "Video duration must be positive." }
         require(info.width > 0 && info.height > 0) { "Video dimensions must be positive." }
@@ -125,14 +172,9 @@ object CompressionPlanner {
         val sourceShortEdge = min(info.width, info.height)
         val requestedShortEdge = min(sourceShortEdge, preset.maxShortEdge)
 
-        val targetShortEdge = if (
-            requestedShortEdge == sourceShortEdge &&
-            sourceShortEdge > FORCE_TRANSCODE_DELTA_PX + 2
-        ) {
-            (sourceShortEdge - FORCE_TRANSCODE_DELTA_PX).toEvenAtLeastTwo()
-        } else {
-            requestedShortEdge.toEvenAtLeastTwo()
-        }
+        // No nudge, no pixel loss: the short edge is the preset's cap or the
+        // source, whichever is smaller, and nothing else.
+        val targetShortEdge = requestedShortEdge.toEvenAtLeastTwo()
 
         // The short edge is the width on portrait footage and the height on
         // landscape or square footage. Both edges are needed for the pixel count

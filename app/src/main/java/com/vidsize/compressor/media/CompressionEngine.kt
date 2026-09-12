@@ -24,6 +24,7 @@ import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.VideoEncoderSettings
+import com.vidsize.compressor.model.CompressionPlan
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
 import kotlinx.coroutines.CancellationException
@@ -70,13 +71,11 @@ object CompressionEngine {
         val temp = File(context.cacheDir, "vidsize_${System.nanoTime()}.mp4")
 
         try {
-            val export = runExport(
+            val export = runExportWithFallbacks(
                 context = context,
                 input = input,
                 output = temp,
-                videoBitrate = plan.videoBitrate,
-                audioBitrate = plan.audioBitrate,
-                targetHeight = plan.targetHeight,
+                plan = plan,
                 hasAudio = info.hasAudio,
                 onProgress = onProgress?.let { report ->
                     { fraction -> report(fraction * ENCODE_PROGRESS_SHARE) }
@@ -108,23 +107,160 @@ object CompressionEngine {
         }
     }
 
+    /**
+     * One configuration the encoder will be asked for.
+     *
+     * @param useRequestedSettings false on the last-resort attempt, where
+     *        Media3 is allowed to pick the video encoder settings itself. The
+     *        `Presentation` effect still forces a transcode, so the output is
+     *        still re-encoded; only the bitrate choice moves to Media3.
+     */
+    private data class Attempt(
+        val label: String,
+        val width: Int,
+        val height: Int,
+        val videoBitrate: Int,
+        val useRequestedSettings: Boolean,
+    )
+
+    /**
+     * Runs the export, retrying with progressively safer encoder configurations
+     * before giving up.
+     *
+     * ## Why a ladder - QA v0.8.7 BUG-05 (Critical)
+     *
+     * v0.8.7 made exactly one attempt with whatever geometry the aspect
+     * arithmetic produced. On the test device that attempt failed outright for
+     * 4K and for a band of common SD/qHD sources, and because there was no
+     * second attempt and no error surfaced, tapping COMPRESS VIDEO did nothing
+     * observable at all.
+     *
+     * The rungs, in order:
+     *
+     *  1. **Faithful.** The planner's exact target geometry, snapped only to the
+     *     alignment the device itself reports, with the bitrate clamped into the
+     *     encoder's advertised range. This is the rung that should always run,
+     *     and it preserves the source resolution and aspect ratio exactly
+     *     (BUG-03).
+     *  2. **Macroblock-aligned.** The same frame snapped to 16, for an encoder
+     *     that rejects geometry it advertised as supported. Costs at most 8px on
+     *     an edge.
+     *  3. **1080p-capped, macroblock-aligned.** For a device whose encoder
+     *     cannot do 4K even though its capability query says otherwise - the
+     *     single most likely cause of the 3840x2160 failure on a budget chipset.
+     *  4. **720p-capped, Media3's own encoder settings.** Nothing of Vidsize's
+     *     own configuration is left to be wrong.
+     *
+     * A cancellation propagates immediately and is never retried. Out-of-space
+     * is not retried either: another attempt would fail the same way, slower.
+     */
+    private suspend fun runExportWithFallbacks(
+        context: Context,
+        input: Uri,
+        output: File,
+        plan: CompressionPlan,
+        hasAudio: Boolean,
+        onProgress: ((Float) -> Unit)?,
+    ): ExportResult {
+        val attempts = buildAttempts(plan)
+        var lastFailure: Throwable? = null
+
+        attempts.forEachIndexed { index, attempt ->
+            try {
+                return runExport(
+                    context = context,
+                    input = input,
+                    output = output,
+                    videoBitrate = attempt.videoBitrate,
+                    audioBitrate = plan.audioBitrate,
+                    targetWidth = attempt.width,
+                    targetHeight = attempt.height,
+                    useRequestedSettings = attempt.useRequestedSettings,
+                    hasAudio = hasAudio,
+                    onProgress = onProgress,
+                )
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (throwable: Throwable) {
+                if (throwable.looksLikeOutOfSpace()) throw throwable
+                lastFailure = throwable
+                // A partial file from the failed attempt must not be handed to
+                // the next one or, worse, published.
+                runCatching { output.delete() }
+                if (index < attempts.lastIndex) {
+                    onProgress?.invoke(0f)
+                }
+            }
+        }
+
+        throw EncoderUnsupportedException(
+            width = plan.targetWidth,
+            height = plan.targetHeight,
+            attempted = attempts.joinToString(", ") { "${it.label} ${it.width}x${it.height}" },
+            cause = lastFailure,
+        )
+    }
+
+    private fun buildAttempts(plan: CompressionPlan): List<Attempt> {
+        val faithful = EncoderSupport.fitToEncoder(plan.targetWidth, plan.targetHeight)
+        val aligned = EncoderSupport.fitToEncoder(
+            plan.targetWidth,
+            plan.targetHeight,
+            minAlignment = EncoderSupport.SAFE_ALIGNMENT,
+        )
+        val capped1080 = EncoderSupport.fitToEncoder(
+            plan.targetWidth,
+            plan.targetHeight,
+            minAlignment = EncoderSupport.SAFE_ALIGNMENT,
+            maxShortEdge = 1080,
+        )
+        val capped720 = EncoderSupport.fitToEncoder(
+            plan.targetWidth,
+            plan.targetHeight,
+            minAlignment = EncoderSupport.SAFE_ALIGNMENT,
+            maxShortEdge = 720,
+        )
+
+        val bitrate = EncoderSupport.clampBitrate(plan.videoBitrate)
+
+        val candidates = listOf(
+            Attempt("faithful", faithful.width, faithful.height, bitrate, true),
+            Attempt("aligned", aligned.width, aligned.height, bitrate, true),
+            Attempt("1080p", capped1080.width, capped1080.height, bitrate, true),
+            Attempt("720p-default", capped720.width, capped720.height, bitrate, false),
+        )
+
+        // Drop rungs that duplicate an earlier one, except the final rung, whose
+        // value is the encoder settings rather than the geometry.
+        val seen = LinkedHashSet<String>()
+        return candidates.filterIndexed { index, attempt ->
+            val key = "${attempt.width}x${attempt.height}:${attempt.useRequestedSettings}"
+            index == candidates.lastIndex || seen.add(key)
+        }
+    }
+
     private suspend fun runExport(
         context: Context,
         input: Uri,
         output: File,
         videoBitrate: Int,
         audioBitrate: Int,
+        targetWidth: Int,
         targetHeight: Int,
+        useRequestedSettings: Boolean,
         hasAudio: Boolean,
         onProgress: ((Float) -> Unit)?,
     ): ExportResult = suspendCancellableCoroutine { continuation ->
-        val videoSettings = VideoEncoderSettings.Builder()
-            .setBitrate(videoBitrate)
-            .setiFrameIntervalSeconds(2f)
-            .build()
         val encoderFactoryBuilder = DefaultEncoderFactory.Builder(context)
             .setEnableFallback(true)
-            .setRequestedVideoEncoderSettings(videoSettings)
+
+        if (useRequestedSettings) {
+            val videoSettings = VideoEncoderSettings.Builder()
+                .setBitrate(videoBitrate)
+                .setiFrameIntervalSeconds(2f)
+                .build()
+            encoderFactoryBuilder.setRequestedVideoEncoderSettings(videoSettings)
+        }
 
         // A zero-bitrate AudioEncoderSettings is meaningless and would be passed
         // straight to MediaFormat if the source turns out to have an audio track
@@ -168,9 +304,27 @@ object CompressionEngine {
             }
         }
 
+        // Both edges, not just the height.
+        //
+        // `Presentation.createForHeight` derived the other edge itself by
+        // floating-point arithmetic, which is how a 854x480 source ended up at
+        // 850x478 - a width that is not even a multiple of 4. Passing a frame
+        // the device has already confirmed it supports removes a whole class of
+        // encoder-configuration failure (QA v0.8.7 BUG-05).
+        //
+        // STRETCH rather than SCALE_TO_FIT: the requested frame differs from the
+        // source ratio by at most half the encoder's alignment - well under 1% -
+        // and a sub-1% stretch is invisible, whereas SCALE_TO_FIT would bake a
+        // thin black bar into every output.
         val effects = Effects(
             emptyList(),
-            listOf<Effect>(Presentation.createForHeight(targetHeight)),
+            listOf<Effect>(
+                Presentation.createForWidthAndHeight(
+                    targetWidth,
+                    targetHeight,
+                    Presentation.LAYOUT_STRETCH_TO_FIT,
+                ),
+            ),
         )
         val item = EditedMediaItem.Builder(MediaItem.fromUri(input))
             .setEffects(effects)

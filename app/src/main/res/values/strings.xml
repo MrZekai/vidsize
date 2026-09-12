@@ -124,4 +124,15 @@
     <string name="ad_badge">Ad</string>
     <string name="result_show_in_gallery">Show in Gallery</string>
     <string name="preset_not_viable">No real saving</string>
+
+    <!-- v0.8.8: QA v0.8.7 fixes -->
+    <string name="error_unreadable_title">This video can\'t be read</string>
+    <string name="notice_no_savings_title">Already well compressed</string>
+    <string name="error_encoder_unsupported">Your device\'s video encoder couldn\'t handle this video, even at a lower resolution. Please pick a different video.</string>
+    <string name="cta_blocked_no_savings">No compression level would make this file meaningfully smaller.</string>
+    <string name="cta_blocked_no_space">Free up some storage to compress this video.</string>
+    <string name="cta_blocked_level">Pick a different compression level to continue.</string>
+    <string name="cta_pick_another">Pick another video</string>
+    <string name="preset_not_viable_hint">This video is already small enough for this level.</string>
+    <string name="result_recent_hint">You can reopen this video any time from Recent on the home screen.</string>
 </resources>

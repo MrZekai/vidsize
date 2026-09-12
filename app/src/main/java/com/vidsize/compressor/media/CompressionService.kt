@@ -121,14 +121,16 @@ class CompressionService : Service() {
                             CompressionJobState.FailureReason.NO_SAVINGS
                         throwable is OutOfSpaceException ->
                             CompressionJobState.FailureReason.OUT_OF_SPACE
-                        throwable.isOutOfSpace() ->
+                        throwable is EncoderUnsupportedException ->
+                            CompressionJobState.FailureReason.ENCODER_UNSUPPORTED
+                        throwable.looksLikeOutOfSpace() ->
                             CompressionJobState.FailureReason.OUT_OF_SPACE
                         else ->
                             CompressionJobState.FailureReason.GENERIC
                     }
                     CompressionJobState.markFailed(
                         reason = reason,
-                        debugMessage = throwable.message,
+                        debugMessage = throwable.diagnostic(),
                     )
                 }
             }
@@ -326,7 +328,34 @@ class CompressionService : Service() {
  * `IOException` it wraps, so a message-only check classified every out-of-space
  * failure as GENERIC and told the user to try a different compression level.
  */
-private fun Throwable.isOutOfSpace(): Boolean {
+/**
+ * A short, human-readable description of what actually went wrong.
+ *
+ * Media3 reports failures as `ExportException`, whose own message is usually
+ * just the error code; the useful text lives one or two levels down in the
+ * wrapped exception. v0.8.7 showed only the outermost message, and only in
+ * debug builds, which is why QA had to attach to logcat to characterise BUG-05
+ * at all. The chain is now flattened and shown to the user in every build.
+ */
+internal fun Throwable.diagnostic(limit: Int = 3): String {
+    val parts = ArrayList<String>(limit)
+    var current: Throwable? = this
+    var depth = 0
+    while (current != null && parts.size < limit && depth < 8) {
+        val text = current.message?.trim()
+        val label = if (text.isNullOrEmpty()) {
+            current.javaClass.simpleName
+        } else {
+            "${current.javaClass.simpleName}: $text"
+        }
+        if (parts.none { it == label }) parts.add(label)
+        current = current.cause
+        depth++
+    }
+    return parts.joinToString(" ← ")
+}
+
+internal fun Throwable.looksLikeOutOfSpace(): Boolean {
     var current: Throwable? = this
     var depth = 0
     while (current != null && depth < 8) {

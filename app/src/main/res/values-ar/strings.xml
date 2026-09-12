@@ -98,4 +98,15 @@
     <string name="ad_badge">إعلان</string>
     <string name="result_show_in_gallery">عرض في المعرض</string>
     <string name="preset_not_viable">لا يوجد توفير فعلي</string>
+
+    <!-- v0.8.8: QA v0.8.7 fixes -->
+    <string name="error_unreadable_title">لا يمكن قراءة هذا الفيديو</string>
+    <string name="notice_no_savings_title">مضغوط جيدًا بالفعل</string>
+    <string name="error_encoder_unsupported">لم يتمكّن مُرمِّز الفيديو في جهازك من معالجة هذا الفيديو، ولا حتى بدقة أقل. الرجاء اختيار فيديو آخر.</string>
+    <string name="cta_blocked_no_savings">لن يجعل أي مستوى ضغط هذا الملف أصغر بشكل ملحوظ.</string>
+    <string name="cta_blocked_no_space">أفرغ بعض مساحة التخزين لضغط هذا الفيديو.</string>
+    <string name="cta_blocked_level">اختر مستوى ضغط مختلفًا للمتابعة.</string>
+    <string name="cta_pick_another">اختيار فيديو آخر</string>
+    <string name="preset_not_viable_hint">هذا الفيديو صغير بما يكفي لهذا المستوى بالفعل.</string>
+    <string name="result_recent_hint">يمكنك إعادة فتح هذا الفيديو في أي وقت من قسم "الأخيرة" في الشاشة الرئيسية.</string>
 </resources>

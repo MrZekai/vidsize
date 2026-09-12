@@ -24,6 +24,7 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.vidsize.compressor.ads.AdIds
+import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ui.theme.VidsizeColor
 
@@ -75,7 +76,20 @@ private fun FixedBannerAd(
 ) {
     val inspecting = LocalInspectionMode.current
 
+    // QA v0.8.7 BUG-01: this variant has no ads at all. Returning before any
+    // layout is emitted is also what removes the "blank white band where a
+    // banner should be" that the QA pass called out as reading like a rendering
+    // fault - an absent ad now costs zero pixels instead of 50dp of empty
+    // surface breaking the lavender background.
+    if (!inspecting && !AdSlots.enabled) return
+
     if (!inspecting && ConsentManager.consentResolved && !ConsentManager.canRequestAds) {
+        return
+    }
+
+    // No fill and no id are the same thing to the layout: emit nothing rather
+    // than a reserved 320x50 hole.
+    if (!inspecting && (!active || !ConsentManager.adsAllowed || unitId.isNullOrBlank())) {
         return
     }
 
@@ -105,10 +119,7 @@ private fun FixedBannerAd(
             return@Box
         }
 
-        if (!active || !ConsentManager.adsAllowed || unitId.isNullOrBlank()) {
-            Spacer(Modifier.width(BannerWidth).height(BannerHeight))
-            return@Box
-        }
+        if (unitId.isNullOrBlank()) return@Box
 
         val context = LocalContext.current
         val adView = remember(context, unitId) {

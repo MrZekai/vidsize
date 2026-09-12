@@ -61,8 +61,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 15' app/build.gradle.kts
-          grep -q 'versionName = "0.8.7"' app/build.gradle.kts
+          grep -q 'versionCode = 16' app/build.gradle.kts
+          grep -q 'versionName = "0.8.8"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -254,17 +254,27 @@ jobs:
           grep -Fq 'higherFrameRateRaisesTheQualityCeiling' "$TESTS"
           grep -Fq 'efficientSourceCodecRaisesTheQualityCeiling' "$TESTS"
 
-          # Q1 - the native ad is a labelled section between the primary action
-          # and the secondary ones, not a footer after everything.
+          # v0.8.8 / QA v0.8.7 BUG-06 + "ad density on the result screen".
+          #
+          # v0.8.5 put the ad between the primary action and the secondary ones,
+          # which left "Show in Gallery" and "Open Video" below a full-height
+          # creative and therefore off screen on a 720x1600 device. Every route
+          # back to the compressed file must now come BEFORE the ad section, and
+          # the save location must be stated in-app rather than only in the
+          # completion notification.
           has "$RESULT" 'R.string.ad_label'
           has "$RESULT" 'HairLine()'
           AD_LINE="$(grep -n 'NativeAdCard(' "$RESULT" | head -1 | cut -d: -f1)"
           ANOTHER_LINE="$(grep -n 'R.string.result_another' "$RESULT" | head -1 | cut -d: -f1)"
           LOCATION_LINE="$(grep -n 'R.string.result_location' "$RESULT" | head -1 | cut -d: -f1)"
           SHARE_LINE="$(grep -n 'R.string.result_share' "$RESULT" | head -1 | cut -d: -f1)"
-          test "$SHARE_LINE" -lt "$AD_LINE"
+          GALLERY_LINE="$(grep -n 'R.string.result_show_in_gallery' "$RESULT" | head -1 | cut -d: -f1)"
+          OPEN_LINE="$(grep -n 'R.string.result_open' "$RESULT" | head -1 | cut -d: -f1)"
+          test "$LOCATION_LINE" -lt "$SHARE_LINE"
+          test "$SHARE_LINE" -lt "$GALLERY_LINE"
+          test "$GALLERY_LINE" -lt "$OPEN_LINE"
+          test "$OPEN_LINE" -lt "$AD_LINE"
           test "$AD_LINE" -lt "$ANOTHER_LINE"
-          test "$AD_LINE" -lt "$LOCATION_LINE"
 
           # Q3 - the anchored home banner keeps a divider and a dead buffer
           # between the creative and the system navigation area.
@@ -276,6 +286,119 @@ jobs:
           test "$(grep -c 'ProcessingOverlay(' "$SCREEN")" -eq 1
           has "$OVERLAY" 'trackOnly = !progressKnown'
           has "$OVERLAY" 'CompressionBannerAd('
+
+          # ==================== v0.8.8 guards (QA v0.8.7) ====================
+
+          ADIDS=app/src/main/java/com/vidsize/compressor/ads/AdIds.kt
+          SLOTS=app/src/main/java/com/vidsize/compressor/ads/AdSlots.kt
+          ENCSUP=app/src/main/java/com/vidsize/compressor/media/EncoderSupport.kt
+          ALIGN=app/src/main/java/com/vidsize/compressor/media/FrameAlignment.kt
+          FAILURES=app/src/main/java/com/vidsize/compressor/media/CompressionFailures.kt
+          STATE=app/src/main/java/com/vidsize/compressor/media/CompressionJobState.kt
+          HISTMODEL=app/src/main/java/com/vidsize/compressor/data/history/HistoryModels.kt
+          HISTCTRL=app/src/main/java/com/vidsize/compressor/data/history/HistoryController.kt
+          HISTREPO=app/src/main/java/com/vidsize/compressor/data/history/PrefsHistoryRepository.kt
+          ROOT=app/src/main/java/com/vidsize/compressor/ui/VidsizeRoot.kt
+          ALIGNTESTS=app/src/test/java/com/vidsize/compressor/media/FrameAlignmentTest.kt
+
+          # BUG-03 - the 2px "force transcode" nudge must never come back. It
+          # cost every output 4x2 px, moved the display aspect ratio off 16:9,
+          # compounded on re-compression, and produced non-aligned geometry.
+          nothas "$PLANNER" 'FORCE_TRANSCODE_DELTA_PX'
+          nothasre "$PLANNER" 'sourceShortEdge - '
+          grep -Fq 'bitrateOnlyReductionKeepsTheSourceResolutionExactly' "$TESTS"
+          grep -Fq 'recompressionDoesNotCompoundAResolutionLoss' "$TESTS"
+          grep -Fq 'displayAspectRatioIsPreserved' "$TESTS"
+          grep -Fq 'portraitAndOddRatioSourcesAlsoKeepTheirExactGeometry' "$TESTS"
+
+          # BUG-05 - the encoder is asked for a frame the DEVICE confirmed it
+          # supports, both edges are passed explicitly, the bitrate is clamped
+          # into the codec's own range, and a failed export is retried before
+          # the user is told anything went wrong.
+          test -f "$ENCSUP"
+          test -f "$ALIGN"
+          has "$ENGINE"  'Presentation.createForWidthAndHeight'
+          nothas "$ENGINE" 'Presentation.createForHeight'
+          has "$ENGINE"  'EncoderSupport.fitToEncoder'
+          has "$ENGINE"  'EncoderSupport.clampBitrate'
+          has "$ENGINE"  'runExportWithFallbacks'
+          has "$ENCSUP"  'isSizeSupported'
+          has "$ENCSUP"  'widthAlignment'
+          has "$ENCSUP"  'bitrateRange'
+          has "$ALIGN"   'fun fit('
+          # The alignment arithmetic must stay free of Android imports so it is
+          # testable on the JVM, and it must actually be tested.
+          nothas "$ALIGN" 'import android.'
+          test -f "$ALIGNTESTS"
+          grep -Fq 'theQaResolutionMatrixIsReproducedExactly' "$ALIGNTESTS"
+          grep -Fq 'noOutputEdgeIsEverOdd' "$ALIGNTESTS"
+
+          # BUG-05 - a failure must be MODAL. v0.8.7 appended it to the bottom
+          # of a scrolling column, where it was off screen on the test device,
+          # so a failed compression looked exactly like a dead button.
+          has "$FAILURES" 'class EncoderUnsupportedException'
+          has "$STATE"    'ENCODER_UNSUPPORTED'
+          has "$SCREEN"   'AlertDialog('
+          has "$SCREEN"   'FailureDialog('
+          # The v0.8.7 shape - a failure card appended inside the scrolling
+          # column, with its detail line hidden behind BuildConfig.DEBUG - must
+          # not come back.
+          nothas "$SCREEN" 'failure.debugMessage.takeIf'
+          # and the reason a disabled button is disabled must be next to it.
+          has "$SCREEN" 'hint = when {'
+          has "$SCREEN" 'R.string.cta_blocked_no_savings'
+
+          # BUG-01 / BUG-02 - no ad slot may render without the build-level
+          # switch, and no Google sample unit may be returned outside debug.
+          test -f "$SLOTS"
+          has "$ADIDS"  'BuildConfig.ENABLE_ADS'
+          has "$ADIDS"  'GOOGLE_SAMPLE_PUBLISHER'
+          has "$ADIDS"  'isGoogleSample'
+          has "$NATIVE" 'AdSlots.enabled'
+          has "$BANNER" 'AdSlots.enabled'
+          has "$RESULT" 'AdSlots.enabled'
+          has "$HOME"   'AdSlots.enabled'
+          grep -Fq 'googleSamplePublisher' app/build.gradle.kts
+          grep -Fq 'adsConfigured' app/build.gradle.kts
+          grep -Fq 'verifyAdsOffWithoutRealIds' app/build.gradle.kts
+
+          # BUG-06 / BUG-07 - recent rows are a real route back to the file,
+          # and rows whose file is gone leave storage instead of being counted
+          # by the "Storage saved" total for ever.
+          has "$HOME"      'combinedClickable'
+          has "$HOME"      'onOpenEntry'
+          has "$ROOT"      'onOpenEntry'
+          has "$HISTMODEL" 'fun remove(id: Long)'
+          has "$HISTREPO"  'override fun remove('
+          has "$HISTCTRL"  'openFileDescriptor'
+          has "$HISTCTRL"  'repository.remove('
+
+          # BUG-08 - nothing on the result screen accepts a tap for the first
+          # instant after it replaces the progress dialog.
+          has "$RESULT" 'ARRIVAL_GUARD_MS'
+          has "$RESULT" 'enabled = interactive'
+
+          # BUG-09 - the estimate factor is recalibrated and named, not a
+          # magic literal buried in an expression.
+          has "$PLANNER" 'ENCODER_VARIANCE = 1.22'
+
+          # UX - the save location is stated in-app, and a disabled level says
+          # why it is disabled.
+          has "$RESULT" 'R.string.result_location'
+          has "$SCREEN" 'R.string.preset_not_viable_hint'
+
+          # localisation completeness for every string added in v0.8.8
+          for f in app/src/main/res/values*/strings.xml; do
+            for key in error_encoder_unsupported cta_blocked_no_savings \
+                       cta_blocked_no_space cta_blocked_level cta_pick_another \
+                       preset_not_viable_hint error_unreadable_title \
+                       notice_no_savings_title result_recent_hint; do
+              grep -Fq "\"$key\"" "$f" || {
+                echo "missing $key in $f" >&2
+                exit 1
+              }
+            done
+          done
 
       - name: Debug QA gate
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
@@ -298,26 +421,49 @@ jobs:
           fi
           echo "Production guard fired as expected (exit ${status})."
 
-      - name: Release build must SUCCEED with placeholder AdMob IDs
+      # QA v0.8.7 BUG-01: v0.8.7 reached real users carrying Google's sample
+      # publisher in every ad slot, so every user saw "Test Ad" and the
+      # developer earned nothing. verifyProductionAdConfig now refuses to
+      # package a release containing that publisher at all. These two steps
+      # prove both halves of that guard.
+      - name: Production ad guard must FAIL on Google sample identifiers
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           gradle :app:bundleRelease --stacktrace \
             -PVIDSIZE_ADMOB_APP_ID=ca-app-pub-3940256099942544~3347511713 \
             -PVIDSIZE_HOME_BANNER_AD_UNIT_ID=ca-app-pub-3940256099942544/9214589741 \
             -PVIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID=ca-app-pub-3940256099942544/9214589741 \
             -PVIDSIZE_NATIVE_RESULT_AD_UNIT_ID=ca-app-pub-3940256099942544/2247696110 \
             -PVIDSIZE_APP_OPEN_AD_UNIT_ID=ca-app-pub-3940256099942544/9257395921
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'A release bundle was packaged with Google sample ad units.' >&2
+            exit 1
+          fi
+          echo "Sample-identifier guard fired as expected (exit ${status})."
+
+      - name: Release build must SUCCEED with non-sample AdMob IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:bundleRelease --stacktrace \
+            -PVIDSIZE_ADMOB_APP_ID=ca-app-pub-1111111111111111~2222222222 \
+            -PVIDSIZE_HOME_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/3333333333 \
+            -PVIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/4444444444 \
+            -PVIDSIZE_NATIVE_RESULT_AD_UNIT_ID=ca-app-pub-1111111111111111/5555555555 \
+            -PVIDSIZE_APP_OPEN_AD_UNIT_ID=ca-app-pub-1111111111111111/6666666666
 
       - name: Create exact source audit ZIP
         shell: bash
-        run: git archive --format=zip --output=vidsize-v087-source-audit.zip HEAD
+        run: git archive --format=zip --output=vidsize-v088-source-audit.zip HEAD
 
       - name: Upload QA APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v087-qa-apk
+          name: vidsize-v088-qa-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
 
@@ -325,7 +471,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v087-closed-test-UNSIGNED-audit-aab
+          name: vidsize-v088-closed-test-UNSIGNED-audit-aab
           path: app/build/outputs/bundle/closedTest/*.aab
           if-no-files-found: warn
 
@@ -333,15 +479,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v087-source-audit
-          path: vidsize-v087-source-audit.zip
+          name: vidsize-v088-source-audit
+          path: vidsize-v088-source-audit.zip
           if-no-files-found: warn
 
       - name: Upload lint reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v087-lint
+          name: vidsize-v088-lint
           path: |
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-closedTest.html

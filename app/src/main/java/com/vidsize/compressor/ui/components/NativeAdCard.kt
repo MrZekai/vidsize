@@ -26,6 +26,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.vidsize.compressor.R
+import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ads.NativeAdLoader
 import com.vidsize.compressor.ui.theme.VidsizeColor
@@ -69,6 +70,11 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
         )
         return
     }
+
+    // QA v0.8.7 BUG-02 and BUG-08. No request, no creative, no debug validator
+    // popup over SHARE VIDEO, and nothing tappable laid out where the progress
+    // dialog's Cancel button was a moment earlier.
+    if (!AdSlots.enabled) return
 
     val adsAllowed = ConsentManager.adsAllowed
     var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
