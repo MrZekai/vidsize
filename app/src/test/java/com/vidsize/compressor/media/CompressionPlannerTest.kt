@@ -196,7 +196,14 @@ class CompressionPlannerTest {
         val x = CompressionPlanner.plan(clip, CompressionPreset.SMALLEST)
         assertTrue(s.estimatedOutputBytes < b.estimatedOutputBytes * 0.80)
         assertTrue(x.estimatedOutputBytes < s.estimatedOutputBytes)
-        assertTrue(b.targetHeight < clip.height)
+        // v0.8.8: a 720px short edge is at Smaller's cap and under Balanced's,
+        // so neither downscales and the separation is entirely bitrate - which
+        // is what this test is named for. Only Smallest (480) resizes.
+        // Until v0.8.7 Balanced shrank the short edge by 2px purely to force a
+        // transcode, and this assertion locked that pixel loss in (BUG-03).
+        assertEquals(clip.height, b.targetHeight)
+        assertEquals(clip.height, s.targetHeight)
+        assertTrue(x.targetHeight < clip.height)
     }
 
     /**
