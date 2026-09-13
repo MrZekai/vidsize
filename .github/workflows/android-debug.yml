@@ -569,7 +569,7 @@ jobs:
           done
 
       - name: Debug QA gate
-        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleAdsQa --stacktrace
 
       - name: Closed-test runtime-safe AAB gate
         run: gradle :app:lintClosedTest :app:bundleClosedTest --stacktrace
@@ -695,7 +695,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vidsize-v089-qa-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/*/*.apk
           if-no-files-found: warn
 
       - name: Upload UNSIGNED closed-test audit AAB
