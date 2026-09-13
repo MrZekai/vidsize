@@ -27,7 +27,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
-import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ui.components.CompressionBannerAd
 import com.vidsize.compressor.ui.components.ProgressRing
 import com.vidsize.compressor.ui.components.SecondaryButton
@@ -90,11 +89,10 @@ fun ProcessingOverlay(
 ) {
     val blocker = remember { MutableInteractionSource() }
 
-    // When consent is refused the banner renders nothing at all; dropping the
-    // surrounding spacers too keeps the panel from carrying a dead gap.
-    val adsBlocked = !LocalInspectionMode.current &&
-        ConsentManager.consentResolved &&
-        !ConsentManager.canRequestAds
+    // When no banner will render - ads off, consent refused, or the rewarded
+    // ad-free window open - dropping the surrounding spacers too keeps the panel
+    // from carrying a dead gap above the progress ring.
+    val bannerVisible = LocalInspectionMode.current || AdSlots.bannerVisible
 
     Box(
         modifier = Modifier
@@ -130,7 +128,7 @@ fun ProcessingOverlay(
             // with the ring, the status copy and 24dp of clearance between it
             // and Cancel, so a thumb reaching for Cancel travels away from the
             // creative rather than through it.
-            if (AdSlots.enabled && !adsBlocked) {
+            if (bannerVisible) {
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     if (maxWidth >= StandardBannerWidth) {
                         Column(modifier = Modifier.fillMaxWidth()) {

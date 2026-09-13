@@ -61,8 +61,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 17' app/build.gradle.kts
-          grep -q 'versionName = "0.8.9"' app/build.gradle.kts
+          grep -q 'versionCode = 18' app/build.gradle.kts
+          grep -q 'versionName = "0.9.0"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -82,6 +82,144 @@ jobs:
           cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html
           cmp -s docs/terms.html app/src/main/assets/legal/terms.html
           cmp -s docs/index.html app/src/main/assets/legal/index.html
+
+      - name: v0.9.0 ad model regression gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADS=app/src/main/java/com/vidsize/compressor/ads
+          UI=app/src/main/java/com/vidsize/compressor/ui
+          RESULT=$UI/screens/ResultScreen.kt
+          COMPRESS=$UI/screens/CompressionScreen.kt
+          SETTINGS=$UI/screens/SettingsSheet.kt
+          MAIN=app/src/main/java/com/vidsize/compressor/MainActivity.kt
+
+          # --- Gate 1: exactly one pacing rule in code, and it is 60 seconds ---
+          # The whole model rests on this. Four stacked conditions are what made
+          # the v0.8.9 app-open ad unreachable and undiagnosable.
+          grep -q 'FULL_SCREEN_GAP_MILLIS: Long = 60L \* 1000L' $ADS/AdPacing.kt
+
+          # --- Gate 2: no silent quota has crept back in ---
+          # A forbidden-name list, because every one of these returned false
+          # without a trace and the outcome was indistinguishable from no fill.
+          for banned in INSTALL_GRACE MIN_SESSIONS_BEFORE COOLDOWN_MILLIS DAILY_LIMIT \
+                        SESSION_QUOTA MAX_PER_SESSION MAX_PER_DAY FREE_USES MIN_COMPRESSIONS; do
+            if grep -rqn "$banned" $ADS; then
+              echo "Silent quota reintroduced in ads/: $banned" >&2
+              exit 1
+            fi
+          done
+
+          # --- Gate 3: the reward duration is stated in exactly one place ---
+          grep -q 'REWARD_DURATION_MINUTES: Int = 10' $ADS/AdFreeWindow.kt
+          grep -q 'REWARD_DURATION_MILLIS: Long = 10L \* 60L \* 1000L' $ADS/AdFreeWindow.kt
+          # ...and no locale states it independently (enforced by the Gradle task).
+          grep -q 'verifyRewardCopyParity' app/build.gradle.kts
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="ad_free_title">[^<]*%1\$d' "$f" || { echo "$f hardcodes the reward duration" >&2; exit 1; }
+          done
+
+          # --- Gate 4: one chokepoint; no surface asks its own question ---
+          # A banner that decided for itself is what would have let an ad-free
+          # window silence the full-screen formats and leave the banner running.
+          grep -q 'AdSlots.requestable' $UI/components/HomeBannerAd.kt
+          grep -q 'AdSlots.requestable' $UI/components/NativeAdCard.kt
+          grep -q 'AdSlots.requestable' $ADS/NativeAdLoader.kt
+          grep -q 'AdSlots.bannerVisible' $UI/screens/HomeScreen.kt
+          grep -q 'AdSlots.bannerVisible' $UI/screens/ProcessingOverlay.kt
+          ! grep -q 'ConsentManager' $UI/components/HomeBannerAd.kt
+          ! grep -q 'ConsentManager' $UI/screens/ProcessingOverlay.kt
+
+          # --- Gate 5: preloading still happens while the job runs ---
+          test "$(grep -c 'InterstitialAds.preload(context)' $COMPRESS)" -eq 2
+
+          # --- Gate 6: the three deferred exits are still deferred ---
+          # If any of these reverts to suppressAppOpenOnReturn alone, the
+          # interstitial silently stops earning on its most common path.
+          test "$(grep -c 'context.deferInterstitialOnReturn()' $RESULT)" -eq 3
+          ! grep -q 'suppressAppOpenOnReturn' $RESULT
+          # ...and both immediate exits from the result screen carry one too, so
+          # "an interstitial after every compression" is true for every path a
+          # user can actually take out of a finished job, not just some of them.
+          test "$(grep -c 'context.findHostActivity()?.let(InterstitialAds::showNow)' $COMPRESS)" -eq 2
+
+          # The rewarded offer appears on all three surfaces that can convert:
+          # before a job (Home, Compression) and straight after one (Result),
+          # which is where it converts best because the cost it removes is the
+          # one the user just paid.
+          grep -q 'AdFreeStrip' $UI/screens/HomeScreen.kt
+          grep -q 'AdFreeStrip' $COMPRESS
+          grep -q 'AdFreeStrip' $RESULT
+          # It must stay ABOVE the ad section, or it reads as part of the
+          # creative instead of as an offer from the app.
+          test "$(grep -n 'AdFreeStrip' $RESULT | tail -1 | cut -d: -f1)" \
+             -lt "$(grep -n 'NativeAdCard' $RESULT | tail -1 | cut -d: -f1)"
+          # The in-content native at the end of the home scroll must not reserve
+          # space it may never fill.
+          grep -q 'reserveSpace = false' $UI/screens/HomeScreen.kt
+
+          # --- Gate 7: no ad in front of content, and ordering is preserved ---
+          # reset() must precede showNow(): AdGate refuses a full-screen ad while
+          # the job is non-idle, so the reverse order fails on every attempt.
+          grep -Pzoq 'CompressionJobState\.reset\(\)\n\s*context\.findHostActivity\(\)\?\.let\(InterstitialAds::showNow\)' $COMPRESS
+          grep -q 'Verdict.RUNNING_JOB' $ADS/AdGate.kt
+          grep -q 'Verdict.RESULT_WAITING' $ADS/AdGate.kt
+          grep -q 'requireIdleJob = true' $ADS/AppOpenAdPolicy.kt
+
+          # --- Gate 8: the share-sheet entry point still suppresses app open ---
+          grep -q 'appOpenAdManager.suppressNextForeground()' $MAIN
+          grep -q 'InterstitialAds.showPendingIfAny(this)' $MAIN
+
+          # --- Gate 9: diagnostics exists and is reachable from a signed build ---
+          grep -q 'DIAGNOSTICS_TAP_COUNT = 7' $SETTINGS
+          grep -q 'AdDiagnosticsSheet' $SETTINGS
+          test -f $UI/screens/AdDiagnosticsSheet.kt
+          grep -q 'VERDICT' $UI/screens/AdDiagnosticsSheet.kt
+
+          # --- Gate 10: real units only; the ads-off-without-ids invariant holds ---
+          grep -q 'VIDSIZE_INTERSTITIAL_AD_UNIT_ID' app/build.gradle.kts
+          grep -q 'VIDSIZE_REWARDED_AD_UNIT_ID' app/build.gradle.kts
+          grep -q 'verifyAdUnitCoverage' app/build.gradle.kts
+          grep -q 'verifyAdsOffWithoutRealIds' app/build.gradle.kts
+          # closedTest must no longer be pinned ads-off, or T1-T7 cannot be run
+          # against the artefact that ships.
+          ! grep -Pzoq 'create\("closedTest"\)[\s\S]{0,600}?ENABLE_ADS", "false"' app/build.gradle.kts
+          # ...and the test-creative variant must be debuggable, or AdIds' sample
+          # backstop refuses every unit and the variant shows nothing.
+          grep -Pzoq 'create\("adsQa"\)[\s\S]{0,400}?isDebuggable = true' app/build.gradle.kts
+
+          # --- Gate 11: no real AdMob identifier is ever committed -----------
+          # The audit guarantee: a clone must package with ads OFF. Only Google's
+          # sample publisher and the all-zero placeholder may appear in tracked
+          # source. A real one leaking in would silently arm the SDK for anyone
+          # who builds the repo.
+          leaked="$(grep -rn 'ca-app-pub-[0-9]' app/src docs app/build.gradle.kts \
+                      --include='*.kt' --include='*.xml' --include='*.html' --include='*.kts' \
+                    | grep -v '3940256099942544' | grep -v '0000000000000000' || true)"
+          if [ -n "$leaked" ]; then
+            echo "Real AdMob identifier committed to source:" >&2
+            echo "$leaked" >&2
+            exit 1
+          fi
+          grep -qx 'ads.properties' .gitignore
+          test -f ads.properties.example
+          ! git ls-files --error-unmatch ads.properties >/dev/null 2>&1
+
+          # --- Gate 12: required and optional identifier sets are as designed --
+          # App Open is optional because this account has no unit for it; making
+          # it required would take the other four formats down with it.
+          grep -q 'val requiredAdIds' app/build.gradle.kts
+          grep -q 'val optionalAdIds' app/build.gradle.kts
+          grep -Pzoq 'val optionalAdIds[\s\S]{0,300}?VIDSIZE_APP_OPEN_AD_UNIT_ID' app/build.gradle.kts
+          grep -Pzoq 'val requiredAdIds[\s\S]{0,400}?VIDSIZE_INTERSTITIAL_AD_UNIT_ID' app/build.gradle.kts
+          grep -Pzoq 'val requiredAdIds[\s\S]{0,400}?VIDSIZE_REWARDED_AD_UNIT_ID' app/build.gradle.kts
+
+          # --- Gate 13: the published policy declares every format and the reward ---
+          for term in 'Banner' 'Result-screen ad' 'App-open ad' 'Interstitial' 'Rewarded ad' \
+                      'no ads of any kind' '10 minutes' '60 seconds'; do
+            grep -Fq "$term" docs/privacy.html || { echo "privacy.html omits: $term" >&2; exit 1; }
+          done
+          cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html
 
       - name: v0.8.3 compression + v0.8.4 UI + v0.8.5 quality/ad guards
         shell: bash
@@ -182,7 +320,14 @@ jobs:
           has "$OVERLAY" 'CompressionBannerAd('
           has "$BANNER"  'setAdSize(AdSize.BANNER)'
           has "$BANNER"  'AdIds.compressionBanner'
-          has "$OVERLAY" 'ConsentManager'
+          # v0.9.0 supersedes the old `has "$OVERLAY" 'ConsentManager'` check.
+          # The intent was "this surface respects consent"; it now does so
+          # through the single AdSlots chokepoint, which is strictly stronger -
+          # it covers consent AND the rewarded ad-free window. Asserting the
+          # literal ConsentManager reference would now force the surface to
+          # re-derive the condition itself, which is the exact divergence the
+          # chokepoint exists to prevent.
+          has "$OVERLAY" 'AdSlots.bannerVisible'
           # exactly one banner call site inside the overlay
           test "$(grep -c 'CompressionBannerAd(' "$OVERLAY")" -eq 1
           # and no full-screen ad format anywhere on this surface
@@ -208,7 +353,15 @@ jobs:
 
           # 3 - back from the result must clear the finished job state.
           has "$RESULT" 'BackHandler'
-          has "$SCREEN" 'onBack = { CompressionJobState.reset() }'
+          # v0.9.0: this asserted the exact one-liner
+          # `onBack = { CompressionJobState.reset() }`. The handler now also
+          # shows an interstitial, so it spans several lines - but the invariant
+          # being protected is unchanged and is checked more directly below:
+          # reset() still runs, and it still runs FIRST. The ordering is not
+          # cosmetic. AdGate refuses a full-screen ad while the job is non-idle,
+          # so a future edit that shows before resetting would be declined on
+          # every attempt and look exactly like no fill.
+          grep -Pzoq 'onBack = \{\n\s*CompressionJobState\.reset\(\)\n\s*context\.findHostActivity\(\)\?\.let\(InterstitialAds::showNow\)\n\s*\}' "$SCREEN"
 
           # 4 - the native ad keeps its reserved slot and its one-time binding,
           # and the page can scroll far enough to expose the whole creative.
@@ -354,10 +507,20 @@ jobs:
           has "$ADIDS"  'BuildConfig.ENABLE_ADS'
           has "$ADIDS"  'GOOGLE_SAMPLE_PUBLISHER'
           has "$ADIDS"  'isGoogleSample'
-          has "$NATIVE" 'AdSlots.enabled'
-          has "$BANNER" 'AdSlots.enabled'
-          has "$RESULT" 'AdSlots.enabled'
-          has "$HOME"   'AdSlots.enabled'
+          # v0.9.0: these four asserted the literal `AdSlots.enabled`. The
+          # invariant being protected was "no slot renders without the
+          # build-level switch", and it still holds - `requestable` and
+          # `bannerVisible` are both defined as `enabled && ...`, so they are
+          # strictly narrower. Pinning the weaker spelling would now block the
+          # ad-free window from ever reaching these surfaces, which is the one
+          # thing v0.9.0 had to guarantee.
+          has "$NATIVE" 'AdSlots.requestable'
+          has "$BANNER" 'AdSlots.requestable'
+          has "$RESULT" 'AdSlots.requestable'
+          has "$HOME"   'AdSlots.bannerVisible'
+          # ...and the definitions themselves still start from the build switch.
+          grep -Fq 'val enabled: Boolean get() = BuildConfig.ENABLE_ADS' "$SLOTS"
+          grep -Fq 'enabled && ConsentManager.adsAllowed' "$SLOTS"
           grep -Fq 'googleSamplePublisher' app/build.gradle.kts
           grep -Fq 'adsConfigured' app/build.gradle.kts
           grep -Fq 'verifyAdsOffWithoutRealIds' app/build.gradle.kts
@@ -458,7 +621,70 @@ jobs:
             -PVIDSIZE_HOME_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/3333333333 \
             -PVIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/4444444444 \
             -PVIDSIZE_NATIVE_RESULT_AD_UNIT_ID=ca-app-pub-1111111111111111/5555555555 \
+            -PVIDSIZE_APP_OPEN_AD_UNIT_ID=ca-app-pub-1111111111111111/6666666666 \
+            -PVIDSIZE_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-1111111111111111/7777777777 \
+            -PVIDSIZE_REWARDED_AD_UNIT_ID=ca-app-pub-1111111111111111/8888888888
+
+      - name: New gates must FAIL when broken (negative tests)
+        shell: bash
+        run: |
+          set -uo pipefail
+          # A gate nobody has watched fail is not a gate. Each case below breaks
+          # the invariant on purpose, asserts the check fires, and restores the
+          # working tree before the next one.
+          ADS=app/src/main/java/com/vidsize/compressor/ads
+          TR=app/src/main/res/values-tr/strings.xml
+
+          restore() { git checkout -- "$@"; }
+
+          # --- 1. A reintroduced silent quota must be caught -----------------
+          cp $ADS/AdPacing.kt /tmp/AdPacing.kt.bak
+          printf '\nprivate const val COOLDOWN_MILLIS = 21600000L\n' >> $ADS/AdPacing.kt
+          if ! grep -rq 'COOLDOWN_MILLIS' $ADS; then
+            echo 'negative test 1 did not break anything' >&2; exit 1
+          fi
+          caught=0
+          for banned in INSTALL_GRACE MIN_SESSIONS_BEFORE COOLDOWN_MILLIS DAILY_LIMIT; do
+            grep -rq "$banned" $ADS && caught=1
+          done
+          cp /tmp/AdPacing.kt.bak $ADS/AdPacing.kt
+          test "$caught" -eq 1 || { echo 'GATE 2 DID NOT FIRE' >&2; exit 1; }
+          echo 'ok: silent-quota gate fires'
+
+          # --- 2. A translation that states the duration must be caught ------
+          cp $TR /tmp/strings-tr.bak
+          sed -i 's|<string name="ad_free_title">[^<]*</string>|<string name="ad_free_title">15 dakika reklamsiz</string>|' $TR
+          if grep -q 'name="ad_free_title">[^<]*%1[$]d' $TR; then
+            cp /tmp/strings-tr.bak $TR
+            echo 'GATE 3 DID NOT FIRE: hardcoded duration went unnoticed' >&2; exit 1
+          fi
+          cp /tmp/strings-tr.bak $TR
+          echo 'ok: reward-duration parity gate fires'
+
+          # --- 3. An incomplete identifier set must not package a release ----
+          # This is the trap the two new slots create: supply the legacy five and
+          # every format - banners included - switches off with nothing said.
+          set +e
+          gradle :app:bundleRelease --stacktrace \
+            -PVIDSIZE_ADMOB_APP_ID=ca-app-pub-1111111111111111~2222222222 \
+            -PVIDSIZE_HOME_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/3333333333 \
+            -PVIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/4444444444 \
+            -PVIDSIZE_NATIVE_RESULT_AD_UNIT_ID=ca-app-pub-1111111111111111/5555555555 \
             -PVIDSIZE_APP_OPEN_AD_UNIT_ID=ca-app-pub-1111111111111111/6666666666
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'A release packaged with the interstitial and rewarded units missing.' >&2
+            exit 1
+          fi
+          echo "ok: incomplete identifier set rejected (exit ${status})"
+
+          # The tree must be exactly as checked out before the audit ZIP is cut.
+          test -z "$(git status --porcelain)" || {
+            echo 'negative tests left the working tree dirty:' >&2
+            git status --porcelain >&2
+            exit 1
+          }
 
       - name: Create exact source audit ZIP
         shell: bash

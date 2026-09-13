@@ -22,6 +22,18 @@ jobs:
       VIDSIZE_UPLOAD_KEYSTORE_TYPE: ${{ secrets.VIDSIZE_UPLOAD_KEYSTORE_TYPE }}
       VIDSIZE_UPLOAD_CERT_SHA256: ${{ secrets.VIDSIZE_UPLOAD_CERT_SHA256 }}
 
+      # AdMob identifiers. Five are required; a blank one switches off EVERY
+      # format, banners included, and verifyProductionAdConfig names it.
+      VIDSIZE_ADMOB_APP_ID: ${{ secrets.VIDSIZE_ADMOB_APP_ID }}
+      VIDSIZE_HOME_BANNER_AD_UNIT_ID: ${{ secrets.VIDSIZE_HOME_BANNER_AD_UNIT_ID }}
+      VIDSIZE_NATIVE_RESULT_AD_UNIT_ID: ${{ secrets.VIDSIZE_NATIVE_RESULT_AD_UNIT_ID }}
+      VIDSIZE_INTERSTITIAL_AD_UNIT_ID: ${{ secrets.VIDSIZE_INTERSTITIAL_AD_UNIT_ID }}
+      VIDSIZE_REWARDED_AD_UNIT_ID: ${{ secrets.VIDSIZE_REWARDED_AD_UNIT_ID }}
+      # Optional. Unset is a supported state: app-open stays off, and the
+      # compression screen reuses the home banner unit.
+      VIDSIZE_APP_OPEN_AD_UNIT_ID: ${{ secrets.VIDSIZE_APP_OPEN_AD_UNIT_ID }}
+      VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID: ${{ secrets.VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID }}
+
     steps:
       - name: Checkout exact main source
         uses: actions/checkout@v5

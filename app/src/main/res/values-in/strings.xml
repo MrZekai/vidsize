@@ -17,6 +17,11 @@
     <string name="storage_saved_empty">Kompres satu video untuk mulai menghemat ruang.</string>
     <string name="clear_history">Hapus</string>
     <string name="ad_label">Iklan</string>
+    <string name="ad_free_title">%1$d menit tanpa iklan</string>
+    <string name="ad_free_body">Tonton video iklan singkat. Vidsize tidak akan menampilkan iklan apa pun selama %1$d menit.</string>
+    <string name="ad_free_action">Tonton video iklan singkat</string>
+    <string name="ad_free_active_title">Sedang tanpa iklan</string>
+    <string name="ad_free_active_body">Sisa %1$s</string>
     <string name="compress_title">Pilih kompresi</string>
     <string name="compress_subtitle">Tentukan keseimbangan antara kualitas dan ukuran file.</string>
     <string name="back">Kembali</string>
@@ -74,7 +79,7 @@
     <string name="settings_privacy_title">Privasi</string>
     <string name="settings_privacy_body">Videomu dikompres di perangkat ini. Tidak ada yang diunggah ke server.</string>
     <string name="settings_ads_title">Iklan</string>
-    <string name="settings_ads_body">Vidsize gratis dan didukung iklan.</string>
+    <string name="settings_ads_body">Vidsize gratis dan didukung iklan: satu banner, satu iklan di layar hasil, serta satu saat aplikasi dibuka dan satu setelah kompresi. Tonton video iklan singkat untuk %1$d menit tanpa iklan.</string>
     <string name="settings_legal_section">HUKUM</string>
     <string name="settings_privacy_policy">Kebijakan Privasi</string>
     <string name="settings_terms">Ketentuan Penggunaan</string>

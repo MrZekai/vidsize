@@ -25,7 +25,6 @@ import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.vidsize.compressor.ads.AdIds
 import com.vidsize.compressor.ads.AdSlots
-import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ui.theme.VidsizeColor
 
 private val BannerWidth = 320.dp
@@ -76,22 +75,25 @@ private fun FixedBannerAd(
 ) {
     val inspecting = LocalInspectionMode.current
 
-    // QA v0.8.7 BUG-01: this variant has no ads at all. Returning before any
-    // layout is emitted is also what removes the "blank white band where a
-    // banner should be" that the QA pass called out as reading like a rendering
-    // fault - an absent ad now costs zero pixels instead of 50dp of empty
-    // surface breaking the lavender background.
-    if (!inspecting && !AdSlots.enabled) return
-
-    if (!inspecting && ConsentManager.consentResolved && !ConsentManager.canRequestAds) {
-        return
-    }
+    // One predicate, asked once.
+    //
+    // QA v0.8.7 BUG-01: a variant with no real identifiers has no ads at all,
+    // and returning before any layout is emitted is what removes the "blank
+    // white band where a banner should be" that read as a rendering fault - an
+    // absent ad costs zero pixels instead of 50dp of empty surface.
+    //
+    // v0.9.0: this used to spell the condition out itself - `AdSlots.enabled`,
+    // then two separate ConsentManager checks - while the App Open manager and
+    // the native loader went through AdSlots.requestable. That divergence is
+    // precisely what would have let a rewarded "ten minutes with no ads" window
+    // silence the full-screen formats and leave this banner running, making the
+    // app's own copy false. The ad-free window is now inside `requestable`, so
+    // the promise is kept here for free.
+    if (!inspecting && !AdSlots.requestable) return
 
     // No fill and no id are the same thing to the layout: emit nothing rather
     // than a reserved 320x50 hole.
-    if (!inspecting && (!active || !ConsentManager.adsAllowed || unitId.isNullOrBlank())) {
-        return
-    }
+    if (!inspecting && (!active || unitId.isNullOrBlank())) return
 
     val container = if (includeNavigationPadding) {
         modifier

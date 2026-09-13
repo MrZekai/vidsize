@@ -8,14 +8,23 @@ import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.appopen.AppOpenAd
 import com.google.android.gms.ads.appopen.AppOpenAd.AppOpenAdLoadCallback
-import com.vidsize.compressor.media.CompressionJobState
 
 /**
  * Loads App Open ads opportunistically and never delays app content.
  *
  * Ads are only loaded after UMP says ads may be requested and the Mobile Ads
- * SDK has finished initialising. A loaded App Open ad is treated as stale after
- * four hours, matching Google's documented lifetime guidance.
+ * SDK has finished initialising.
+ *
+ * ## The four-hour number is not a pacing rule
+ *
+ * [APP_OPEN_EXPIRY_MILLIS] is Google's documented lifetime for a *loaded*
+ * app-open creative: after four hours the creative is stale and must be
+ * discarded and re-requested. It has nothing to do with how often a user should
+ * meet an ad, and reading it as though it did is a well-worn way to silence the
+ * format for an entire afternoon while every other counter looks healthy. The
+ * interval between two full-screen ads is [AdPacing.FULL_SCREEN_GAP_MILLIS] -
+ * sixty seconds, shared with the interstitial - and the per-day ceiling is set
+ * in the AdMob panel, not here.
  */
 class AppOpenAdManager(
     private val appContext: Context,
@@ -28,6 +37,12 @@ class AppOpenAdManager(
         private set
 
     private var suppressNextForeground = false
+
+    /** Diagnostics only: whether a fresh creative is currently in hand. */
+    val hasLoadedAd: Boolean get() = isAdAvailable()
+
+    /** Diagnostics only: whether the next foreground is being skipped. */
+    val isSuppressingNextForeground: Boolean get() = suppressNextForeground
 
     fun suppressNextForeground() {
         suppressNextForeground = true
@@ -50,12 +65,10 @@ class AppOpenAdManager(
             return
         }
 
-        // Never cover an active/finished compression workflow with a full-screen ad.
-        if (CompressionJobState.status !is CompressionJobState.Status.Idle) {
-            loadIfNeeded()
-            return
-        }
-
+        // The job-state rule (never cover a running or freshly finished
+        // compression) now lives in AdGate, which policy.shouldShow() consults,
+        // so every full-screen format reads the same conditions in the same
+        // order and the diagnostics sheet can name which one declined.
         if (policy.shouldShow() && isAdAvailable()) {
             show(activity)
         } else {

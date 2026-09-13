@@ -17,6 +17,11 @@
     <string name="storage_saved_empty">Komprimiere ein Video, um Speicher zu sparen.</string>
     <string name="clear_history">Löschen</string>
     <string name="ad_label">Werbung</string>
+    <string name="ad_free_title">%1$d Minuten ohne Werbung</string>
+    <string name="ad_free_body">Sieh dir ein kurzes Werbevideo an. Vidsize zeigt dann %1$d Minuten lang keine Werbung.</string>
+    <string name="ad_free_action">Kurzes Werbevideo ansehen</string>
+    <string name="ad_free_active_title">Gerade werbefrei</string>
+    <string name="ad_free_active_body">Noch %1$s</string>
     <string name="compress_title">Komprimierung wählen</string>
     <string name="compress_subtitle">Wähle das Verhältnis aus Qualität und Dateigröße.</string>
     <string name="back">Zurück</string>
@@ -74,7 +79,7 @@
     <string name="settings_privacy_title">Datenschutz</string>
     <string name="settings_privacy_body">Deine Videos werden auf diesem Gerät komprimiert. Es wird nichts auf einen Server hochgeladen.</string>
     <string name="settings_ads_title">Werbung</string>
-    <string name="settings_ads_body">Vidsize ist kostenlos und werbefinanziert.</string>
+    <string name="settings_ads_body">Vidsize ist kostenlos und werbefinanziert: ein Banner, eine Anzeige auf dem Ergebnisbildschirm sowie je eine beim Öffnen der App und nach einer Komprimierung. Sieh dir ein kurzes Werbevideo an für %1$d Minuten ohne Werbung.</string>
     <string name="settings_legal_section">RECHTLICHES</string>
     <string name="settings_privacy_policy">Datenschutzerklärung</string>
     <string name="settings_terms">Nutzungsbedingungen</string>

@@ -13,3 +13,9 @@ captures/
 **/vidsize-play-upload.jks
 **/vidsize-play-upload.keystore
 **/vidsize-play-upload.p12
+
+# AdMob identifiers. Not secret - they ship inside the APK - but kept out of the
+# repository so a clone with no identifiers packages with ads OFF and still
+# builds. That is what lets CI publish an unsigned audit AAB nobody can turn the
+# ads SDK on in. See docs/ADS.md.
+ads.properties

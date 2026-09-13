@@ -32,6 +32,8 @@ object AdIds {
     private const val TEST_BANNER = "ca-app-pub-3940256099942544/9214589741"
     private const val TEST_NATIVE = "ca-app-pub-3940256099942544/2247696110"
     private const val TEST_APP_OPEN = "ca-app-pub-3940256099942544/9257395921"
+    private const val TEST_INTERSTITIAL = "ca-app-pub-3940256099942544/1033173712"
+    private const val TEST_REWARDED = "ca-app-pub-3940256099942544/5224354917"
 
     /** Google's public sample publisher. Serves "Test Ad" creatives only. */
     private const val GOOGLE_SAMPLE_PUBLISHER = "3940256099942544"
@@ -42,14 +44,44 @@ object AdIds {
     val homeBanner: String?
         get() = resolve(TEST_BANNER, BuildConfig.HOME_BANNER_AD_UNIT_ID)
 
+    /**
+     * The compression screen's banner, falling back to the home banner unit.
+     *
+     * One AdMob banner unit may serve two placements; separate units only buy
+     * finer reporting. Requiring a second unit would mean a build failure in
+     * exchange for a column in a dashboard, so an absent
+     * `COMPRESSION_BANNER_AD_UNIT_ID` quietly reuses the home one. Supplying it
+     * later splits the reporting with no code change.
+     */
     val compressionBanner: String?
         get() = resolve(TEST_BANNER, BuildConfig.COMPRESSION_BANNER_AD_UNIT_ID)
+            ?: resolve(TEST_BANNER, BuildConfig.HOME_BANNER_AD_UNIT_ID)
 
     val nativeResult: String?
         get() = resolve(TEST_NATIVE, BuildConfig.NATIVE_RESULT_AD_UNIT_ID)
 
+    /**
+     * The App Open unit, which this AdMob account does not currently have.
+     *
+     * Returning null is the format's off switch and every caller already treats
+     * it that way: [AppOpenAdManager] never requests, never shows, and the
+     * diagnostics sheet reports it as not loaded. No other format is affected -
+     * that is the whole point of keeping this identifier optional rather than in
+     * the required set, where a blank value would take the banner, the native,
+     * the interstitial and the rewarded ad down with it.
+     *
+     * Creating the unit in AdMob and supplying the property turns the format on
+     * with no code change. The privacy policy must declare it first;
+     * `verifyProductionAdConfig` enforces that pairing.
+     */
     val appOpen: String?
         get() = resolve(TEST_APP_OPEN, BuildConfig.APP_OPEN_AD_UNIT_ID)
+
+    val interstitial: String?
+        get() = resolve(TEST_INTERSTITIAL, BuildConfig.INTERSTITIAL_AD_UNIT_ID)
+
+    val rewarded: String?
+        get() = resolve(TEST_REWARDED, BuildConfig.REWARDED_AD_UNIT_ID)
 
     /**
      * True when a sample or placeholder identifier would be requested. Kept

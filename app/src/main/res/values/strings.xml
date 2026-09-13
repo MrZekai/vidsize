@@ -28,6 +28,11 @@
 
     <!-- Ads -->
     <string name="ad_label">Advertisement</string>
+    <string name="ad_free_title">%1$d minutes with no ads</string>
+    <string name="ad_free_body">Watch a short ad video. Vidsize then shows no ads at all for %1$d minutes.</string>
+    <string name="ad_free_action">Watch a short ad video</string>
+    <string name="ad_free_active_title">No ads right now</string>
+    <string name="ad_free_active_body">%1$s left</string>
 
     <!-- Compression screen -->
     <string name="compress_title">Choose compression</string>
@@ -99,7 +104,7 @@
     <string name="settings_privacy_title">Privacy</string>
     <string name="settings_privacy_body">Your videos are compressed on this device. Nothing is uploaded to a server.</string>
     <string name="settings_ads_title">Ads</string>
-    <string name="settings_ads_body">Vidsize is free and supported by ads.</string>
+    <string name="settings_ads_body">Vidsize is free and supported by ads: a banner, an ad on the result screen, one when the app opens and one after a compression. Watch a short ad video for %1$d minutes with no ads.</string>
     <string name="settings_legal_section">LEGAL</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_terms">Terms of Use</string>

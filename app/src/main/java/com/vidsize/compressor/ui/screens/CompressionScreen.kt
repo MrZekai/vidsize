@@ -63,6 +63,10 @@ import com.vidsize.compressor.model.VideoInfo
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HairLine
+import com.vidsize.compressor.ads.AdDiagnostics
+import com.vidsize.compressor.ads.InterstitialAds
+import com.vidsize.compressor.ads.findHostActivity
+import com.vidsize.compressor.ui.components.AdFreeStrip
 import com.vidsize.compressor.ui.components.CompressionBannerAd
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
@@ -182,6 +186,20 @@ fun CompressionScreen(
         probeFailed = probed == null
     }
 
+    // Preloading an interstitial is essentially free in this app, and that is a
+    // genuine structural advantage over the reader app this ad model came from.
+    //
+    // The usual failure mode for interstitials is requesting one at the moment
+    // of display and losing the impression on a slow connection - which is why
+    // the source model argues for a nine-second load window. Vidsize has minutes
+    // of runway: the request goes out when the compression screen opens and
+    // again when the job starts, and the earliest a result screen can exist is
+    // two minutes later. There is no load timeout here because the user is never
+    // waiting on this request.
+    LaunchedEffect(videoUri) {
+        InterstitialAds.preload(context)
+    }
+
     fun startCompression() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -190,12 +208,19 @@ fun CompressionScreen(
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         starting = true
+        InterstitialAds.preload(context)
         CompressionService.start(context, videoUri, preset)
     }
 
     // Fires once per finished job so History picks the new row up.
     LaunchedEffect(result) {
-        result?.let(onCompleted)
+        result?.let {
+            onCompleted(it)
+            // Diagnostics only. "How many jobs has this user finished" is the
+            // number a tester needs when asking why an interstitial has not
+            // appeared yet; it gates nothing.
+            AdDiagnostics.recordCompression()
+        }
     }
 
     // The result is a full screen, not a dialog over a dimmed compression
@@ -206,9 +231,30 @@ fun CompressionScreen(
     if (finished != null) {
         ResultScreen(
             result = finished,
-            onBack = { CompressionJobState.reset() },
-            onCompressAnother = {
+            // Back from the result returns to the preset picker for the SAME
+            // video, which is still a completed job and still a real transition,
+            // so it carries an ad like the other exits. That is what makes
+            // "an interstitial after every compression" actually true rather
+            // than true only for the paths a user happens to take.
+            //
+            // reset() first: AdGate refuses a full-screen ad while the job is
+            // non-idle, so the reverse order would be declined every time.
+            onBack = {
                 CompressionJobState.reset()
+                context.findHostActivity()?.let(InterstitialAds::showNow)
+            },
+            onCompressAnother = {
+                // The immediate half of the deferred pattern: this is a plain
+                // in-app transition back to Home with the work finished, which
+                // is exactly the moment an ad belongs.
+                //
+                // reset() runs FIRST and the ordering is load-bearing. AdGate
+                // refuses a full-screen ad while a job is anything other than
+                // idle, so showing before the reset would be silently declined
+                // on every single attempt - the kind of bug that looks like no
+                // fill and takes a week to find.
+                CompressionJobState.reset()
+                context.findHostActivity()?.let(InterstitialAds::showNow)
                 onBack()
             },
         )
@@ -266,6 +312,21 @@ fun CompressionScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = Space.gutter),
             ) {
+                // The rewarded offer, repeated here on purpose.
+                //
+                // This is the strongest moment in the app to make it. The user
+                // is one tap from starting a job that will take two to five
+                // minutes and will end in an interstitial; "watch a short ad
+                // video, get ten minutes with no ads" is a trade that makes
+                // obvious sense right now in a way it does not on Home, where
+                // the user has not yet committed to anything.
+                //
+                // Hidden during processing: the offer opens a full-screen ad,
+                // and nothing covers a running job.
+                if (!processing) {
+                    AdFreeStrip(modifier = Modifier.fillMaxWidth())
+                }
+
                 Spacer(Modifier.height(Space.lg))
 
                 SelectedVideoCard(videoUri = videoUri, info = info, failed = probeFailed)

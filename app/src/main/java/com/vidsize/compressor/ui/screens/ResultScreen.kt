@@ -40,10 +40,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
-import com.vidsize.compressor.ads.ConsentManager
-import com.vidsize.compressor.ads.suppressAppOpenOnReturn
+import com.vidsize.compressor.ads.deferInterstitialOnReturn
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
+import com.vidsize.compressor.ui.components.AdFreeStrip
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.IconAction
@@ -125,7 +125,11 @@ fun ResultScreen(
     onCompressAnother: () -> Unit,
 ) {
     val context = LocalContext.current
-    val adsVisible = AdSlots.enabled && ConsentManager.adsAllowed || LocalInspectionMode.current
+    // One predicate. AdSlots.requestable also carries the rewarded ad-free
+    // window, so a user inside their ten quiet minutes gets a result screen with
+    // no ad section at all - no divider, no "Advertisement" label, no reserved
+    // 340dp slot - rather than a labelled empty band.
+    val adsVisible = AdSlots.requestable || LocalInspectionMode.current
     val savedBytes = (result.sourceBytes - result.outputBytes).coerceAtLeast(0L)
     val percent = Fmt.percentSmaller(result.sourceBytes, result.outputBytes)
 
@@ -267,6 +271,25 @@ fun ResultScreen(
                     enabled = interactive,
                 )
 
+                // The rewarded offer, placed at the app's highest-converting
+                // moment for it.
+                //
+                // The user has just finished a job, sat through whatever ads it
+                // carried, and is one scroll from a native creative. "Keep going
+                // for ten minutes with no ads" means more here than anywhere
+                // else in the app, because the cost it removes is the one they
+                // just paid.
+                //
+                // It is a Vidsize control, not an ad, so it adds nothing to the
+                // ad density of this screen - and it sits ABOVE the ad section
+                // so the offer is read before the creative rather than looking
+                // like part of it. Nothing on this screen depends on taking it:
+                // Share, Show in Gallery and Open all sit above it, already
+                // reachable, exactly as they were.
+                if (AdSlots.rewardedRequestable) {
+                    AdFreeStrip(modifier = Modifier.fillMaxWidth())
+                }
+
                 if (adsVisible) {
                     // A divider, a label and 24dp of dead space above; a divider
                     // and 32dp below. The creative's boundary is unambiguous in
@@ -382,8 +405,26 @@ private fun ResultFigures(
 /* Intents                                                                    */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * The three exits below are the deferred-interstitial paths, and they are the
+ * reason this pattern earns anything at all.
+ *
+ * The intuitive wiring is the opposite of this: show an ad when the user leaves
+ * for Home, and cancel it when they go to view their file, so nothing gets
+ * between them and their video. That reasoning is right about the *placement*
+ * and catastrophically wrong about the *outcome* - practically everyone who just
+ * compressed a video wants to share, open or find it, so the cancelling branch
+ * is the common one and the format earns close to nothing.
+ *
+ * deferInterstitialOnReturn() keeps the placement and recovers the revenue: no
+ * ad now, on the way out; one ad when the user comes back with that task done.
+ * It also suppresses the app-open ad in the same call, because an app-open ad on
+ * re-entry would both break the "content the user asked for" rule and consume
+ * the 60-second window the interstitial needs.
+ */
+
 private fun shareVideo(context: Context, uri: Uri) {
-    context.suppressAppOpenOnReturn()
+    context.deferInterstitialOnReturn()
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "video/mp4"
         putExtra(Intent.EXTRA_STREAM, uri)
@@ -405,7 +446,7 @@ private fun shareVideo(context: Context, uri: Uri) {
  * is used first and a generic chooser is the fallback.
  */
 private fun showInGallery(context: Context, uri: Uri) {
-    context.suppressAppOpenOnReturn()
+    context.deferInterstitialOnReturn()
     val gallery = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "video/*")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -423,7 +464,7 @@ private fun showInGallery(context: Context, uri: Uri) {
 }
 
 private fun openVideo(context: Context, uri: Uri) {
-    context.suppressAppOpenOnReturn()
+    context.deferInterstitialOnReturn()
     val intent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "video/mp4")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

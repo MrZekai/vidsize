@@ -15,7 +15,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import com.vidsize.compressor.R
 import com.vidsize.compressor.VidsizeApplication
+import com.vidsize.compressor.ads.AdFreeWindow
 import com.vidsize.compressor.ads.suppressAppOpenOnReturn
+import kotlinx.coroutines.delay
 import com.vidsize.compressor.data.history.CompressionHistoryEntry
 import com.vidsize.compressor.data.history.rememberHistoryController
 import com.vidsize.compressor.ui.screens.CompressionScreen
@@ -51,6 +53,25 @@ fun VidsizeRoot(initialVideo: Uri?) {
     }
 
     val current = selectedVideo
+
+    // The single clock behind the rewarded ad-free window.
+    //
+    // Compose can observe a value changing; it cannot observe time passing. The
+    // window's expiry is a moment in the future, so without something driving a
+    // recomposition the banner would stay hidden and the countdown frozen until
+    // some unrelated state change happened to repaint the screen.
+    //
+    // One ticker at the root, rather than one per ad surface: every surface
+    // reads AdSlots.requestable, which reads AdFreeWindow.remainingMillis, which
+    // this updates. The banner returns and the strip flips back to its offer on
+    // the same frame, and they cannot drift apart because there is only one
+    // source.
+    LaunchedEffect(Unit) {
+        while (true) {
+            AdFreeWindow.refresh()
+            delay(1_000L)
+        }
+    }
 
     // Re-reads history every time Home comes back into view. This is what
     // notices that the user deleted their outputs from Movies/Vidsize while the

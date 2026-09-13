@@ -42,11 +42,13 @@ import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.data.history.CompressionHistoryEntry
 import com.vidsize.compressor.data.history.HistorySummary
+import com.vidsize.compressor.ui.components.AdFreeStrip
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
 import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.HomeBannerAd
+import com.vidsize.compressor.ui.components.NativeAdCard
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SavingsChart
@@ -105,6 +107,20 @@ fun HomeScreen(
 
             TrustRow()
 
+            // The rewarded offer.
+            //
+            // Placed here, below the trust row, for two reasons. It is above the
+            // fold on a 360dp phone, so the highest-eCPM unit in the app is
+            // actually discoverable rather than buried in Settings. And the
+            // trust row sits between it and the Select Video button, so a thumb
+            // travelling to the primary action never crosses a control that
+            // opens a full-screen ad.
+            //
+            // The composable renders nothing at all when there is no offer to
+            // make - ads off, consent refused, or no creative loaded - so no
+            // spacing is reserved for an absent card.
+            AdFreeStrip(modifier = Modifier.fillMaxWidth())
+
             Spacer(Modifier.height(Space.xxl))
 
             SectionHeader(
@@ -132,6 +148,46 @@ fun HomeScreen(
 
             StorageSavedPanel(summary = summary)
 
+            // The in-content native ad, at the very end of the scroll.
+            //
+            // ## Why here and not higher
+            //
+            // Home's entire job is "tap Select Video", and a user in a hurry
+            // never reaches this. Everything above it is the product; this sits
+            // after the last piece of real content, so a user who arrives here
+            // scrolled deliberately. It is also as far from the Select Video
+            // button as the screen allows - the opposite end of the scroll -
+            // which matters because a native creative carries its own tappable
+            // call to action.
+            //
+            // ## Why it does not replace the anchored banner
+            //
+            // Native eCPM runs several times banner eCPM, which is an argument
+            // for swapping them and a bad one here. The anchored banner is the
+            // only ad that reaches a user who never scrolls, and it refreshes on
+            // a 60-second cycle; this one is a single impression that requires
+            // the user to travel to it. They earn from different behaviour, so
+            // they are not substitutes. The whole scroll separates them, and
+            // neither is adjacent to a Vidsize control.
+            //
+            // reserveSpace = false: nothing sits below this, so no-fill cannot
+            // displace anything, and holding 340dp open on a page that may never
+            // fill it would add a screen of dead scroll for nothing.
+            if (AdSlots.requestable) {
+                Spacer(Modifier.height(Space.xl))
+                HairLine()
+                Spacer(Modifier.height(Space.sm))
+                Eyebrow(
+                    text = stringResource(R.string.ad_label),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(Space.xs))
+                NativeAdCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    reserveSpace = false,
+                )
+            }
+
             Spacer(Modifier.height(Space.xl))
         }
 
@@ -148,7 +204,12 @@ fun HomeScreen(
         // The divider exists to separate the creative from the content above it.
         // With ads off there is no creative, so a dangling rule at the bottom of
         // the screen would be a decoration with no meaning.
-        if (AdSlots.enabled) {
+        // One predicate for the creative and its chrome. Previously this read
+        // AdSlots.enabled while the banner itself also checked consent, so a
+        // refusal left a hairline with nothing under it at the bottom of the
+        // screen. AdSlots.bannerVisible now also covers the rewarded ad-free
+        // window, so the divider leaves with the banner it exists to separate.
+        if (AdSlots.bannerVisible) {
             HairLine()
             HomeBannerAd()
         }

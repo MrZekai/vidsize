@@ -11,6 +11,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import com.vidsize.compressor.ads.ConsentManager
+import com.vidsize.compressor.ads.InterstitialAds
+import com.vidsize.compressor.ads.RewardedAds
 import com.vidsize.compressor.ui.VidsizeRoot
 import com.vidsize.compressor.ui.theme.VidsizeTheme
 
@@ -56,12 +58,34 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!BuildConfig.ENABLE_ADS) return
+
         // No delay and no forced display: this only preloads when consent and
         // SDK initialization have already completed. With ENABLE_ADS false the
         // manager short-circuits, so the ads SDK is never touched.
-        if (BuildConfig.ENABLE_ADS) {
-            (application as VidsizeApplication).appOpenAdManager.preload()
-        }
+        (application as VidsizeApplication).appOpenAdManager.preload()
+
+        // The deferred interstitial lands here, and only here.
+        //
+        // This is the one callback that fires for every way back into Vidsize:
+        // the share sheet dismissing, a video player or the gallery being
+        // closed, the task switcher. Putting the show call on a specific
+        // screen's focus effect would have meant re-deriving "did the user come
+        // back?" once per exit point and forgetting one of them - which is the
+        // single most common way this pattern leaks revenue.
+        //
+        // It is safe against loops: showPendingIfAny consumes the flag before it
+        // shows, and the ad's own dismissal re-enters onResume with nothing
+        // pending. It is safe against stacking: AdGate consults the same
+        // 60-second clock the app-open ad writes to, so a return that has just
+        // been met by an app-open ad skips the interstitial rather than
+        // following one full-screen ad with another.
+        InterstitialAds.showPendingIfAny(this)
+
+        // Rewarded is preloaded here rather than on the Home composable alone so
+        // the offer strip is ready on the first frame of a warm return, not one
+        // network round-trip later.
+        RewardedAds.preload(this)
     }
 
     /**

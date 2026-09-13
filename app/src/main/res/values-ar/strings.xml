@@ -17,6 +17,11 @@
     <string name="storage_saved_empty">اضغط فيديو لتبدأ في توفير المساحة.</string>
     <string name="clear_history">مسح</string>
     <string name="ad_label">إعلان</string>
+    <string name="ad_free_title">%1$d دقيقة بلا إعلانات</string>
+    <string name="ad_free_body">شاهد فيديو إعلانيًا قصيرًا. لن يعرض Vidsize أي إعلان لمدة %1$d دقيقة.</string>
+    <string name="ad_free_action">مشاهدة فيديو إعلاني قصير</string>
+    <string name="ad_free_active_title">بلا إعلانات الآن</string>
+    <string name="ad_free_active_body">بقي %1$s</string>
     <string name="compress_title">اختر مستوى الضغط</string>
     <string name="compress_subtitle">حدّد التوازن الذي تريده بين الجودة وحجم الملف.</string>
     <string name="back">رجوع</string>
@@ -74,7 +79,7 @@
     <string name="settings_privacy_title">الخصوصية</string>
     <string name="settings_privacy_body">تُضغط مقاطعك على هذا الجهاز. لا يُرفع أي شيء إلى أي خادم.</string>
     <string name="settings_ads_title">الإعلانات</string>
-    <string name="settings_ads_body">Vidsize مجاني ومموَّل بالإعلانات.</string>
+    <string name="settings_ads_body">‏Vidsize مجاني ومدعوم بالإعلانات: لافتة، وإعلان في شاشة النتيجة، وإعلان عند فتح التطبيق وآخر بعد الضغط. شاهد فيديو إعلانيًا قصيرًا للحصول على %1$d دقيقة بلا إعلانات.</string>
     <string name="settings_legal_section">قانوني</string>
     <string name="settings_privacy_policy">سياسة الخصوصية</string>
     <string name="settings_terms">شروط الاستخدام</string>

@@ -1,0 +1,18 @@
+# Copy to ads.properties (gitignored) and fill in.
+#
+# REQUIRED - a blank value here switches off EVERY ad format, banners included.
+VIDSIZE_ADMOB_APP_ID=ca-app-pub-0000000000000000~0000000000
+VIDSIZE_HOME_BANNER_AD_UNIT_ID=ca-app-pub-0000000000000000/0000000000
+VIDSIZE_NATIVE_RESULT_AD_UNIT_ID=ca-app-pub-0000000000000000/0000000000
+VIDSIZE_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-0000000000000000/0000000000
+VIDSIZE_REWARDED_AD_UNIT_ID=ca-app-pub-0000000000000000/0000000000
+
+# OPTIONAL - absent disables exactly one thing and nothing else.
+#
+# APP_OPEN absent  -> the app-open format is off; every other format works.
+#                     Before enabling it, docs/privacy.html must declare an
+#                     "App-open ad"; verifyProductionAdConfig enforces that.
+# COMPRESSION_BANNER absent -> the compression screen reuses the home banner
+#                     unit. Supplying a second unit only splits the reporting.
+#VIDSIZE_APP_OPEN_AD_UNIT_ID=
+#VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID=
