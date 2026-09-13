@@ -15,14 +15,12 @@
  * retyping seven `-P` flags on every local build. It is gitignored.
  */
 val adsPropertiesFile = rootProject.file("ads.properties")
-val adsProperties = java.util.Properties().apply {
-    if (adsPropertiesFile.isFile) adsPropertiesFile.inputStream().use { load(it) }
-}
+val adsProperties: Map<String, String> = if (!adsPropertiesFile.isFile) emptyMap() else adsPropertiesFile.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") && it.contains("=") }.associate { it.substringBefore("=").trim() to it.substringAfter("=").trim() }
 
 fun adId(name: String): String =
     (providers.gradleProperty(name).orNull
         ?: System.getenv(name)
-        ?: adsProperties.getProperty(name)
+        ?: adsProperties[name]
         ?: "").trim()
 
 val admobAppId: String = adId("VIDSIZE_ADMOB_APP_ID")
