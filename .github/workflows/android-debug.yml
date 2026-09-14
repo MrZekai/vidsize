@@ -62,8 +62,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 23' app/build.gradle.kts
-          grep -q 'versionName = "0.9.5"' app/build.gradle.kts
+          grep -q 'versionCode = 24' app/build.gradle.kts
+          grep -q 'versionName = "0.9.6"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -887,6 +887,18 @@ jobs:
           # A symbol that exists nowhere at all.
           probe "$R" 's/val context = LocalContext.current/val context = NoSuchHelper.get()/' \
                 "a reference to a class that does not exist"
+
+          # v0.9.5: the lower-case half of the same class. `scope.launch { }`
+          # shipped without its import and the capitalised check could not see
+          # it - the name is lower-case AND it sits after a dot, so it read as a
+          # member call. Both halves are probed here.
+          C=app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          probe "$C" '/^import kotlinx.coroutines.launch$/d' \
+                "a deleted kotlinx.coroutines.launch import"
+          probe "$C" '/^import androidx.compose.runtime.rememberCoroutineScope$/d' \
+                "a deleted rememberCoroutineScope import"
+          probe "$R" '/^import androidx.compose.runtime.setValue$/d' \
+                "a deleted setValue import behind a var delegate"
 
           python3 tools/check_kotlin_references.py
           echo "ok: restored tree still passes"
