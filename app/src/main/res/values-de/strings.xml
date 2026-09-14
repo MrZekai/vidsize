@@ -94,6 +94,10 @@
     <string name="notification_channel_name">Komprimierungsfortschritt</string>
     <string name="notification_channel_description">Zeigt den Fortschritt, während ein Video komprimiert wird.</string>
     <string name="notification_title">Video wird komprimiert</string>
+    <string name="notification_timeout_title">Komprimierung gestoppt</string>
+    <string name="notification_timeout_body">Android hat den Vorgang vor dem Ende beendet. Lange Videos können das Tageslimit des Systems für Hintergrundarbeit erreichen – probiere ein kürzeres Video oder eine stärkere Komprimierung.</string>
+    <string name="error_timeout_title">Komprimierung gestoppt</string>
+    <string name="error_timeout_body">Android hat den Vorgang vor dem Ende beendet. Lange Videos können das Tageslimit des Systems für Hintergrundarbeit erreichen – probiere ein kürzeres Video oder eine stärkere Komprimierung.</string>
     <string name="result_default_name">Komprimiertes Video</string>
     <string name="notification_done_title">Video fertig</string>
     <string name="notification_done_body">Dein komprimiertes Video wurde unter Movies/Vidsize gespeichert.</string>

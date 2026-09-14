@@ -61,8 +61,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 19' app/build.gradle.kts
-          grep -q 'versionName = "0.9.1"' app/build.gradle.kts
+          grep -q 'versionCode = 20' app/build.gradle.kts
+          grep -q 'versionName = "0.9.2"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -135,7 +135,9 @@ jobs:
           ! grep -q 'ConsentManager' $UI/screens/ProcessingOverlay.kt
 
           # --- Gate 5: preloading still happens while the job runs ---
-          test "$(grep -c 'InterstitialAds.preload(context)' $COMPRESS)" -eq 2
+          # Three call sites since v0.9.2: screen open, job start, and the
+          # POST_NOTIFICATIONS callback that now owns the deferred start.
+          test "$(grep -c 'InterstitialAds.preload(context)' $COMPRESS)" -eq 3
 
           # --- Gate 6: the three deferred exits are still deferred ---
           # If any of these reverts to suppressAppOpenOnReturn alone, the
@@ -245,6 +247,57 @@ jobs:
           grep -Pzoq 'val optionalAdIds[\s\S]{0,300}?VIDSIZE_APP_OPEN_AD_UNIT_ID' app/build.gradle.kts
           grep -Pzoq 'val requiredAdIds[\s\S]{0,400}?VIDSIZE_INTERSTITIAL_AD_UNIT_ID' app/build.gradle.kts
           grep -Pzoq 'val requiredAdIds[\s\S]{0,400}?VIDSIZE_REWARDED_AD_UNIT_ID' app/build.gradle.kts
+
+          # --- Gate 12b: v0.9.2 hardening, each tied to its QA finding -------
+          ADSDIR=app/src/main/java/com/vidsize/compressor/ads
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+
+          # Pacing reads a clock the user cannot set. A wall-clock read here
+          # would let a forward clock change stack two full-screen ads.
+          grep -q 'SystemClock.elapsedRealtime()' $ADSDIR/AdPacing.kt
+          ! grep -q 'System.currentTimeMillis' $ADSDIR/AdPacing.kt
+          # The reward window keeps wall clock (it must survive reboot) but
+          # cannot be stretched past what was granted.
+          grep -q 'remaining > REWARD_DURATION_MILLIS' $ADSDIR/AdFreeWindow.kt
+
+          # Consent decides before the SDK starts: no synchronous syncState.
+          test "$(grep -c 'syncState(activity, consentInformation)' $ADSDIR/ConsentManager.kt)" -eq 2
+
+          # Shared URIs are grants, not paths.
+          grep -q 'ContentResolver.SCHEME_CONTENT' $MAIN
+          grep -q 'uri.authority.equals(packageName' $MAIN
+          # A second share reaches the running activity instead of stacking one.
+          grep -q 'android:launchMode="singleTask"' app/src/main/AndroidManifest.xml
+          grep -q 'override fun onNewIntent' $MAIN
+
+          # A platform-killed job is reported, not silently reset.
+          grep -q 'FailureReason.TIMEOUT' $MEDIA/CompressionService.kt
+          grep -q 'TIMEOUT,' $MEDIA/CompressionJobState.kt
+          ! grep -Pzoq 'private fun handleTimeout\(\)[\s\S]{0,200}?cancelJob\(\)' $MEDIA/CompressionService.kt
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="notification_timeout_title"' "$f" || { echo "$f lacks timeout copy" >&2; exit 1; }
+          done
+
+          # Orphaned scratch files are swept at process start.
+          grep -q 'fun sweepOrphanedTempFiles' $MEDIA/CompressionEngine.kt
+          grep -q 'CompressionEngine.sweepOrphanedTempFiles' app/src/main/java/com/vidsize/compressor/VidsizeApplication.kt
+
+          # No test build may occupy the production package name.
+          # Both suffixes must exist; a distance-based match would break the
+          # moment someone adds a comment, which is exactly what happened.
+          grep -q 'applicationIdSuffix = ".debug"' app/build.gradle.kts
+          grep -q 'applicationIdSuffix = ".adsqa"' app/build.gradle.kts
+          test "$(grep -c 'applicationIdSuffix' app/build.gradle.kts)" -eq 2
+
+          # A closed test built WITH real identifiers runs the production check,
+          # including the privacy-policy pairing for App Open.
+          grep -q 'if (adsConfigured) dependsOn(verifyProductionAdConfig)' app/build.gradle.kts
+
+          # The diagnostics sheet must never print an ad unit id.
+          ! grep -qE 'Line\(.*AdIds\.' $UI/screens/AdDiagnosticsSheet.kt
+
+          # Stale duplicate build script must stay deleted.
+          ! test -f app/build.gradle-1.kts
 
           # --- Gate 13: the published policy declares every format and the reward ---
           for term in 'Banner' 'Result-screen ad' 'App-open ad' 'Interstitial' 'Rewarded ad' \

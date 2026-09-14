@@ -154,8 +154,8 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 19
-        versionName = "0.9.1"
+        versionCode = 20
+        versionName = "0.9.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -196,6 +196,23 @@ android {
 
     buildTypes {
         debug {
+            // QA finding: this keystore is public - it is committed to the
+            // repository, deliberately, so anyone can reproduce a QA build. That
+            // is fine for a test artefact and unacceptable for a package name a
+            // real install might occupy, and the debug variant used to build as
+            // `com.vidsize.compressor` with no suffix at all.
+            //
+            // A sideloaded debug build therefore sat on the production package
+            // name signed with a key the whole world holds, so anyone could
+            // publish a malicious APK that installs over it as a silent update
+            // and inherits its app-private data. Play installs are unaffected -
+            // they carry the upload key and refuse a signature change - but a
+            // tester's phone was exposed.
+            //
+            // The suffix removes the collision outright: no test build can ever
+            // occupy the production identity, whatever it is signed with.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
             signingConfig = signingConfigs.getByName("qaDebug")
             buildConfigField("boolean", "USE_TEST_ADS", "true")
             // Off unless a developer opts in explicitly. A QA tester installing
@@ -520,10 +537,19 @@ tasks.matching {
 tasks.matching {
     it.name == "bundleClosedTest" || it.name == "assembleClosedTest"
 }.configureEach {
-    // Deliberately NOT verifyProductionAdConfig: the unsigned audit AAB must
-    // keep building with no repository secrets at all. Without identifiers this
-    // variant packages with ads off, which is honest; with them it ships the
-    // real ones. What must hold either way is that a placeholder App ID never
-    // travels with ads enabled, and that the two lists have not drifted.
+    // The unsigned audit AAB must keep building with no repository secrets at
+    // all, so verifyProductionAdConfig cannot be an unconditional dependency
+    // here: without identifiers this variant packages with ads off, which is
+    // honest, and demanding them would break the audit path.
+    //
+    // QA finding: that left a hole. A closed-test build made WITH real
+    // identifiers skipped the check entirely - including the clause that refuses
+    // to enable App Open unless the published privacy policy declares it, which
+    // is precisely the drift that check exists to catch, and closed test is
+    // where a tester would first meet it.
+    //
+    // So the dependency is conditional on the thing that distinguishes the two
+    // cases: whether identifiers were actually supplied.
     dependsOn(verifyAdsOffWithoutRealIds, verifyAdUnitCoverage, verifyRewardCopyParity)
+    if (adsConfigured) dependsOn(verifyProductionAdConfig)
 }

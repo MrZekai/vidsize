@@ -116,6 +116,10 @@
     <string name="notification_channel_name">Compression progress</string>
     <string name="notification_channel_description">Shows progress while a video is being compressed.</string>
     <string name="notification_title">Compressing your video</string>
+    <string name="notification_timeout_title">Compression stopped</string>
+    <string name="notification_timeout_body">Android stopped the job before it finished. Long videos can hit the system's daily limit for background work — try a shorter video or a smaller compression level.</string>
+    <string name="error_timeout_title">Compression stopped</string>
+    <string name="error_timeout_body">Android stopped the job before it finished. Long videos can hit the system's daily limit for background work — try a shorter video or a smaller compression level.</string>
     <string name="notification_done_title">Video ready</string>
     <string name="notification_done_body">Your compressed video was saved to Movies/Vidsize.</string>
     <string name="result_default_name">Compressed video</string>

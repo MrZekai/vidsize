@@ -22,6 +22,18 @@ object CompressionJobState {
          * help, but a smaller source or a different video will.
          */
         ENCODER_UNSUPPORTED,
+
+        /**
+         * Android stopped the foreground service before the job finished.
+         *
+         * From API 35 a mediaProcessing foreground service may run for at most
+         * six hours per day, after which the system calls `onTimeout` and the
+         * service must stop within seconds. Previously that path called
+         * `reset()`, so a user who had waited hours found the app back on Home
+         * with no output, no error and nothing to explain it - the worst
+         * possible ending for the longest possible job.
+         */
+        TIMEOUT,
         GENERIC,
     }
 

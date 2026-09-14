@@ -94,6 +94,10 @@
     <string name="notification_channel_name">कंप्रेशन प्रगति</string>
     <string name="notification_channel_description">वीडियो कंप्रेस होते समय प्रगति दिखाता है।</string>
     <string name="notification_title">आपका वीडियो कंप्रेस हो रहा है</string>
+    <string name="notification_timeout_title">कंप्रेशन रुक गया</string>
+    <string name="notification_timeout_body">Android ने काम पूरा होने से पहले रोक दिया। लंबे वीडियो सिस्टम की बैकग्राउंड कार्य की दैनिक सीमा तक पहुँच सकते हैं — छोटा वीडियो या कम कंप्रेशन स्तर आज़माएँ।</string>
+    <string name="error_timeout_title">कंप्रेशन रुक गया</string>
+    <string name="error_timeout_body">Android ने काम पूरा होने से पहले रोक दिया। लंबे वीडियो सिस्टम की बैकग्राउंड कार्य की दैनिक सीमा तक पहुँच सकते हैं — छोटा वीडियो या कम कंप्रेशन स्तर आज़माएँ।</string>
     <string name="result_default_name">कंप्रेस किया वीडियो</string>
     <string name="notification_done_title">वीडियो तैयार है</string>
     <string name="notification_done_body">आपका कंप्रेस किया गया वीडियो Movies/Vidsize में सेव हो गया है।</string>

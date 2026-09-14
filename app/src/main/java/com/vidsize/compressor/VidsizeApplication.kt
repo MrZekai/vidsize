@@ -13,6 +13,7 @@ import com.vidsize.compressor.ads.AppOpenAdManager
 import com.vidsize.compressor.ads.AppOpenAdPolicy
 import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.growth.ReviewPrompt
+import com.vidsize.compressor.media.CompressionEngine
 
 class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks,
     DefaultLifecycleObserver {
@@ -41,6 +42,11 @@ class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks
         AdDiagnostics.init(this)
         InterstitialAds.init(this)
         ReviewPrompt.init(this)
+
+        // Scratch files from a process that was killed mid-job. Safe here and
+        // only here: at process start no job of ours can be running, so every
+        // vidsize_* file in the cache is an orphan.
+        CompressionEngine.sweepOrphanedTempFiles(this)
 
         appOpenAdPolicy = AppOpenAdPolicy(this)
         appOpenAdManager = AppOpenAdManager(this, appOpenAdPolicy)

@@ -35,11 +35,31 @@ import com.vidsize.compressor.ui.screens.HomeScreen
  * below stay stateless and previewable.
  */
 @Composable
-fun VidsizeRoot(initialVideo: Uri?) {
+fun VidsizeRoot(
+    initialVideo: Uri?,
+    onVideoConsumed: () -> Unit = {},
+) {
     val context = LocalContext.current
     val history = rememberHistoryController()
 
     var selectedVideo by rememberSaveable { mutableStateOf(initialVideo?.toString()) }
+
+    // A SECOND share arriving while the app is already open.
+    //
+    // With launchMode="singleTask" that intent reaches onNewIntent rather than
+    // creating a new activity, so the only thing left to do is notice the new
+    // value here and switch to it. Without this the app would keep showing the
+    // first video and the share the user just performed would appear to have
+    // done nothing.
+    //
+    // Keyed on the incoming value, so re-composition for any other reason does
+    // not drag the user back to a video they already navigated away from; the
+    // activity clears its state through onVideoConsumed once it is taken.
+    LaunchedEffect(initialVideo) {
+        val incoming = initialVideo?.toString() ?: return@LaunchedEffect
+        if (incoming != selectedVideo) selectedVideo = incoming
+        onVideoConsumed()
+    }
 
     val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         if (uri != null) selectedVideo = uri.toString()

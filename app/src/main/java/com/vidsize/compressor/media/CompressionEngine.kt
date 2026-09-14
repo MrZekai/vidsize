@@ -39,6 +39,30 @@ import kotlin.coroutines.resumeWithException
 @OptIn(UnstableApi::class)
 object CompressionEngine {
 
+    /** Prefix every scratch file shares, so a sweep can recognise them. */
+    private const val TEMP_PREFIX = "vidsize_"
+
+    /**
+     * Deletes scratch files a previous process left in the cache.
+     *
+     * QA finding: the temp file is removed in a `finally`, which covers success,
+     * failure and cancellation but not the one case that matters most for a job
+     * running several minutes in the background - the process being killed. Each
+     * orphan is the size of a video, and StorageGuard refuses to start a new job
+     * when free space is low, so a few killed jobs could leave the app
+     * permanently reporting "not enough space" on a device with plenty of it.
+     *
+     * Called once at startup, when by definition no job of ours is running, so
+     * any `vidsize_*` file present is from a process that no longer exists.
+     */
+    fun sweepOrphanedTempFiles(context: Context) {
+        runCatching {
+            context.cacheDir.listFiles { file ->
+                file.isFile && file.name.startsWith(TEMP_PREFIX)
+            }?.forEach { runCatching { it.delete() } }
+        }
+    }
+
     private const val PROGRESS_POLL_MS = 300L
     private const val PENDING_EXPIRY_MILLIS = 24L * 60L * 60L * 1000L
     private const val COPY_BUFFER_BYTES = 256 * 1024
@@ -68,7 +92,7 @@ object CompressionEngine {
         if (!storage.hasRoom) throw OutOfSpaceException()
 
         val started = System.currentTimeMillis()
-        val temp = File(context.cacheDir, "vidsize_${System.nanoTime()}.mp4")
+        val temp = File(context.cacheDir, "$TEMP_PREFIX${System.nanoTime()}.mp4")
 
         try {
             val export = runExportWithFallbacks(

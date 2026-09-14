@@ -94,6 +94,10 @@
     <string name="notification_channel_name">Sıkıştırma ilerlemesi</string>
     <string name="notification_channel_description">Video sıkıştırılırken ilerlemeyi gösterir.</string>
     <string name="notification_title">Videon sıkıştırılıyor</string>
+    <string name="notification_timeout_title">Sıkıştırma durdu</string>
+    <string name="notification_timeout_body">Android işi bitmeden durdurdu. Uzun videolar sistemin arka plan çalışma sınırına takılabilir — daha kısa bir video ya da daha küçük bir sıkıştırma seviyesi dene.</string>
+    <string name="error_timeout_title">Sıkıştırma durdu</string>
+    <string name="error_timeout_body">Android işi bitmeden durdurdu. Uzun videolar sistemin arka plan çalışma sınırına takılabilir — daha kısa bir video ya da daha küçük bir sıkıştırma seviyesi dene.</string>
     <string name="result_default_name">Sıkıştırılmış video</string>
     <string name="notification_done_title">Video hazır</string>
     <string name="notification_done_body">Sıkıştırılmış videon Movies/Vidsize klasörüne kaydedildi.</string>

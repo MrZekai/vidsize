@@ -93,6 +93,10 @@
     <string name="notification_channel_name">Progres kompresi</string>
     <string name="notification_channel_description">Menampilkan progres saat video sedang dikompres.</string>
     <string name="notification_title">Mengompres videomu</string>
+    <string name="notification_timeout_title">Kompresi dihentikan</string>
+    <string name="notification_timeout_body">Android menghentikan proses sebelum selesai. Video panjang bisa mencapai batas harian sistem untuk kerja latar belakang — coba video lebih pendek atau tingkat kompresi lebih kecil.</string>
+    <string name="error_timeout_title">Kompresi dihentikan</string>
+    <string name="error_timeout_body">Android menghentikan proses sebelum selesai. Video panjang bisa mencapai batas harian sistem untuk kerja latar belakang — coba video lebih pendek atau tingkat kompresi lebih kecil.</string>
     <string name="result_default_name">Video terkompresi</string>
     <string name="notification_done_title">Video siap</string>
     <string name="notification_done_body">Video terkompresimu disimpan di Movies/Vidsize.</string>

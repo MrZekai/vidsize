@@ -98,6 +98,10 @@
     <string name="notification_channel_name">تقدّم الضغط</string>
     <string name="notification_channel_description">يعرض التقدّم أثناء ضغط الفيديو.</string>
     <string name="notification_title">جارٍ ضغط الفيديو</string>
+    <string name="notification_timeout_title">توقف الضغط</string>
+    <string name="notification_timeout_body">أوقف Android المهمة قبل اكتمالها. قد تبلغ مقاطع الفيديو الطويلة الحدَّ اليومي للنظام للعمل في الخلفية — جرّب مقطعًا أقصر أو مستوى ضغط أقل.</string>
+    <string name="error_timeout_title">توقف الضغط</string>
+    <string name="error_timeout_body">أوقف Android المهمة قبل اكتمالها. قد تبلغ مقاطع الفيديو الطويلة الحدَّ اليومي للنظام للعمل في الخلفية — جرّب مقطعًا أقصر أو مستوى ضغط أقل.</string>
     <string name="result_default_name">فيديو مضغوط</string>
     <string name="notification_done_title">الفيديو جاهز</string>
     <string name="notification_done_body">تم حفظ الفيديو المضغوط في Movies/Vidsize.</string>

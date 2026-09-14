@@ -135,9 +135,25 @@ fun CompressionScreen(
 
     // Asked for at the moment of first use rather than at launch. A denial is
     // not fatal: the service still runs, it just cannot show progress.
+    //
+    // QA finding: the old code launched the dialog and started the service in
+    // the same frame, so startForeground posted its notification while the
+    // permission dialog was still up. On a denial-then-grant the channel was
+    // already created without permission and the user watched a blank overlay
+    // until the first percentage arrived. The service now starts from the
+    // permission RESULT - granted or denied, but never concurrently with the
+    // question.
+    var pendingStart by remember(videoUri) { mutableStateOf(false) }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { }
+    ) {
+        if (pendingStart) {
+            pendingStart = false
+            starting = true
+            InterstitialAds.preload(context)
+            CompressionService.start(context, videoUri, preset)
+        }
+    }
 
     // Pre-flight: what every preset is likely to produce, and whether the device
     // has room for the selected one.
@@ -205,7 +221,10 @@ fun CompressionScreen(
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
+            // Defer the start to the permission callback rather than racing it.
+            pendingStart = true
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
         }
         starting = true
         InterstitialAds.preload(context)
@@ -505,14 +524,19 @@ private fun FailureDialog(
         CompressionJobState.FailureReason.INVALID_VIDEO -> R.string.error_invalid_video
         CompressionJobState.FailureReason.NO_SAVINGS -> R.string.error_no_savings
         CompressionJobState.FailureReason.ENCODER_UNSUPPORTED -> R.string.error_encoder_unsupported
+        CompressionJobState.FailureReason.TIMEOUT -> R.string.error_timeout_body
         CompressionJobState.FailureReason.GENERIC -> R.string.error_generic
     }
 
     // Picking another video is the useful next step for the two reasons where
     // retrying this one cannot succeed.
+    // Picking another video is also the useful step after a timeout: this one
+    // hit the platform's daily background limit, so retrying it unchanged will
+    // hit the same wall.
     val offerAnotherVideo = failure.reason == CompressionJobState.FailureReason.INVALID_VIDEO ||
         failure.reason == CompressionJobState.FailureReason.ENCODER_UNSUPPORTED ||
-        failure.reason == CompressionJobState.FailureReason.NO_SAVINGS
+        failure.reason == CompressionJobState.FailureReason.NO_SAVINGS ||
+        failure.reason == CompressionJobState.FailureReason.TIMEOUT
 
     AlertDialog(
         onDismissRequest = onDismiss,

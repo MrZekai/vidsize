@@ -2,6 +2,7 @@ package com.vidsize.compressor.ads
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.SystemClock
 
 /**
  * The one and only pacing rule that lives in Vidsize's code: two full-screen ads
@@ -61,23 +62,29 @@ object AdPacing {
      * an ad that failed to present must not consume the next minute of
      * eligibility.
      */
-    fun markFullScreenShown(nowMillis: Long = System.currentTimeMillis()) {
+    /** Monotonic, user-proof, and the only clock this file reads. */
+    fun now(): Long = SystemClock.elapsedRealtime()
+
+    fun markFullScreenShown(nowMillis: Long = now()) {
         prefs?.edit()?.putLong(KEY_LAST_FULL_SCREEN, nowMillis)?.apply()
     }
 
     fun lastFullScreenMillis(): Long = prefs?.getLong(KEY_LAST_FULL_SCREEN, 0L) ?: 0L
 
-    fun millisSinceLastFullScreen(nowMillis: Long = System.currentTimeMillis()): Long {
+    fun millisSinceLastFullScreen(nowMillis: Long = now()): Long {
         val last = lastFullScreenMillis()
         if (last <= 0L) return Long.MAX_VALUE
-        return (nowMillis - last).coerceAtLeast(0L)
+        // A stored value ahead of the current uptime is from a previous boot.
+        // Treat it as "nothing shown this boot" rather than as a future event.
+        if (last > nowMillis) return Long.MAX_VALUE
+        return nowMillis - last
     }
 
-    fun canShowFullScreen(nowMillis: Long = System.currentTimeMillis()): Boolean =
+    fun canShowFullScreen(nowMillis: Long = now()): Boolean =
         millisSinceLastFullScreen(nowMillis) >= FULL_SCREEN_GAP_MILLIS
 
     /** Seconds still to wait, for the diagnostics screen's verdict line. */
-    fun secondsUntilAllowed(nowMillis: Long = System.currentTimeMillis()): Long {
+    fun secondsUntilAllowed(nowMillis: Long = now()): Long {
         val elapsed = millisSinceLastFullScreen(nowMillis)
         if (elapsed >= FULL_SCREEN_GAP_MILLIS) return 0L
         return (FULL_SCREEN_GAP_MILLIS - elapsed + 999L) / 1000L

@@ -61,11 +61,22 @@ object ConsentManager {
             },
         )
 
-        // Returning users can reuse a valid stored consent state immediately.
-        syncState(activity, consentInformation)
-        if (consentInformation.canRequestAds()) {
-            consentResolved = true
-        }
+        // v0.9.2 - QA finding: the synchronous syncState() that used to sit here
+        // has been removed.
+        //
+        // It read the cached consent state on the same frame the async update
+        // was requested, and syncState() starts the Mobile Ads SDK whenever
+        // canRequestAds() is true. So on a warm start the SDK could initialise
+        // *before* loadAndShowConsentFormIfRequired had a chance to decide that
+        // a form was still due - an expired consent, a changed vendor list, a
+        // user who moved into the EEA. And because startAdsSdk guards on a
+        // compareAndSet, that start is not revocable: once it has happened,
+        // refusing consent in the form seconds later cannot put the SDK back.
+        //
+        // The cost of removing it is that a returning user's SDK starts one
+        // callback later, which is milliseconds and delays nothing the user can
+        // see: every ad surface already renders nothing until adsAllowed is
+        // true. Consent decides, then the SDK starts. In that order, always.
     }
 
     fun showPrivacyOptions(activity: Activity, onDismissed: () -> Unit = {}) {

@@ -151,8 +151,44 @@ class CompressionService : Service() {
     }
 
     private fun handleTimeout() {
-        // The system gives us seconds, not minutes. Stop immediately.
-        cancelJob()
+        // The system gives us seconds, not minutes, so the job stops first and
+        // everything else happens after.
+        //
+        // QA finding: this used to call cancelJob(), which resets the state to
+        // Idle - indistinguishable from "nothing ever happened". A user who had
+        // waited hours was returned to Home with no output and no explanation.
+        // A six-hour job that the platform killed is a failure and has to be
+        // reported as one, with a reason of its own so the dialog can say what
+        // actually happened instead of offering a generic retry.
+        job?.cancel()
+        CompressionJobState.markFailed(CompressionJobState.FailureReason.TIMEOUT)
+        notifyTimeout()
+        stopSelfSafely(latestStartId)
+    }
+
+    /**
+     * A notification, because by definition nobody is looking at the screen.
+     *
+     * The six-hour limit is reached by jobs left running in the background; the
+     * in-app dialog would go unseen for hours, and by then the user has long
+     * concluded the app simply lost their video.
+     */
+    private fun notifyTimeout() {
+        runCatching {
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(getString(R.string.notification_timeout_title))
+                .setContentText(getString(R.string.notification_timeout_body))
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText(getString(R.string.notification_timeout_body)),
+                )
+                .setAutoCancel(true)
+                .setOngoing(false)
+                .build()
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            manager?.notify(TIMEOUT_NOTIFICATION_ID, notification)
+        }
     }
 
     private fun cancelJob() {
@@ -299,6 +335,7 @@ class CompressionService : Service() {
         private const val CHANNEL_ID = "vidsize_compression"
         private const val NOTIFICATION_ID = 1001
         private const val COMPLETION_NOTIFICATION_ID = 1002
+        private const val TIMEOUT_NOTIFICATION_ID = 1003
         private const val ACTION_CANCEL = "com.vidsize.compressor.CANCEL"
         private const val EXTRA_URI = "uri"
         private const val EXTRA_PRESET = "preset"
