@@ -5,6 +5,7 @@
     <string name="hero_eyebrow">ضاغط الفيديو</string>
     <string name="hero_headline">اجعل الفيديو أصغر.</string>
     <string name="hero_body">قلّل حجم الملف مع الحفاظ على الجودة التي تحتاجها.</string>
+    <string name="hero_share_hint">‏نصيحة: شارك أي فيديو من المعرض إلى Vidsize مباشرةً — لا حاجة لفتح التطبيق أولًا.</string>
     <string name="cta_select_video">اختر فيديو</string>
     <string name="trust_on_device">على الجهاز</string>
     <string name="trust_fast">سريع</string>

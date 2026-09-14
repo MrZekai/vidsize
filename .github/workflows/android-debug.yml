@@ -61,8 +61,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 18' app/build.gradle.kts
-          grep -q 'versionName = "0.9.0"' app/build.gradle.kts
+          grep -q 'versionCode = 19' app/build.gradle.kts
+          grep -q 'versionName = "0.9.1"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -125,8 +125,12 @@ jobs:
           grep -q 'AdSlots.requestable' $UI/components/HomeBannerAd.kt
           grep -q 'AdSlots.requestable' $UI/components/NativeAdCard.kt
           grep -q 'AdSlots.requestable' $ADS/NativeAdLoader.kt
-          grep -q 'AdSlots.bannerVisible' $UI/screens/HomeScreen.kt
+          # v0.9.1: Home no longer carries the anchored banner - it keeps the
+          # rewarded offer and the in-content native. The progress panel keeps
+          # its banner; that surface is the longest-dwell one in the app.
+          ! grep -q 'HomeBannerAd' $UI/screens/HomeScreen.kt
           grep -q 'AdSlots.bannerVisible' $UI/screens/ProcessingOverlay.kt
+          grep -q 'CompressionBannerAd' $UI/screens/ProcessingOverlay.kt
           ! grep -q 'ConsentManager' $UI/components/HomeBannerAd.kt
           ! grep -q 'ConsentManager' $UI/screens/ProcessingOverlay.kt
 
@@ -166,6 +170,27 @@ jobs:
           grep -q 'Verdict.RESULT_WAITING' $ADS/AdGate.kt
           grep -q 'requireIdleJob = true' $ADS/AppOpenAdPolicy.kt
 
+          # --- Gate 7b: a system back gesture never answers with an ad -------
+          # The in-app arrow carries the interstitial; the platform gesture must
+          # not. Same destination, two callbacks, and the gesture's one must stay
+          # free of any show call.
+          grep -q 'BackHandler { onSystemBack() }' $RESULT
+          grep -Pzoq 'onSystemBack = \{ CompressionJobState\.reset\(\) \},' $COMPRESS
+          ! grep -Pzoq 'onSystemBack[\s\S]{0,120}?InterstitialAds' $COMPRESS
+
+          # --- Gate 7c: growth surfaces are wired --------------------------
+          # The share-sheet path has existed since v0.8.x and was never
+          # mentioned in the UI. A caption is the whole retention story here.
+          grep -q 'hero_share_hint' $UI/screens/HomeScreen.kt
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="hero_share_hint"' "$f" || { echo "$f lacks hero_share_hint" >&2; exit 1; }
+          done
+          # Play review asked at the result, never on the exit the ad owns.
+          test -f app/src/main/java/com/vidsize/compressor/growth/ReviewPrompt.kt
+          grep -q 'ReviewPrompt.maybeAsk' $RESULT
+          ! grep -q 'ReviewPrompt' $COMPRESS
+          grep -q 'review-ktx' app/build.gradle.kts
+
           # --- Gate 8: the share-sheet entry point still suppresses app open ---
           grep -q 'appOpenAdManager.suppressNextForeground()' $MAIN
           grep -q 'InterstitialAds.showPendingIfAny(this)' $MAIN
@@ -193,11 +218,18 @@ jobs:
           # sample publisher and the all-zero placeholder may appear in tracked
           # source. A real one leaking in would silently arm the SDK for anyone
           # who builds the repo.
-          leaked="$(grep -rn 'ca-app-pub-[0-9]' app/src docs app/build.gradle.kts \
-                      --include='*.kt' --include='*.xml' --include='*.html' --include='*.kts' \
-                    | grep -v '3940256099942544' | grep -v '0000000000000000' || true)"
+          # Allowed publishers, and why each is safe:
+          #   3940256099942544 - Google's public sample publisher
+          #   0000000000000000 - the all-zero placeholder
+          #   1111111111111111 - the repeated-digit dummy this workflow's own
+          #                      negative tests pass to bundleRelease
+          # Anything else is a live publisher and must never be committed.
+          ALLOWED_PUBS='3940256099942544|0000000000000000|1111111111111111'
+          leaked="$(grep -rhoE 'ca-app-pub-[0-9]{16}' \
+                      app/src docs app/build.gradle.kts .github 2>/dev/null \
+                    | sort -u | grep -vE "ca-app-pub-($ALLOWED_PUBS)" || true)"
           if [ -n "$leaked" ]; then
-            echo "Real AdMob identifier committed to source:" >&2
+            echo "Live AdMob publisher committed to source:" >&2
             echo "$leaked" >&2
             exit 1
           fi
@@ -517,7 +549,7 @@ jobs:
           has "$NATIVE" 'AdSlots.requestable'
           has "$BANNER" 'AdSlots.requestable'
           has "$RESULT" 'AdSlots.requestable'
-          has "$HOME"   'AdSlots.bannerVisible'
+          has "$HOME"   'AdSlots.requestable'
           # ...and the definitions themselves still start from the build switch.
           grep -Fq 'val enabled: Boolean get() = BuildConfig.ENABLE_ADS' "$SLOTS"
           grep -Fq 'enabled && ConsentManager.adsAllowed' "$SLOTS"

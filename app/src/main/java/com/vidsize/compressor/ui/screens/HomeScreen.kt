@@ -47,7 +47,6 @@ import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
 import com.vidsize.compressor.ui.components.HairLine
-import com.vidsize.compressor.ui.components.HomeBannerAd
 import com.vidsize.compressor.ui.components.NativeAdCard
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
@@ -204,15 +203,15 @@ fun HomeScreen(
         // The divider exists to separate the creative from the content above it.
         // With ads off there is no creative, so a dangling rule at the bottom of
         // the screen would be a decoration with no meaning.
-        // One predicate for the creative and its chrome. Previously this read
-        // AdSlots.enabled while the banner itself also checked consent, so a
-        // refusal left a hairline with nothing under it at the bottom of the
-        // screen. AdSlots.bannerVisible now also covers the rewarded ad-free
-        // window, so the divider leaves with the banner it exists to separate.
-        if (AdSlots.bannerVisible) {
-            HairLine()
-            HomeBannerAd()
-        }
+        // v0.9.1: the anchored banner is gone from Home.
+        //
+        // Home now carries the rewarded offer and an in-content native at the
+        // end of the scroll. A third ad surface on the app's front door - a
+        // screen whose entire job is "tap Select Video" and where the median
+        // visit is a few seconds - was density without a matching return. The
+        // banner survives where it actually earns: the compression screen, and
+        // above all the progress panel, which is the longest-dwell surface in
+        // the app and refreshes on a 60-second cycle for the whole job.
     }
 
     if (showSettings) {
@@ -340,6 +339,25 @@ private fun HeroPanel(onSelectVideo: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = R.drawable.ic_video_file,
             trailingIcon = R.drawable.ic_chevron_right,
+        )
+
+        // The share-sheet entry point, said out loud.
+        //
+        // The manifest has declared an ACTION_SEND filter for video/* since
+        // v0.8.x: a user can share a video into Vidsize straight from Gallery
+        // and never open the app at all. Nothing in the UI has ever mentioned
+        // it, so effectively nobody knows.
+        //
+        // For a tool people reach for occasionally, that path is the whole
+        // retention story - it removes the step where the user has to remember
+        // this app exists. One caption is the cheapest feature in the product.
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            text = stringResource(R.string.hero_share_hint),
+            style = VidsizeType.caption,
+            color = VidsizeColor.Muted,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

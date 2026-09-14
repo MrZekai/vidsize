@@ -12,6 +12,7 @@ import com.vidsize.compressor.ads.AdPacing
 import com.vidsize.compressor.ads.AppOpenAdManager
 import com.vidsize.compressor.ads.AppOpenAdPolicy
 import com.vidsize.compressor.ads.InterstitialAds
+import com.vidsize.compressor.growth.ReviewPrompt
 
 class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks,
     DefaultLifecycleObserver {
@@ -39,6 +40,7 @@ class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks
         AdFreeWindow.init(this)
         AdDiagnostics.init(this)
         InterstitialAds.init(this)
+        ReviewPrompt.init(this)
 
         appOpenAdPolicy = AppOpenAdPolicy(this)
         appOpenAdManager = AppOpenAdManager(this, appOpenAdPolicy)

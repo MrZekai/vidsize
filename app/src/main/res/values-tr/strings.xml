@@ -5,6 +5,7 @@
     <string name="hero_eyebrow">VİDEO SIKIŞTIRICI</string>
     <string name="hero_headline">Videonu küçült.</string>
     <string name="hero_body">İhtiyacın olan kaliteyi koruyarak dosya boyutunu düşür.</string>
+    <string name="hero_share_hint">İpucu: Galeri’den bir videoyu paylaşıp Vidsize’a gönderebilirsin — uygulamayı açmana gerek yok.</string>
     <string name="cta_select_video">VİDEO SEÇ</string>
     <string name="trust_on_device">Cihazda</string>
     <string name="trust_fast">Hızlı</string>

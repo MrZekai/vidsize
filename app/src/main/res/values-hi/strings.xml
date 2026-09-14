@@ -5,6 +5,7 @@
     <string name="hero_eyebrow">वीडियो कंप्रेसर</string>
     <string name="hero_headline">अपना वीडियो छोटा करें।</string>
     <string name="hero_body">ज़रूरी क्वालिटी बनाए रखते हुए फ़ाइल का साइज़ कम करें।</string>
+    <string name="hero_share_hint">सुझाव: गैलरी से कोई वीडियो सीधे Vidsize पर शेयर करें — ऐप पहले खोलने की ज़रूरत नहीं।</string>
     <string name="cta_select_video">वीडियो चुनें</string>
     <string name="trust_on_device">फ़ोन पर ही</string>
     <string name="trust_fast">तेज़</string>

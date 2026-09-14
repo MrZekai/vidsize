@@ -15,6 +15,11 @@
  * retyping seven `-P` flags on every local build. It is gitignored.
  */
 val adsPropertiesFile = rootProject.file("ads.properties")
+
+// ads.properties, java.util.Properties ile DEGIL elle ayristirilir: Gradle
+// Kotlin DSL'inde `java` bir eklenti erisimcisi tarafindan golgelenir ve
+// `java.util` "Unresolved reference 'util'" verir. Asagisi tamamen Kotlin
+// stdlib - golgelenecek nitelikli paket adi ve kaybolacak import yok.
 val adsProperties: Map<String, String> = if (!adsPropertiesFile.isFile) emptyMap() else adsPropertiesFile.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") && it.contains("=") }.associate { it.substringBefore("=").trim() to it.substringAfter("=").trim() }
 
 fun adId(name: String): String =
@@ -149,8 +154,8 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.9.0"
+        versionCode = 19
+        versionName = "0.9.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -330,6 +335,10 @@ dependencies {
     implementation("androidx.media3:media3-common:1.11.0")
     implementation("com.google.android.gms:play-services-ads:25.4.0")
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")
+    // Play In-App Review. Rating volume is the biggest Play ranking lever after
+    // the store listing itself, and a compressor's best moment to ask is the
+    // one where the user is looking at "15% smaller" - see ReviewPrompt.
+    implementation("com.google.android.play:review-ktx:2.0.2")
     testImplementation("junit:junit:4.13.2")
     debugImplementation("androidx.compose.ui:ui-tooling:1.11.4")
 }

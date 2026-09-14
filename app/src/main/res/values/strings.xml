@@ -12,6 +12,7 @@
     <string name="hero_eyebrow">VIDEO COMPRESSOR</string>
     <string name="hero_headline">Make your video smaller.</string>
     <string name="hero_body">Reduce file size while keeping the quality you need.</string>
+    <string name="hero_share_hint">Tip: share a video into Vidsize from Gallery — no need to open the app first.</string>
     <string name="cta_select_video">SELECT VIDEO</string>
     <string name="trust_on_device">On-device</string>
     <string name="trust_fast">Fast</string>

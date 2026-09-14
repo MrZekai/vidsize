@@ -40,7 +40,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
+import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.deferInterstitialOnReturn
+import com.vidsize.compressor.ads.findHostActivity
+import com.vidsize.compressor.growth.ReviewPrompt
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
 import com.vidsize.compressor.ui.components.AdFreeStrip
@@ -67,6 +70,14 @@ import kotlinx.coroutines.delay
  * who deliberately reaches for SHARE never notices it.
  */
 private const val ARRIVAL_GUARD_MS = 450L
+
+/**
+ * How long the result screen settles before a Play review is requested.
+ *
+ * Long enough that the dialog reads as a question rather than a glitch, short
+ * enough that the user is still on the screen whose result prompted it.
+ */
+private const val REVIEW_PROMPT_DELAY_MS = 1_800L
 
 /**
  * Result page.
@@ -122,6 +133,7 @@ private const val ARRIVAL_GUARD_MS = 450L
 fun ResultScreen(
     result: CompressionResult,
     onBack: () -> Unit,
+    onSystemBack: () -> Unit,
     onCompressAnother: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -148,7 +160,39 @@ fun ResultScreen(
         interactive = true
     }
 
-    BackHandler { onBack() }
+    // The system back gesture and the in-app arrow do the same navigation but
+    // are NOT the same event.
+    //
+    // The arrow is a control this app drew: tapping it is a deliberate in-app
+    // transition out of a finished job, and it carries the interstitial like
+    // every other such transition.
+    //
+    // The system gesture is part of Android, not part of Vidsize. Answering it
+    // with a full-screen ad is the pattern Play's Better Ads Experiences
+    // describes as interfering with navigation, and it is the one placement in
+    // this model with a bad risk-to-revenue ratio: the users who leave a result
+    // by swiping back rather than tapping an action are a small minority, and
+    // every one of them would meet an ad in response to a system gesture.
+    //
+    // Same destination, different callback, deliberately.
+    BackHandler { onSystemBack() }
+
+    // Ask for a Play review at the peak of the experience, not on the way out.
+    //
+    // The user is looking at a measured result they waited minutes for. That is
+    // the moment a person feels like saying something nice, and it is also the
+    // moment that is NOT contested by anything else: the interstitial fires on
+    // exit, so the two never race for the same instant.
+    //
+    // The delay lets the screen settle first - a system dialog that arrives in
+    // the same frame as the page reads as a glitch rather than a question. It
+    // reuses the arrival guard the screen already waits out for BUG-08.
+    LaunchedEffect(result.outputUri) {
+        delay(REVIEW_PROMPT_DELAY_MS)
+        context.findHostActivity()?.let { activity ->
+            ReviewPrompt.maybeAsk(activity, AdDiagnostics.compressionCount())
+        }
+    }
 
     Column(
         modifier = Modifier

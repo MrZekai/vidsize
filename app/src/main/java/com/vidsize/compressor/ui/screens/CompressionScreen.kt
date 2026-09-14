@@ -231,11 +231,8 @@ fun CompressionScreen(
     if (finished != null) {
         ResultScreen(
             result = finished,
-            // Back from the result returns to the preset picker for the SAME
-            // video, which is still a completed job and still a real transition,
-            // so it carries an ad like the other exits. That is what makes
-            // "an interstitial after every compression" actually true rather
-            // than true only for the paths a user happens to take.
+            // The in-app arrow: a deliberate transition out of a finished
+            // job, so it carries the ad like every other such transition.
             //
             // reset() first: AdGate refuses a full-screen ad while the job is
             // non-idle, so the reverse order would be declined every time.
@@ -243,6 +240,10 @@ fun CompressionScreen(
                 CompressionJobState.reset()
                 context.findHostActivity()?.let(InterstitialAds::showNow)
             },
+            // The system back gesture: same navigation, no ad. Answering a
+            // platform gesture with a full-screen ad is the one placement in
+            // this model whose risk outweighs its return.
+            onSystemBack = { CompressionJobState.reset() },
             onCompressAnother = {
                 // The immediate half of the deferred pattern: this is a plain
                 // in-app transition back to Home with the work finished, which

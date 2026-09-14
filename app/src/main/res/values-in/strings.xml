@@ -5,6 +5,7 @@
     <string name="hero_eyebrow">KOMPRESOR VIDEO</string>
     <string name="hero_headline">Perkecil ukuran videomu.</string>
     <string name="hero_body">Kurangi ukuran file tanpa kehilangan kualitas yang kamu butuhkan.</string>
+    <string name="hero_share_hint">Tips: bagikan video dari Galeri ke Vidsize — tidak perlu membuka aplikasi dulu.</string>
     <string name="cta_select_video">PILIH VIDEO</string>
     <string name="trust_on_device">Di perangkat</string>
     <string name="trust_fast">Cepat</string>
