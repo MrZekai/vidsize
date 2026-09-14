@@ -14,7 +14,7 @@ import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 
 /**
  * The rewarded ad: the user watches a short video, and Vidsize goes quiet for
- * ten minutes ([AdFreeWindow]).
+ * one export without the Vidsize mark ([WatermarkOffer]).
  *
  * ## Why this unit matters more than its impression count suggests
  *
@@ -103,11 +103,11 @@ object RewardedAds {
     }
 
     /**
-     * Presents the ad. The window is granted only from the SDK's own reward
+     * Presents the ad. The grant is made only from the SDK's own reward
      * callback - never optimistically, and never on dismissal.
      *
-     * A user who closes the ad early gets no window and no penalty of any kind:
-     * the strip simply returns to its offer state and they may try again.
+     * A user who closes the ad early gets no grant and no penalty of any kind:
+     * their file keeps the mark, the offer returns, and they may try again.
      */
     fun show(activity: Activity, onRewardGranted: () -> Unit) {
         val creative = ad ?: run {
@@ -121,7 +121,7 @@ object RewardedAds {
             override fun onAdShowedFullScreenContent() {
                 // A rewarded ad is still a full-screen ad. Marking the shared
                 // clock keeps the 60-second promise honest for the case where
-                // the user dismisses early and earns no window - otherwise an
+                // the user dismisses early and earns nothing - otherwise an
                 // interstitial could land immediately behind it.
                 AdPacing.markFullScreenShown()
             }
@@ -142,10 +142,8 @@ object RewardedAds {
         }
 
         creative.show(activity) {
-            // Earned. This is the only path that opens the window.
-            AdFreeWindow.grant()
-            // Anything already in hand for a suppressed format is now stale.
-            InterstitialAds.clearPending()
+            // Earned. This is the only path that grants a mark-free export.
+            WatermarkOffer.grant()
             onRewardGranted()
         }
     }

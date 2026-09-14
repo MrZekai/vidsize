@@ -83,8 +83,32 @@ a promise the app made to the user in words:
 1. **60 seconds between full-screen ads.** `AdPacing.FULL_SCREEN_GAP_MILLIS`.
    Shared by the app-open ad and the interstitial — one timestamp, not two, or
    the user meets both back to back while each format believes it behaved.
-2. **The rewarded ad-free window: 10 minutes, every format.** `AdFreeWindow`.
-   Enforced in exactly one place, `AdSlots.requestable`.
+That is now the only one. It used to be joined by a ten-minute rewarded ad-free
+window; v0.9.4 removed it.
+
+### Why the ad-free window was replaced (v0.9.4)
+
+The reward was silence: watch one rewarded ad, and no banner, native,
+interstitial or app-open ad could be requested for ten minutes. Two problems,
+one of them structural.
+
+It was **revenue-negative**. The app traded one rewarded impression for ten
+minutes of empty inventory. No other reward in the portfolio suppresses the
+portfolio.
+
+And it sold something the user was not feeling. At the moment of the offer the
+ads are behind them; "ten quiet minutes" is an abstraction about the future.
+
+The reward is now **one export without the Vidsize mark** (`WatermarkOffer`),
+offered on the result screen, where the thing it removes is visible on the file
+the user is about to send someone. It suppresses nothing, and it recurs on every
+export instead of suppressing the next ten minutes of them.
+
+The price is a second encode, from the **original** source — the mark is burned
+into the pixels of the first output, and re-encoding an encode compounds the
+loss for nothing. `CompressionService.start(replacing = ...)` deletes the marked
+copy only after the clean one is published, so a failed second pass leaves the
+user with the file they already had.
 
 ### What was deleted, and why
 

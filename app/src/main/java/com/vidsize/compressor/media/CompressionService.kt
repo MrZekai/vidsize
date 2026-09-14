@@ -76,6 +76,12 @@ class CompressionService : Service() {
         val uri = intent?.getStringExtra(EXTRA_URI)?.let(Uri::parse)
         val preset = intent?.getStringExtra(EXTRA_PRESET)
             ?.let { name -> runCatching { CompressionPreset.valueOf(name) }.getOrNull() }
+        // Marked unless the caller says otherwise: a missing extra must never
+        // silently produce a free unmarked export.
+        val watermark = intent?.getBooleanExtra(EXTRA_WATERMARK, true) ?: true
+        // Set only by the watermark-free re-export, and only ever to the file
+        // that re-export replaces.
+        val replacing = intent?.getStringExtra(EXTRA_REPLACE_URI)?.let(Uri::parse)
 
         if (uri == null || preset == null) {
             stopSelf(startId)
@@ -101,12 +107,17 @@ class CompressionService : Service() {
                     context = applicationContext,
                     input = uri,
                     preset = preset,
+                    watermark = watermark,
                     onProgress = { value ->
                         CompressionJobState.markProgress(value)
                         updateNotification((value.coerceIn(0f, 1f) * 100f).roundToInt())
                     },
                 )
             }.onSuccess { result ->
+                // Order matters: the replaced file is removed only after the
+                // new one exists. A delete before the export would leave the
+                // user with nothing if the second pass failed.
+                if (replacing != null) deleteReplaced(replacing)
                 recordHistory(result)
                 CompressionJobState.markDone(result)
                 showCompletionNotification()
@@ -198,6 +209,19 @@ class CompressionService : Service() {
     }
 
     // -- notification ---------------------------------------------------------
+
+    /**
+     * Removes the file the watermark-free export just superseded.
+     *
+     * Vidsize created this row, so it owns it and the delete needs no extra
+     * permission. Failure is swallowed on purpose: the user now has the file
+     * they asked for, and an undeleted predecessor is a tidiness problem, not a
+     * reason to report the successful export as failed. The Home list prunes
+     * rows whose files are gone on its next refresh either way.
+     */
+    private fun deleteReplaced(uri: Uri) {
+        runCatching { contentResolver.delete(uri, null, null) }
+    }
 
     private fun startForegroundSafely(notification: Notification) {
         // FOREGROUND_SERVICE_TYPE_MANIFEST is available from API 29. The
@@ -339,12 +363,32 @@ class CompressionService : Service() {
         private const val ACTION_CANCEL = "com.vidsize.compressor.CANCEL"
         private const val EXTRA_URI = "uri"
         private const val EXTRA_PRESET = "preset"
+        private const val EXTRA_WATERMARK = "watermark"
+        private const val EXTRA_REPLACE_URI = "replace_uri"
 
-        /** Starts a compression. Safe to call from the UI thread. */
-        fun start(context: Context, uri: Uri, preset: CompressionPreset) {
+        /**
+         * Starts a compression. Safe to call from the UI thread.
+         *
+         * @param watermark false only when the user has earned a mark-free
+         *        export. The default is the paying-nothing case, so a caller
+         *        that forgets the argument produces a marked file rather than
+         *        giving the reward away.
+         * @param replacing the previous, marked output to delete once the new
+         *        one is published. Passing it is what makes the re-export a
+         *        REPLACEMENT rather than a second copy in the user's gallery.
+         */
+        fun start(
+            context: Context,
+            uri: Uri,
+            preset: CompressionPreset,
+            watermark: Boolean = true,
+            replacing: Uri? = null,
+        ) {
             val intent = Intent(context, CompressionService::class.java)
                 .putExtra(EXTRA_URI, uri.toString())
                 .putExtra(EXTRA_PRESET, preset.name)
+                .putExtra(EXTRA_WATERMARK, watermark)
+            if (replacing != null) intent.putExtra(EXTRA_REPLACE_URI, replacing.toString())
             ContextCompat.startForegroundService(context, intent)
         }
 

@@ -154,8 +154,8 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.9.3"
+        versionCode = 22
+        versionName = "0.9.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -491,39 +491,53 @@ val verifyAdUnitCoverage = tasks.register("verifyAdUnitCoverage") {
 }
 
 /**
- * Regression gate: the rewarded reward length must be stated in exactly one
- * place.
+ * Regression gate: the rewarded offer says the same thing in every language.
  *
- * The app promises "N minutes with no ads" in eight languages. A translation
- * that hardcodes a number can drift from the constant that enforces it, and an
- * ad-free window shorter than the app claims is a live AdMob policy problem, not
- * a typo. The strings therefore interpolate the duration, and this asserts that
- * every locale still does.
+ * Up to v0.9.3 this asserted that each locale INTERPOLATED a duration, because
+ * the reward was "N minutes with no ads" and a translation that hardcoded the
+ * number could drift from the constant enforcing it - an ad-free window shorter
+ * than the app claims is an AdMob policy problem, not a typo.
+ *
+ * v0.9.4 replaced that reward with a mark-free export, which has no duration and
+ * therefore no number to drift. The failure mode moved: the risk now is a locale
+ * that never got the new copy, or one that still describes a period without ads.
+ * So the gate checks presence in all eight languages, and refuses any format
+ * specifier - there is nothing left to interpolate, and a stray one would crash
+ * at runtime rather than merely mislead.
  */
 val verifyRewardCopyParity = tasks.register("verifyRewardCopyParity") {
     group = "verification"
-    description = "Fail if any locale states the reward duration instead of interpolating it."
+    description = "Fail if any locale is missing the watermark offer copy, or interpolates into it."
     val resDir = file("src/main/res")
     doLast {
         val offenders = mutableListOf<String>()
+        val required = listOf(
+            "watermark_offer_title",
+            "watermark_offer_body",
+            "watermark_offer_action",
+        )
         resDir.listFiles()
             ?.filter { it.isDirectory && it.name.startsWith("values") }
             ?.forEach { dir ->
                 val strings = dir.resolve("strings.xml")
                 if (!strings.isFile) return@forEach
                 val text = strings.readText()
-                listOf("ad_free_title", "ad_free_body", "settings_ads_body").forEach { name ->
+                required.forEach { name ->
                     val value = Regex("<string name=\"$name\">(.*?)</string>", RegexOption.DOT_MATCHES_ALL)
                         .find(text)?.groupValues?.get(1)
                     if (value == null) {
                         offenders += "${dir.name}/$name is missing"
-                    } else if (!value.contains("%1" + '$' + "d")) {
-                        offenders += "${dir.name}/$name does not interpolate the duration"
+                    } else if (value.contains("%")) {
+                        offenders += "${dir.name}/$name has a format specifier and must not"
                     }
+                }
+                // The old reward must not survive anywhere, in any language.
+                if (text.contains("ad_free_")) {
+                    offenders += "${dir.name} still defines an ad_free_* string"
                 }
             }
         check(offenders.isEmpty()) {
-            "Reward duration copy is not parameterised:\n" + offenders.joinToString("\n")
+            "Rewarded offer copy is inconsistent:\n" + offenders.joinToString("\n") { "  - $it" }
         }
     }
 }

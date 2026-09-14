@@ -42,7 +42,6 @@ import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.data.history.CompressionHistoryEntry
 import com.vidsize.compressor.data.history.HistorySummary
-import com.vidsize.compressor.ui.components.AdFreeStrip
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
@@ -118,7 +117,6 @@ fun HomeScreen(
             // The composable renders nothing at all when there is no offer to
             // make - ads off, consent refused, or no creative loaded - so no
             // spacing is reserved for an absent card.
-            AdFreeStrip(modifier = Modifier.fillMaxWidth())
 
             Spacer(Modifier.height(Space.xxl))
 

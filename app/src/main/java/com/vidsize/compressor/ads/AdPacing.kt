@@ -19,9 +19,11 @@ import android.os.SystemClock
  *
  * Three of those four are gone. The rule for keeping one is simple:
  *
- *  - A condition that is a PROMISE to the user stays in code. There are exactly
- *    two: this 60-second gap (do not stack full-screen ads), and the rewarded
- *    ad-free window ([AdFreeWindow]).
+ *  - A condition that is a PROMISE to the user stays in code. Since v0.9.4
+ *    there is exactly one: this 60-second gap, which says two full-screen ads
+ *    never arrive together. The other promise moved out of the ad path
+ *    entirely - a rewarded ad now buys a mark-free export ([WatermarkOffer]),
+ *    which is a property of the file rather than a rule about ad frequency.
  *  - A condition that is only a TEMPO preference moves to the AdMob panel, where
  *    it can be retuned without shipping a release. Interstitial: 3 per hour per
  *    user. App open: 4 per day per user. See `docs/ADS.md`.

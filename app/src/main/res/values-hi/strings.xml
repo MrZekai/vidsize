@@ -9,7 +9,7 @@
     <string name="cta_select_video">वीडियो चुनें</string>
     <string name="trust_on_device">फ़ोन पर ही</string>
     <string name="trust_fast">तेज़</string>
-    <string name="trust_no_watermark">वॉटरमार्क नहीं</string>
+    <string name="trust_no_watermark">साइन-अप नहीं</string>
     <string name="section_recent">हाल के</string>
     <string name="recent_empty_title">अभी कोई वीडियो नहीं</string>
     <string name="recent_empty_body">कंप्रेस किए गए वीडियो यहाँ दिखेंगे।</string>
@@ -18,11 +18,6 @@
     <string name="storage_saved_empty">जगह बचाना शुरू करने के लिए एक वीडियो कंप्रेस करें।</string>
     <string name="clear_history">हटाएँ</string>
     <string name="ad_label">विज्ञापन</string>
-    <string name="ad_free_title">%1$d मिनट बिना विज्ञापन</string>
-    <string name="ad_free_body">एक छोटा विज्ञापन वीडियो देखें। इसके बाद Vidsize %1$d मिनट तक कोई विज्ञापन नहीं दिखाएगा।</string>
-    <string name="ad_free_action">छोटा विज्ञापन वीडियो देखें</string>
-    <string name="ad_free_active_title">अभी विज्ञापन बंद हैं</string>
-    <string name="ad_free_active_body">%1$s बाकी</string>
     <string name="compress_title">कंप्रेशन चुनें</string>
     <string name="compress_subtitle">क्वालिटी और फ़ाइल साइज़ के बीच संतुलन चुनें।</string>
     <string name="back">वापस</string>
@@ -80,7 +75,7 @@
     <string name="settings_privacy_title">प्राइवेसी</string>
     <string name="settings_privacy_body">आपके वीडियो इसी फ़ोन पर कंप्रेस होते हैं। कुछ भी सर्वर पर अपलोड नहीं होता।</string>
     <string name="settings_ads_title">विज्ञापन</string>
-    <string name="settings_ads_body">Vidsize मुफ़्त है और विज्ञापनों से चलता है: एक बैनर, परिणाम स्क्रीन पर एक विज्ञापन, ऐप खुलने पर एक और कंप्रेशन के बाद एक। %1$d मिनट बिना विज्ञापन पाने के लिए एक छोटा विज्ञापन वीडियो देखें।</string>
+    <string name="settings_ads_body">Vidsize मुफ़्त है और विज्ञापनों से चलता है: एक बैनर, परिणाम स्क्रीन पर एक विज्ञापन, ऐप खुलने पर एक और कंप्रेशन के बाद एक। मुफ़्त वीडियो पर छोटा Vidsize निशान रहता है; एक छोटा विज्ञापन वीडियो देखकर उसे बिना निशान के दोबारा बनवाएँ।</string>
     <string name="settings_legal_section">कानूनी</string>
     <string name="settings_privacy_policy">प्राइवेसी पॉलिसी</string>
     <string name="settings_terms">उपयोग की शर्तें</string>
@@ -115,4 +110,7 @@
     <string name="cta_pick_another">कोई और वीडियो चुनें</string>
     <string name="preset_not_viable_hint">यह वीडियो इस लेवल के लिए पहले से ही काफ़ी छोटा है।</string>
     <string name="result_recent_hint">आप इस वीडियो को होम स्क्रीन के “हाल के” सेक्शन से कभी भी दोबारा खोल सकते हैं।</string>
+    <string name="watermark_offer_title">Vidsize का निशान हटाएँ</string>
+    <string name="watermark_offer_body">एक छोटा विज्ञापन वीडियो देखें और यह वीडियो बिना निशान के दोबारा बनाया जाएगा। पहली बार जितना ही समय लगता है।</string>
+    <string name="watermark_offer_action">छोटा विज्ञापन वीडियो देखें</string>
 </resources>

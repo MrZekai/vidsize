@@ -9,7 +9,7 @@
     <string name="cta_select_video">اختر فيديو</string>
     <string name="trust_on_device">على الجهاز</string>
     <string name="trust_fast">سريع</string>
-    <string name="trust_no_watermark">بدون علامة مائية</string>
+    <string name="trust_no_watermark">بدون تسجيل</string>
     <string name="section_recent">الأحدث</string>
     <string name="recent_empty_title">لا توجد مقاطع بعد</string>
     <string name="recent_empty_body">ستظهر هنا مقاطعك المضغوطة.</string>
@@ -18,11 +18,6 @@
     <string name="storage_saved_empty">اضغط فيديو لتبدأ في توفير المساحة.</string>
     <string name="clear_history">مسح</string>
     <string name="ad_label">إعلان</string>
-    <string name="ad_free_title">%1$d دقيقة بلا إعلانات</string>
-    <string name="ad_free_body">شاهد فيديو إعلانيًا قصيرًا. لن يعرض Vidsize أي إعلان لمدة %1$d دقيقة.</string>
-    <string name="ad_free_action">مشاهدة فيديو إعلاني قصير</string>
-    <string name="ad_free_active_title">بلا إعلانات الآن</string>
-    <string name="ad_free_active_body">بقي %1$s</string>
     <string name="compress_title">اختر مستوى الضغط</string>
     <string name="compress_subtitle">حدّد التوازن الذي تريده بين الجودة وحجم الملف.</string>
     <string name="back">رجوع</string>
@@ -80,7 +75,7 @@
     <string name="settings_privacy_title">الخصوصية</string>
     <string name="settings_privacy_body">تُضغط مقاطعك على هذا الجهاز. لا يُرفع أي شيء إلى أي خادم.</string>
     <string name="settings_ads_title">الإعلانات</string>
-    <string name="settings_ads_body">‏Vidsize مجاني ومدعوم بالإعلانات: لافتة، وإعلان في شاشة النتيجة، وإعلان عند فتح التطبيق وآخر بعد الضغط. شاهد فيديو إعلانيًا قصيرًا للحصول على %1$d دقيقة بلا إعلانات.</string>
+    <string name="settings_ads_body">تطبيق Vidsize مجاني ومدعوم بالإعلانات: لافتة، وإعلان في شاشة النتيجة، وإعلان عند فتح التطبيق، وآخر بعد الضغط. تحمل الملفات المجانية علامة Vidsize صغيرة؛ شاهد فيديو إعلانيًا قصيرًا لإعادة إنشاء الفيديو بدونها.</string>
     <string name="settings_legal_section">قانوني</string>
     <string name="settings_privacy_policy">سياسة الخصوصية</string>
     <string name="settings_terms">شروط الاستخدام</string>
@@ -119,4 +114,7 @@
     <string name="cta_pick_another">اختيار فيديو آخر</string>
     <string name="preset_not_viable_hint">هذا الفيديو صغير بما يكفي لهذا المستوى بالفعل.</string>
     <string name="result_recent_hint">يمكنك إعادة فتح هذا الفيديو في أي وقت من قسم "الأخيرة" في الشاشة الرئيسية.</string>
+    <string name="watermark_offer_title">إزالة علامة Vidsize</string>
+    <string name="watermark_offer_body">شاهد فيديو إعلانيًا قصيرًا وسيُنشأ الفيديو من جديد بدون العلامة. يستغرق وقتًا مماثلًا للمرة الأولى.</string>
+    <string name="watermark_offer_action">مشاهدة فيديو إعلاني قصير</string>
 </resources>

@@ -16,7 +16,7 @@
     <string name="cta_select_video">SELECT VIDEO</string>
     <string name="trust_on_device">On-device</string>
     <string name="trust_fast">Fast</string>
-    <string name="trust_no_watermark">No watermark</string>
+    <string name="trust_no_watermark">No sign-up</string>
 
     <!-- Activity -->
     <string name="section_recent">Recent</string>
@@ -29,11 +29,6 @@
 
     <!-- Ads -->
     <string name="ad_label">Advertisement</string>
-    <string name="ad_free_title">%1$d minutes with no ads</string>
-    <string name="ad_free_body">Watch a short ad video. Vidsize then shows no ads at all for %1$d minutes.</string>
-    <string name="ad_free_action">Watch a short ad video</string>
-    <string name="ad_free_active_title">No ads right now</string>
-    <string name="ad_free_active_body">%1$s left</string>
 
     <!-- Compression screen -->
     <string name="compress_title">Choose compression</string>
@@ -105,7 +100,7 @@
     <string name="settings_privacy_title">Privacy</string>
     <string name="settings_privacy_body">Your videos are compressed on this device. Nothing is uploaded to a server.</string>
     <string name="settings_ads_title">Ads</string>
-    <string name="settings_ads_body">Vidsize is free and supported by ads: a banner, an ad on the result screen, one when the app opens and one after a compression. Watch a short ad video for %1$d minutes with no ads.</string>
+    <string name="settings_ads_body">Vidsize is free and supported by ads: a banner, an ad on the result screen, one when the app opens and one after a compression. Free exports carry a small Vidsize mark; watch a short ad video to have the video made again without it.</string>
     <string name="settings_legal_section">LEGAL</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_terms">Terms of Use</string>
@@ -145,4 +140,7 @@
     <string name="cta_pick_another">Pick another video</string>
     <string name="preset_not_viable_hint">This video is already small enough for this level.</string>
     <string name="result_recent_hint">You can reopen this video any time from Recent on the home screen.</string>
+    <string name="watermark_offer_title">Remove the Vidsize mark</string>
+    <string name="watermark_offer_body">Watch a short ad video and this video is made again without the mark. Takes about as long as the first pass.</string>
+    <string name="watermark_offer_action">Watch a short ad video</string>
 </resources>

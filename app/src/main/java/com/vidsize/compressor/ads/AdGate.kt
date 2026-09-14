@@ -51,8 +51,6 @@ object AdGate {
         /** UMP has not resolved yet, or the user refused. */
         NO_CONSENT,
 
-        /** The user watched a rewarded ad and is inside the ad-free window. */
-        AD_FREE_WINDOW,
 
         /** Less than 60 seconds since the last full-screen ad. */
         PACING,
@@ -100,7 +98,6 @@ object AdGate {
         return when {
             !AdSlots.enabled -> Verdict.ADS_DISABLED
             !ConsentManager.adsAllowed -> Verdict.NO_CONSENT
-            AdFreeWindow.isActiveNow(nowMillis) -> Verdict.AD_FREE_WINDOW
             job is CompressionJobState.Status.Running -> Verdict.RUNNING_JOB
             requireIdleJob && job !is CompressionJobState.Status.Idle -> Verdict.RESULT_WAITING
             !AdPacing.canShowFullScreen(nowMillis) -> Verdict.PACING

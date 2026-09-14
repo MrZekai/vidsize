@@ -84,10 +84,16 @@ object CompressionEngine {
      */
     private const val ENCODE_PROGRESS_SHARE = 0.90f
 
+    /**
+     * @param watermark whether the output carries the Vidsize mark. Decided by
+     *        the caller, never here: a free export is marked, and an export the
+     *        user has paid for with a rewarded ad is not. See [Watermark].
+     */
     suspend fun compress(
         context: Context,
         input: Uri,
         preset: CompressionPreset,
+        watermark: Boolean,
         onProgress: ((Float) -> Unit)? = null,
     ): CompressionResult {
         val info = withContext(Dispatchers.IO) { VideoProbe.probe(context, input) }
@@ -111,6 +117,7 @@ object CompressionEngine {
                 output = temp,
                 plan = plan,
                 hasAudio = info.hasAudio,
+                watermark = watermark,
                 onProgress = onProgress?.let { report ->
                     { fraction -> report(fraction * ENCODE_PROGRESS_SHARE) }
                 },
@@ -131,10 +138,12 @@ object CompressionEngine {
             }
             return CompressionResult(
                 outputUri = published,
+                sourceUri = input,
                 sourceBytes = info.sourceBytes,
                 outputBytes = actual,
                 elapsedMs = System.currentTimeMillis() - started,
                 preset = preset,
+                watermarked = watermark,
             )
         } finally {
             temp.delete()
@@ -194,6 +203,7 @@ object CompressionEngine {
         output: File,
         plan: CompressionPlan,
         hasAudio: Boolean,
+        watermark: Boolean,
         onProgress: ((Float) -> Unit)?,
     ): ExportResult {
         val attempts = buildAttempts(plan)
@@ -211,6 +221,7 @@ object CompressionEngine {
                     targetHeight = attempt.height,
                     useRequestedSettings = attempt.useRequestedSettings,
                     hasAudio = hasAudio,
+                    watermark = watermark,
                     onProgress = onProgress,
                 )
             } catch (cancellation: CancellationException) {
@@ -283,6 +294,7 @@ object CompressionEngine {
         targetHeight: Int,
         useRequestedSettings: Boolean,
         hasAudio: Boolean,
+        watermark: Boolean,
         onProgress: ((Float) -> Unit)?,
     ): ExportResult = suspendCancellableCoroutine { continuation ->
         val encoderFactoryBuilder = DefaultEncoderFactory.Builder(context)
@@ -350,16 +362,21 @@ object CompressionEngine {
         // source ratio by at most half the encoder's alignment - well under 1% -
         // and a sub-1% stretch is invisible, whereas SCALE_TO_FIT would bake a
         // thin black bar into every output.
-        val effects = Effects(
-            emptyList(),
-            listOf<Effect>(
+        // Presentation first, Watermark second. Order is the pipeline order, so
+        // the mark is applied to the frame Vidsize is actually writing - sized
+        // from targetHeight, which is why it is the same relative size on a 4K
+        // source and a 480p one.
+        val videoEffects = buildList<Effect> {
+            add(
                 Presentation.createForWidthAndHeight(
                     targetWidth,
                     targetHeight,
                     Presentation.LAYOUT_STRETCH_TO_FIT,
                 ),
-            ),
-        )
+            )
+            if (watermark) add(Watermark.effect(targetHeight))
+        }
+        val effects = Effects(emptyList(), videoEffects)
         val item = EditedMediaItem.Builder(MediaItem.fromUri(input))
             .setEffects(effects)
             .build()

@@ -9,7 +9,7 @@
     <string name="cta_select_video">VIDEO AUSWÄHLEN</string>
     <string name="trust_on_device">Auf dem Gerät</string>
     <string name="trust_fast">Schnell</string>
-    <string name="trust_no_watermark">Ohne Wasserzeichen</string>
+    <string name="trust_no_watermark">Ohne Anmeldung</string>
     <string name="section_recent">Zuletzt</string>
     <string name="recent_empty_title">Noch keine Videos</string>
     <string name="recent_empty_body">Deine komprimierten Videos erscheinen hier.</string>
@@ -18,11 +18,6 @@
     <string name="storage_saved_empty">Komprimiere ein Video, um Speicher zu sparen.</string>
     <string name="clear_history">Löschen</string>
     <string name="ad_label">Werbung</string>
-    <string name="ad_free_title">%1$d Minuten ohne Werbung</string>
-    <string name="ad_free_body">Sieh dir ein kurzes Werbevideo an. Vidsize zeigt dann %1$d Minuten lang keine Werbung.</string>
-    <string name="ad_free_action">Kurzes Werbevideo ansehen</string>
-    <string name="ad_free_active_title">Gerade werbefrei</string>
-    <string name="ad_free_active_body">Noch %1$s</string>
     <string name="compress_title">Komprimierung wählen</string>
     <string name="compress_subtitle">Wähle das Verhältnis aus Qualität und Dateigröße.</string>
     <string name="back">Zurück</string>
@@ -80,7 +75,7 @@
     <string name="settings_privacy_title">Datenschutz</string>
     <string name="settings_privacy_body">Deine Videos werden auf diesem Gerät komprimiert. Es wird nichts auf einen Server hochgeladen.</string>
     <string name="settings_ads_title">Werbung</string>
-    <string name="settings_ads_body">Vidsize ist kostenlos und werbefinanziert: ein Banner, eine Anzeige auf dem Ergebnisbildschirm sowie je eine beim Öffnen der App und nach einer Komprimierung. Sieh dir ein kurzes Werbevideo an für %1$d Minuten ohne Werbung.</string>
+    <string name="settings_ads_body">Vidsize ist kostenlos und werbefinanziert: ein Banner, eine Anzeige auf dem Ergebnisbildschirm, eine beim App-Start und eine nach einer Komprimierung. Kostenlose Exporte tragen ein kleines Vidsize-Wasserzeichen; sieh ein kurzes Werbevideo an, um das Video ohne Wasserzeichen neu erstellen zu lassen.</string>
     <string name="settings_legal_section">RECHTLICHES</string>
     <string name="settings_privacy_policy">Datenschutzerklärung</string>
     <string name="settings_terms">Nutzungsbedingungen</string>
@@ -115,4 +110,7 @@
     <string name="cta_pick_another">Anderes Video wählen</string>
     <string name="preset_not_viable_hint">Dieses Video ist für diese Stufe schon klein genug.</string>
     <string name="result_recent_hint">Du kannst dieses Video jederzeit über „Kürzlich“ auf dem Startbildschirm wieder öffnen.</string>
+    <string name="watermark_offer_title">Vidsize-Wasserzeichen entfernen</string>
+    <string name="watermark_offer_body">Kurzes Werbevideo ansehen - das Video wird ohne Wasserzeichen neu erstellt. Dauert etwa so lange wie der erste Durchlauf.</string>
+    <string name="watermark_offer_action">Kurzes Werbevideo ansehen</string>
 </resources>

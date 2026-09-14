@@ -62,8 +62,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 21' app/build.gradle.kts
-          grep -q 'versionName = "0.9.3"' app/build.gradle.kts
+          grep -q 'versionCode = 22' app/build.gradle.kts
+          grep -q 'versionName = "0.9.4"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -112,18 +112,30 @@ jobs:
             fi
           done
 
-          # --- Gate 3: the reward duration is stated in exactly one place ---
-          grep -q 'REWARD_DURATION_MINUTES: Int = 10' $ADS/AdFreeWindow.kt
-          grep -q 'REWARD_DURATION_MILLIS: Long = 10L \* 60L \* 1000L' $ADS/AdFreeWindow.kt
-          # ...and no locale states it independently (enforced by the Gradle task).
+          # --- Gate 3: the reward buys a mark-free export, and nothing else ---
+          # v0.9.4 replaced the ten-minute ad-free window. The old reward was
+          # revenue-negative - one rewarded impression traded for ten minutes of
+          # empty inventory - so the rule now is that NOTHING the user can earn
+          # suppresses an ad.
+          test -f $ADS/WatermarkOffer.kt
+          if test -f $ADS/AdFreeWindow.kt; then
+            echo 'AdFreeWindow is back. The reward must not suppress ads.' >&2
+            exit 1
+          fi
+          grep -q 'fun consume(): Boolean' $ADS/WatermarkOffer.kt
+          grep -q 'WatermarkOffer.grant()' $ADS/RewardedAds.kt
           grep -q 'verifyRewardCopyParity' app/build.gradle.kts
           for f in app/src/main/res/values*/strings.xml; do
-            grep -q 'name="ad_free_title">[^<]*%1\$d' "$f" || { echo "$f hardcodes the reward duration" >&2; exit 1; }
+            grep -q 'name="watermark_offer_title"' "$f" || { echo "$f lacks the offer copy" >&2; exit 1; }
+            if grep -q 'ad_free_' "$f"; then
+              echo "$f still defines the removed ad-free copy" >&2
+              exit 1
+            fi
           done
 
           # --- Gate 4: one chokepoint; no surface asks its own question ---
-          # A banner that decided for itself is what would have let an ad-free
-          # window silence the full-screen formats and leave the banner running.
+          # A surface that decides for itself is how a consent refusal used to
+          # leave a divider with nothing under it. One predicate, asked once.
           grep -q 'AdSlots.requestable' $UI/components/HomeBannerAd.kt
           grep -q 'AdSlots.requestable' $UI/components/NativeAdCard.kt
           grep -q 'AdSlots.requestable' $ADS/NativeAdLoader.kt
@@ -151,16 +163,24 @@ jobs:
           # user can actually take out of a finished job, not just some of them.
           test "$(grep -c 'context.findHostActivity()?.let(InterstitialAds::showNow)' $COMPRESS)" -eq 2
 
-          # The rewarded offer appears on all three surfaces that can convert:
-          # before a job (Home, Compression) and straight after one (Result),
-          # which is where it converts best because the cost it removes is the
-          # one the user just paid.
-          grep -q 'AdFreeStrip' $UI/screens/HomeScreen.kt
-          grep -q 'AdFreeStrip' $COMPRESS
-          grep -q 'AdFreeStrip' $RESULT
+          # The rewarded offer appears on exactly ONE surface, and it is the
+          # result screen.
+          #
+          # v0.9.4: its predecessor sat on Home and on the compression screen
+          # too, because ten quiet minutes were not attached to anything in
+          # particular. What it sells now is a property of one specific file, so
+          # Home would be asking the user to pay for a video they have not
+          # chosen, and the compression screen would be asking them to decide
+          # while a progress ring spins.
+          grep -q 'WatermarkStrip' $RESULT
+          forbid 'WatermarkStrip' $UI/screens/HomeScreen.kt
+          forbid 'WatermarkStrip' $COMPRESS
+          # ...and only while the file still carries the mark. An offer left
+          # standing after the clean export reads as a second charge.
+          grep -q 'if (result.watermarked) {' $RESULT
           # It must stay ABOVE the ad section, or it reads as part of the
           # creative instead of as an offer from the app.
-          test "$(grep -n 'AdFreeStrip' $RESULT | tail -1 | cut -d: -f1)" \
+          test "$(grep -n 'WatermarkStrip(' $RESULT | tail -1 | cut -d: -f1)" \
              -lt "$(grep -n 'NativeAdCard' $RESULT | tail -1 | cut -d: -f1)"
           # The in-content native at the end of the home scroll must not reserve
           # space it may never fill.
@@ -261,9 +281,12 @@ jobs:
           # would let a forward clock change stack two full-screen ads.
           grep -q 'SystemClock.elapsedRealtime()' $ADSDIR/AdPacing.kt
           forbid 'System.currentTimeMillis' $ADSDIR/AdPacing.kt
-          # The reward window keeps wall clock (it must survive reboot) but
-          # cannot be stretched past what was granted.
-          grep -q 'remaining > REWARD_DURATION_MILLIS' $ADSDIR/AdFreeWindow.kt
+          # v0.9.4: the clock-tampering surface this used to guard is gone with
+          # the window itself. The grant that replaced it holds no timestamp, is
+          # single-use, and is not persisted, so there is nothing for a moved
+          # clock or an edited preferences file to stretch.
+          forbid 'currentTimeMillis' $ADSDIR/WatermarkOffer.kt
+          forbid 'SharedPreferences' $ADSDIR/WatermarkOffer.kt
 
           # Consent decides before the SDK starts: no synchronous syncState.
           test "$(grep -c 'syncState(activity, consentInformation)' $ADSDIR/ConsentManager.kt)" -eq 2
@@ -332,9 +355,42 @@ jobs:
           grep -q 'private fun showInGallery(context: Context)' $RESULT
           forbid 'showInGallery(context, ' $RESULT
 
+          # --- Gate 12d: v0.9.4 watermark model ------------------------------
+          # Every free export is marked. The default is the paying-nothing case,
+          # so a caller that forgets the argument produces a marked file rather
+          # than giving the reward away.
+          grep -q 'watermark: Boolean' $MEDIA/CompressionEngine.kt
+          grep -q 'if (watermark) add(Watermark.effect(targetHeight))' $MEDIA/CompressionEngine.kt
+          grep -q 'watermark: Boolean = true' $MEDIA/CompressionService.kt
+          grep -q 'getBooleanExtra(EXTRA_WATERMARK, true)' $MEDIA/CompressionService.kt
+
+          # The mark-free re-export starts from the ORIGINAL, never from the
+          # marked output: the mark is burned into those pixels, and re-encoding
+          # an encode compounds the loss for nothing.
+          grep -q 'uri = result.sourceUri' $RESULT
+          grep -q 'watermark = false' $RESULT
+          grep -q 'replacing = result.outputUri' $RESULT
+          forbid 'uri = result.outputUri' $RESULT
+
+          # The grant is single-use and is spent by the export it pays for.
+          grep -q 'if (WatermarkOffer.consume())' $RESULT
+
+          # The old reward must not come back anywhere.
+          forbid 'AdFreeWindow' $ADS/AdSlots.kt
+          forbid 'AdFreeWindow' $ADS/AdGate.kt
+          grep -q 'val requestable: Boolean get() = permitted' $ADS/AdSlots.kt
+
+          # The home screen may not claim what the app no longer does.
+          for f in app/src/main/res/values*/strings.xml; do
+            if grep -qiE 'name="trust_no_watermark">[^<]*(watermark|filigran|wasserzeichen|marca)' "$f"; then
+              echo "$f still advertises no watermark" >&2
+              exit 1
+            fi
+          done
+
           # --- Gate 13: the published policy declares every format and the reward ---
           for term in 'Banner' 'Result-screen ad' 'App-open ad' 'Interstitial' 'Rewarded ad' \
-                      'no ads of any kind' '10 minutes' '60 seconds'; do
+                      'without the' 'mark' 'one mark-free export' '60 seconds'; do
             grep -Fq "$term" docs/privacy.html || { echo "privacy.html omits: $term" >&2; exit 1; }
           done
           cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html

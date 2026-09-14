@@ -57,40 +57,28 @@ object AdSlots {
      * Every format except the rewarded unit itself asks this: banner, native,
      * app open, interstitial.
      *
-     * ## Why it reads the window twice
+     * ## Why this is now just [permitted]
      *
-     * [AdFreeWindow.remainingMillis] is Compose state maintained by a one-second
-     * ticker in `VidsizeRoot`. Touching it here is what subscribes every ad
-     * composable to the window, so a granted reward removes the banner in the
-     * same frame and its expiry brings the banner back without any surface
-     * wiring itself up to anything.
+     * Up to v0.9.3 it also consulted a ten-minute ad-free window, and that
+     * window is gone. The rewarded ad no longer buys silence; it buys an export
+     * without the Vidsize mark ([WatermarkOffer]). Nothing the user can earn
+     * suppresses an ad any more, so there is no second question to ask.
      *
-     * But that value is only as fresh as the last tick, and the ticker stops
-     * when the UI leaves the composition. Deciding with it alone would mean a
-     * user who backgrounds Vidsize mid-window comes back to a value frozen at,
-     * say, four minutes remaining - and `AppOpenAdManager`, which runs from a
-     * process lifecycle callback with no composition at all, would suppress the
-     * app-open ad forever on the strength of a window that expired hours ago.
-     *
-     * So the stale value drives observation and [AdFreeWindow.isActiveNow]
-     * decides. Reading Compose state and then ignoring it looks redundant; it is
-     * the difference between a correct answer and a live one.
+     * The name and the single-chokepoint rule stay. Every surface still asks
+     * exactly this one predicate rather than assembling its own - which is what
+     * kept a consent refusal from leaving a divider with nothing under it, and
+     * what will keep the next condition, whatever it is, from being applied to
+     * three formats out of four.
      */
-    val requestable: Boolean
-        get() {
-            @Suppress("UNUSED_VARIABLE")
-            val observed = AdFreeWindow.remainingMillis
-            return permitted && !AdFreeWindow.isActiveNow()
-        }
+    val requestable: Boolean get() = permitted
 
     /**
-     * The rewarded unit is the one format the ad-free window does not silence.
+     * The rewarded unit answers a different question.
      *
-     * It is user-initiated, it is the thing the user traded for the window in
-     * the first place, and keeping it loadable is what lets the strip offer an
-     * extension the moment the window runs out. AdMob's rewarded policy is also
-     * explicit that a rewarded ad the user opts into is exempt from the
-     * unexpected-full-screen rules the other formats live under.
+     * It is user-initiated and it is the only way to earn a mark-free export,
+     * so it must stay loadable whenever ads are permitted at all. AdMob's
+     * rewarded policy is also explicit that an ad the user opts into is exempt
+     * from the unexpected-full-screen rules the other formats live under.
      */
     val rewardedRequestable: Boolean get() = permitted
 
@@ -101,8 +89,8 @@ object AdSlots {
      * This is [requestable] by another name, and that is the whole point. Hosts
      * used to spell the condition out themselves (`AdSlots.enabled` on Home,
      * `AdSlots.enabled && !adsBlocked` in ProcessingOverlay), so a consent
-     * refusal - and now an ad-free window - left a hairline with nothing under
-     * it and a 12dp gap at the bottom of the screen. The divider exists to
+     * refusal left a hairline with nothing under it and a 12dp gap at the
+     * bottom of the screen. The divider exists to
      * separate a creative from the content above it; with no creative it is a
      * decoration with no meaning.
      */

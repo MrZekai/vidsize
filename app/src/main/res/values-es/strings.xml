@@ -9,7 +9,7 @@
     <string name="cta_select_video">ELEGIR VÍDEO</string>
     <string name="trust_on_device">En el dispositivo</string>
     <string name="trust_fast">Rápido</string>
-    <string name="trust_no_watermark">Sin marca de agua</string>
+    <string name="trust_no_watermark">Sin registro</string>
     <string name="section_recent">Recientes</string>
     <string name="recent_empty_title">Aún no hay vídeos</string>
     <string name="recent_empty_body">Tus vídeos comprimidos aparecerán aquí.</string>
@@ -18,11 +18,6 @@
     <string name="storage_saved_empty">Comprime un vídeo para empezar a ahorrar espacio.</string>
     <string name="clear_history">Borrar</string>
     <string name="ad_label">Publicidad</string>
-    <string name="ad_free_title">%1$d minutos sin anuncios</string>
-    <string name="ad_free_body">Mira un breve vídeo publicitario. Vidsize no mostrará ningún anuncio durante %1$d minutos.</string>
-    <string name="ad_free_action">Ver un breve vídeo publicitario</string>
-    <string name="ad_free_active_title">Sin anuncios ahora</string>
-    <string name="ad_free_active_body">Quedan %1$s</string>
     <string name="compress_title">Elige la compresión</string>
     <string name="compress_subtitle">Escoge el equilibrio que quieres entre calidad y tamaño.</string>
     <string name="back">Atrás</string>
@@ -80,7 +75,7 @@
     <string name="settings_privacy_title">Privacidad</string>
     <string name="settings_privacy_body">Tus vídeos se comprimen en este dispositivo. No se sube nada a ningún servidor.</string>
     <string name="settings_ads_title">Publicidad</string>
-    <string name="settings_ads_body">Vidsize es gratuito y se financia con anuncios: un banner, un anuncio en la pantalla de resultados y uno al abrir la app y otro tras una compresión. Mira un breve vídeo publicitario para tener %1$d minutos sin anuncios.</string>
+    <string name="settings_ads_body">Vidsize es gratis y se financia con anuncios: un banner, un anuncio en la pantalla de resultados, uno al abrir la app y otro tras una compresion. Los videos gratuitos llevan una pequena marca de Vidsize; mira un video publicitario corto para generarlo de nuevo sin ella.</string>
     <string name="settings_legal_section">LEGAL</string>
     <string name="settings_privacy_policy">Política de Privacidad</string>
     <string name="settings_terms">Términos de Uso</string>
@@ -116,4 +111,7 @@
     <string name="cta_pick_another">Elegir otro vídeo</string>
     <string name="preset_not_viable_hint">Este vídeo ya es lo bastante pequeño para este nivel.</string>
     <string name="result_recent_hint">Puedes volver a abrir este vídeo cuando quieras desde Reciente en la pantalla de inicio.</string>
+    <string name="watermark_offer_title">Quitar la marca de Vidsize</string>
+    <string name="watermark_offer_body">Mira un video publicitario corto y el video se genera de nuevo sin la marca. Tarda lo mismo que la primera vez.</string>
+    <string name="watermark_offer_action">Ver un video publicitario corto</string>
 </resources>

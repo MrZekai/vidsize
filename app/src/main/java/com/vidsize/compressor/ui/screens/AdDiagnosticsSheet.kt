@@ -33,7 +33,6 @@ import androidx.compose.ui.window.DialogProperties
 import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.VidsizeApplication
 import com.vidsize.compressor.ads.AdDiagnostics
-import com.vidsize.compressor.ads.AdFreeWindow
 import com.vidsize.compressor.ads.AdGate
 import com.vidsize.compressor.ads.AdPacing
 import com.vidsize.compressor.ui.components.HairLine
@@ -73,15 +72,14 @@ fun AdDiagnosticsSheet(onDismiss: () -> Unit) {
     val application = context.applicationContext as? VidsizeApplication
 
     // A one-second refresh, because half of what this screen reports is a clock:
-    // seconds since the last full-screen ad, seconds until pacing allows the
-    // next, minutes left in the ad-free window. A static snapshot would make the
+    // seconds since the last full-screen ad, and seconds until pacing allows
+    // the next. A static snapshot would make the
     // 60-second rule impossible to watch cross its threshold, which is the one
     // thing a tester most often needs to see happen.
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
-            AdFreeWindow.refresh()
             tick += 1
         }
     }
@@ -165,12 +163,10 @@ fun AdDiagnosticsSheet(onDismiss: () -> Unit) {
                         Line("Wait", "${snapshot.secondsUntilPacingAllows}s")
                     }
 
-                    Section("Rewarded ad-free window")
-                    Line("Active", snapshot.adFreeActive.yesNo())
-                    Line("Reward length", "${AdFreeWindow.REWARD_DURATION_MINUTES} min")
-                    if (snapshot.adFreeActive) {
-                        Line("Remaining", snapshot.adFreeRemaining)
-                    }
+                    Section("Rewarded watermark removal")
+                    Line("Grant in hand (unspent)", snapshot.watermarkGranted.yesNo())
+                    Line("Grant buys", "1 export, no mark")
+                    Line("Suppresses any ad", "no")
 
                     Section("Inventory")
                     Line("Interstitial preloaded", snapshot.interstitialLoaded.yesNo())
@@ -226,12 +222,6 @@ private fun VerdictPanel(verdict: AdGate.Verdict) {
             "UMP has not resolved yet, or the user refused. Ads cannot be " +
                 "requested. Check the privacy options row in Settings.",
             VidsizeColor.Danger,
-        )
-        AdGate.Verdict.AD_FREE_WINDOW -> Triple(
-            "Blocked: the ad-free window is open.",
-            "The user watched a rewarded ad. No ad of any kind will show until " +
-                "the countdown above reaches zero. This is correct behaviour.",
-            VidsizeColor.Indigo,
         )
         AdGate.Verdict.RUNNING_JOB -> Triple(
             "Blocked: a compression is running.",

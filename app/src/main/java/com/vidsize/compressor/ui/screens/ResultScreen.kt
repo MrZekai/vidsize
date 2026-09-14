@@ -42,13 +42,15 @@ import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.AdDiagnostics
+import com.vidsize.compressor.ads.WatermarkOffer
 import com.vidsize.compressor.ads.deferInterstitialOnReturn
 import com.vidsize.compressor.ads.findHostActivity
 import com.vidsize.compressor.growth.ReviewPrompt
+import com.vidsize.compressor.media.CompressionService
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
 import com.vidsize.compressor.ui.buildVideoShareIntent
-import com.vidsize.compressor.ui.components.AdFreeStrip
+import com.vidsize.compressor.ui.components.WatermarkStrip
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.IconAction
@@ -139,10 +141,9 @@ fun ResultScreen(
     onCompressAnother: () -> Unit,
 ) {
     val context = LocalContext.current
-    // One predicate. AdSlots.requestable also carries the rewarded ad-free
-    // window, so a user inside their ten quiet minutes gets a result screen with
-    // no ad section at all - no divider, no "Advertisement" label, no reserved
-    // 340dp slot - rather than a labelled empty band.
+    // One predicate, asked once. A consent refusal gives this screen no ad
+    // section at all - no divider, no "Advertisement" label, no reserved 340dp
+    // slot - rather than a labelled empty band.
     val adsVisible = AdSlots.requestable || LocalInspectionMode.current
     val savedBytes = (result.sourceBytes - result.outputBytes).coerceAtLeast(0L)
     val percent = Fmt.percentSmaller(result.sourceBytes, result.outputBytes)
@@ -317,23 +318,40 @@ fun ResultScreen(
                     enabled = interactive,
                 )
 
-                // The rewarded offer, placed at the app's highest-converting
-                // moment for it.
+                // The rewarded offer, on the one screen where its subject
+                // exists.
                 //
-                // The user has just finished a job, sat through whatever ads it
-                // carried, and is one scroll from a native creative. "Keep going
-                // for ten minutes with no ads" means more here than anywhere
-                // else in the app, because the cost it removes is the one they
-                // just paid.
+                // Shown only while this file still carries the mark. Once the
+                // clean export lands the offer has nothing left to sell, and a
+                // card still sitting there would read as a second charge for
+                // something already paid for.
                 //
                 // It is a Vidsize control, not an ad, so it adds nothing to the
                 // ad density of this screen - and it sits ABOVE the ad section
                 // so the offer is read before the creative rather than looking
-                // like part of it. Nothing on this screen depends on taking it:
-                // Share, Show in Gallery and Open all sit above it, already
-                // reachable, exactly as they were.
-                if (AdSlots.rewardedRequestable) {
-                    AdFreeStrip(modifier = Modifier.fillMaxWidth())
+                // like part of it. Nothing here depends on taking it: Share,
+                // Open Gallery and Open all sit above it, already reachable.
+                if (result.watermarked) {
+                    WatermarkStrip(
+                        enabled = interactive,
+                        onRewardGranted = {
+                            // The grant is consumed here, by the one export it
+                            // pays for. Re-encoding starts from the ORIGINAL,
+                            // never from the marked output: the mark is burned
+                            // into those pixels, and a second pass over an
+                            // encode compounds the loss for nothing.
+                            if (WatermarkOffer.consume()) {
+                                CompressionService.start(
+                                    context = context,
+                                    uri = result.sourceUri,
+                                    preset = result.preset,
+                                    watermark = false,
+                                    replacing = result.outputUri,
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
 
                 if (adsVisible) {

@@ -7,7 +7,6 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.vidsize.compressor.ads.AdDiagnostics
-import com.vidsize.compressor.ads.AdFreeWindow
 import com.vidsize.compressor.ads.AdPacing
 import com.vidsize.compressor.ads.AppOpenAdManager
 import com.vidsize.compressor.ads.AppOpenAdPolicy
@@ -38,7 +37,6 @@ class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks
         // ConsentManager, and with ENABLE_ADS false these objects simply hold
         // zeroes that nothing reads.
         AdPacing.init(this)
-        AdFreeWindow.init(this)
         AdDiagnostics.init(this)
         InterstitialAds.init(this)
         ReviewPrompt.init(this)

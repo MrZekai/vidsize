@@ -66,7 +66,6 @@ import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.findHostActivity
-import com.vidsize.compressor.ui.components.AdFreeStrip
 import com.vidsize.compressor.ui.components.CompressionBannerAd
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
@@ -344,7 +343,6 @@ fun CompressionScreen(
                 // Hidden during processing: the offer opens a full-screen ad,
                 // and nothing covers a running job.
                 if (!processing) {
-                    AdFreeStrip(modifier = Modifier.fillMaxWidth())
                 }
 
                 Spacer(Modifier.height(Space.lg))
