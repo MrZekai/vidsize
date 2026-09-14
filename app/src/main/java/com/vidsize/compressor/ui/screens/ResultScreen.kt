@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.AdDiagnostics
-import com.vidsize.compressor.ads.WatermarkOffer
 import com.vidsize.compressor.ads.deferInterstitialOnReturn
 import com.vidsize.compressor.ads.findHostActivity
 import com.vidsize.compressor.growth.ReviewPrompt
@@ -283,6 +282,47 @@ fun ResultScreen(
 
                 // The action almost everyone wants next stays above the ad, so
                 // the common path never has to scroll past a creative.
+                // The offer sits ABOVE Share, not below it.
+                //
+                // QA finding: it used to sit 48 lines under the primary button,
+                // after Share, Open Gallery and Open video. The brightest
+                // control on the screen therefore sent the marked file before
+                // the user had any reason to know there was a mark - and a user
+                // who only notices the logo inside the chat they sent it to is
+                // past the point where any offer helps.
+                //
+                // Shown only while this file still carries the mark. Once the
+                // clean export lands the offer has nothing left to sell, and a
+                // card still sitting there would read as a second charge for
+                // something already paid for.
+                if (result.watermarked) {
+                    WatermarkStrip(
+                        enabled = interactive,
+                        onRewardGranted = {
+                            // Re-encoding starts from the ORIGINAL, never from
+                            // the marked output: the mark is burned into those
+                            // pixels, and a second pass over an encode
+                            // compounds the loss for nothing.
+                            //
+                            // The grant is NOT consumed here. A failed second
+                            // pass would otherwise leave the user having
+                            // watched an ad for nothing, which is both a bad
+                            // trade and an AdMob policy problem - the reward
+                            // has to be delivered. It is spent by the export
+                            // that succeeds; see CompressionScreen.
+                            CompressionService.start(
+                                context = context,
+                                uri = result.sourceUri,
+                                preset = result.preset,
+                                watermark = false,
+                                replacing = result.outputUri,
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(Space.md))
+                }
+
                 PrimaryButton(
                     text = stringResource(R.string.result_share),
                     onClick = { shareVideo(context, result.outputUri) },
@@ -313,46 +353,10 @@ fun ResultScreen(
 
                 SecondaryButton(
                     text = stringResource(R.string.result_open),
-                    onClick = { openVideo(context, result.outputUri) },
+                    onClick = { openVideo(context, result.outputUri, result.watermarked) },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = interactive,
                 )
-
-                // The rewarded offer, on the one screen where its subject
-                // exists.
-                //
-                // Shown only while this file still carries the mark. Once the
-                // clean export lands the offer has nothing left to sell, and a
-                // card still sitting there would read as a second charge for
-                // something already paid for.
-                //
-                // It is a Vidsize control, not an ad, so it adds nothing to the
-                // ad density of this screen - and it sits ABOVE the ad section
-                // so the offer is read before the creative rather than looking
-                // like part of it. Nothing here depends on taking it: Share,
-                // Open Gallery and Open all sit above it, already reachable.
-                if (result.watermarked) {
-                    WatermarkStrip(
-                        enabled = interactive,
-                        onRewardGranted = {
-                            // The grant is consumed here, by the one export it
-                            // pays for. Re-encoding starts from the ORIGINAL,
-                            // never from the marked output: the mark is burned
-                            // into those pixels, and a second pass over an
-                            // encode compounds the loss for nothing.
-                            if (WatermarkOffer.consume()) {
-                                CompressionService.start(
-                                    context = context,
-                                    uri = result.sourceUri,
-                                    preset = result.preset,
-                                    watermark = false,
-                                    replacing = result.outputUri,
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
 
                 if (adsVisible) {
                     // A divider, a label and 24dp of dead space above; a divider
@@ -536,8 +540,17 @@ private fun showInGallery(context: Context) {
     }
 }
 
-private fun openVideo(context: Context, uri: Uri) {
-    context.deferInterstitialOnReturn()
+private fun openVideo(context: Context, uri: Uri, watermarked: Boolean) {
+    // QA finding: coming back from the player is the single highest-intent
+    // moment for the rewarded ad - the user has just seen the mark with their
+    // own eyes. Arming the deferred interstitial here meant that return was met
+    // by a full-screen ad, and the offer they came back for was behind it.
+    //
+    // A rewarded impression is worth more than an interstitial one, so trading
+    // the interstitial away here is not a concession: it is the better half of
+    // the trade. And nothing is lost permanently - the interstitial re-arms on
+    // the next exit from this screen.
+    if (!watermarked) context.deferInterstitialOnReturn()
     val intent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "video/mp4")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

@@ -63,10 +63,14 @@ import com.vidsize.compressor.model.VideoInfo
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HairLine
+import androidx.compose.runtime.rememberCoroutineScope
 import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.InterstitialAds
+import com.vidsize.compressor.ads.RewardedAds
+import com.vidsize.compressor.ads.WatermarkOffer
 import com.vidsize.compressor.ads.findHostActivity
 import com.vidsize.compressor.ui.components.CompressionBannerAd
+import com.vidsize.compressor.ui.components.WatermarkFreeRow
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SectionHeader
@@ -78,6 +82,8 @@ import com.vidsize.compressor.ui.theme.VidsizeTheme
 import com.vidsize.compressor.ui.theme.VidsizeType
 import com.vidsize.compressor.ui.theme.Space
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 
 /**
@@ -96,6 +102,19 @@ import kotlinx.coroutines.withContext
  * selectable: running it would mean several minutes of work ending in a
  * "compression didn't finish" error.
  */
+/**
+ * How long the mark-free row waits for a rewarded ad that is not yet in hand.
+ *
+ * Long enough for a normal fill on a normal connection, short enough that the
+ * user does not read it as a hang. Past it the app says so and starts the free
+ * export - the result screen still carries the offer, so nothing is lost but
+ * one encode.
+ */
+private const val REWARDED_WAIT_MILLIS = 5_000L
+
+/** Polling interval while waiting. RewardedAds.isLoaded is Compose state. */
+private const val REWARDED_POLL_MILLIS = 150L
+
 @Composable
 fun CompressionScreen(
     videoUri: Uri,
@@ -143,14 +162,19 @@ fun CompressionScreen(
     // permission RESULT - granted or denied, but never concurrently with the
     // question.
     var pendingStart by remember(videoUri) { mutableStateOf(false) }
+    var pendingWatermark by remember(videoUri) { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    var awaitingRewarded by remember(videoUri) { mutableStateOf(false) }
+    var rewardedUnavailable by remember(videoUri) { mutableStateOf(false) }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {
         if (pendingStart) {
             pendingStart = false
             starting = true
+            val chosen = pendingWatermark
             InterstitialAds.preload(context)
-            CompressionService.start(context, videoUri, preset)
+            CompressionService.start(context, videoUri, preset, watermark = chosen)
         }
     }
 
@@ -215,19 +239,79 @@ fun CompressionScreen(
         InterstitialAds.preload(context)
     }
 
-    fun startCompression() {
+    fun startCompression(watermark: Boolean = true) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             // Defer the start to the permission callback rather than racing it.
+            // The choice has to survive the round trip, or a user who granted a
+            // mark-free export and then met the permission dialog would get a
+            // marked file after watching an ad for the opposite.
+            pendingWatermark = watermark
             pendingStart = true
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
         starting = true
         InterstitialAds.preload(context)
-        CompressionService.start(context, videoUri, preset)
+        CompressionService.start(context, videoUri, preset, watermark = watermark)
+    }
+
+    /**
+     * The mark-free path: one rewarded ad, then ONE encode with no mark.
+     *
+     * The ad may not be in hand at the moment of the tap. Rather than refusing
+     * or hiding the option - both of which make it look broken - the row waits,
+     * briefly and visibly, and then tells the truth and gets on with the job the
+     * user actually came for. A marked file plus an honest sentence is a better
+     * outcome than a dead control.
+     */
+    fun startWithoutWatermark() {
+        // A grant already in hand is one the user paid for and did not receive -
+        // a previous mark-free export that failed. Charging them a second ad for
+        // the same reward would be taking payment twice.
+        if (WatermarkOffer.granted) {
+            startCompression(watermark = false)
+            return
+        }
+        val activity = context.findHostActivity() ?: run {
+            startCompression(watermark = true)
+            return
+        }
+        awaitingRewarded = true
+        scope.launch {
+            val ready = withTimeoutOrNull(REWARDED_WAIT_MILLIS) {
+                RewardedAds.preload(context)
+                while (!RewardedAds.isLoaded) delay(REWARDED_POLL_MILLIS)
+                true
+            } == true
+            awaitingRewarded = false
+            if (!ready) {
+                // Not an error and not silent: the user asked for something the
+                // network could not supply, and the result screen still carries
+                // the offer, so say so and start the free export.
+                rewardedUnavailable = true
+                startCompression(watermark = true)
+                return@launch
+            }
+            // RewardedAds grants from the SDK's own reward callback; this
+            // starts the export the grant paid for. The grant is NOT consumed
+            // here - see the completion effect below.
+            RewardedAds.show(activity) { startCompression(watermark = false) }
+        }
+    }
+
+    // The grant is spent HERE, by the export that actually delivered.
+    //
+    // QA finding: it used to be consumed at launch. A second pass that failed -
+    // no space, encoder refusal, the platform's six-hour limit - left the user
+    // having watched a rewarded ad and still holding a marked file, with the
+    // grant gone. That is a bad trade and an AdMob policy problem: the reward
+    // has to be delivered. Failure now leaves the grant standing, so the next
+    // attempt costs nothing.
+    LaunchedEffect(result) {
+        if (result != null && !result.watermarked) WatermarkOffer.consume()
     }
 
     // Fires once per finished job so History picks the new row up.
@@ -456,6 +540,29 @@ fun CompressionScreen(
                 onClick = {
                     if (probeFailed) onSelectAnother() else startCompression()
                 },
+                // The mark-free option rides under the button, on the one
+                // screen where the choice still costs a single encode.
+                belowButton = {
+                    if (!probeFailed) {
+                        WatermarkFreeRow(
+                            enabled = info != null &&
+                                !processing &&
+                                selectedPlan?.viable == true &&
+                                storage?.hasRoom != false,
+                            waiting = awaitingRewarded,
+                            onChoose = { startWithoutWatermark() },
+                        )
+                        if (rewardedUnavailable) {
+                            Text(
+                                text = stringResource(R.string.watermark_free_unavailable),
+                                style = VidsizeType.caption,
+                                color = VidsizeColor.Muted,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                },
             )
         }
 
@@ -614,6 +721,7 @@ private fun CompressionActionBar(
     enabled: Boolean,
     onClick: () -> Unit,
     hint: String? = null,
+    belowButton: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -643,6 +751,7 @@ private fun CompressionActionBar(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = enabled,
             )
+            belowButton()
         }
     }
 }

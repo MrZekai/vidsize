@@ -117,4 +117,7 @@
     <string name="watermark_offer_title">إزالة علامة Vidsize</string>
     <string name="watermark_offer_body">شاهد فيديو إعلانيًا قصيرًا وسيُنشأ الفيديو من جديد بدون العلامة. يستغرق وقتًا مماثلًا للمرة الأولى.</string>
     <string name="watermark_offer_action">مشاهدة فيديو إعلاني قصير</string>
+    <string name="watermark_free_row">إنشاء بدون علامة Vidsize · شاهد إعلانًا قصيرًا</string>
+    <string name="watermark_free_row_waiting">جارٍ تحضير الإعلان…</string>
+    <string name="watermark_free_unavailable">تعذّر تحميل الإعلان. يجري إنشاء الفيديو مع العلامة — يمكنك المحاولة مجددًا من شاشة النتيجة.</string>
 </resources>

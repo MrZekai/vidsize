@@ -62,8 +62,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 22' app/build.gradle.kts
-          grep -q 'versionName = "0.9.4"' app/build.gradle.kts
+          grep -q 'versionCode = 23' app/build.gradle.kts
+          grep -q 'versionName = "0.9.5"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -372,8 +372,10 @@ jobs:
           grep -q 'replacing = result.outputUri' $RESULT
           forbid 'uri = result.outputUri' $RESULT
 
-          # The grant is single-use and is spent by the export it pays for.
-          grep -q 'if (WatermarkOffer.consume())' $RESULT
+          # The grant is single-use. v0.9.5 moved WHERE it is spent: the
+          # completion effect in CompressionScreen, never the result screen's
+          # launch path. See Gate 12e.
+          grep -q 'fun consume(): Boolean' $ADS/WatermarkOffer.kt
 
           # The old reward must not come back anywhere.
           forbid 'AdFreeWindow' $ADS/AdSlots.kt
@@ -387,6 +389,41 @@ jobs:
               exit 1
             fi
           done
+
+          # --- Gate 12e: v0.9.5 the choice is made BEFORE the encode ---------
+          # The mark-free option is one line under the primary button, never a
+          # second primary. Two equal buttons make the free path a vocabulary
+          # test and start to look like an ad wall.
+          # The CALL, not the import: a stale import alone used to satisfy this.
+          grep -q 'WatermarkFreeRow(' $COMPRESS
+          grep -q 'fun startWithoutWatermark' $COMPRESS
+          grep -q 'startCompression(watermark = false)' $COMPRESS
+          forbid 'PrimaryButton' $UI/components/WatermarkFreeRow.kt
+
+          # An unloaded rewarded ad must not block the job the user came for.
+          grep -q 'withTimeoutOrNull(REWARDED_WAIT_MILLIS)' $COMPRESS
+          grep -q 'rewardedUnavailable = true' $COMPRESS
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="watermark_free_unavailable"' "$f" || {
+              echo "$f lacks the ad-unavailable copy" >&2; exit 1; }
+          done
+
+          # The permission round trip must not lose the choice.
+          grep -q 'pendingWatermark = watermark' $COMPRESS
+          grep -q 'watermark = chosen' $COMPRESS
+
+          # The grant is spent by the export that DELIVERS, never at launch:
+          # a failed second pass must not cost the user their rewarded view.
+          grep -q 'if (result != null && !result.watermarked) WatermarkOffer.consume()' $COMPRESS
+          forbid 'WatermarkOffer.consume' $RESULT
+
+          # The offer is read before the share button is pressed.
+          test "$(grep -n 'WatermarkStrip(' $RESULT | head -1 | cut -d: -f1)" \
+             -lt "$(grep -n 'R.string.result_share' $RESULT | head -1 | cut -d: -f1)"
+
+          # Returning from a still-marked output must not be met by an
+          # interstitial: that return is the rewarded ad's best moment.
+          grep -q 'if (!watermarked) context.deferInterstitialOnReturn()' $RESULT
 
           # --- Gate 13: the published policy declares every format and the reward ---
           for term in 'Banner' 'Result-screen ad' 'App-open ad' 'Interstitial' 'Rewarded ad' \
@@ -845,8 +882,8 @@ jobs:
           # The exact v0.9.4 failure, reproduced.
           probe "$W" '/import com.vidsize.compressor.ui.theme.VidsizeTheme/d' \
                 "a deleted VidsizeTheme import"
-          probe "$R" '/import com.vidsize.compressor.ads.WatermarkOffer/d' \
-                "a deleted WatermarkOffer import"
+          probe "$R" '/import com.vidsize.compressor.media.CompressionService/d' \
+                "a deleted CompressionService import"
           # A symbol that exists nowhere at all.
           probe "$R" 's/val context = LocalContext.current/val context = NoSuchHelper.get()/' \
                 "a reference to a class that does not exist"

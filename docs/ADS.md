@@ -104,11 +104,36 @@ offered on the result screen, where the thing it removes is visible on the file
 the user is about to send someone. It suppresses nothing, and it recurs on every
 export instead of suppressing the next ten minutes of them.
 
-The price is a second encode, from the **original** source — the mark is burned
+Since v0.9.5 the choice is offered TWICE, and the two placements cost
+different amounts.
+
+**Before the encode** - one quiet line under the primary button on the
+compression screen (`WatermarkFreeRow`). Taking it here costs ONE encode: the
+rewarded ad plays, then the job starts with the mark switched off. This is the
+efficient path and the honest one, because the user is told what the file will
+contain before it exists.
+
+It is deliberately a line and not a second button. Two equal primary actions
+turn one clear decision into a fork, make "watermark" a vocabulary test nobody
+can get past, and start to make the free path look like it sits behind an ad
+wall.
+
+If the rewarded ad is not loaded when the line is tapped, the app waits up to
+five seconds, then says so plainly and starts the marked export. A dead control
+reads as a broken app; an honest sentence does not.
+
+**After the encode** - the result-screen card (`WatermarkStrip`), which is the
+recovery path for anyone who did not notice the line. The price is a second
+encode, from the **original** source — the mark is burned
 into the pixels of the first output, and re-encoding an encode compounds the
 loss for nothing. `CompressionService.start(replacing = ...)` deletes the marked
 copy only after the clean one is published, so a failed second pass leaves the
 user with the file they already had.
+
+The grant is spent by the export that DELIVERS, never by the one that starts.
+A second pass that fails leaves the grant standing, so the retry costs no
+second ad view - which is both the fair outcome and what AdMob's
+reward-delivery rule requires.
 
 ### What was deleted, and why
 

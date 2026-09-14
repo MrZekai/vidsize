@@ -114,4 +114,7 @@
     <string name="watermark_offer_title">Remover a marca da Vidsize</string>
     <string name="watermark_offer_body">Assista a um video de anuncio curto e o video e gerado de novo sem a marca. Leva o mesmo tempo da primeira vez.</string>
     <string name="watermark_offer_action">Assistir a um video de anuncio curto</string>
+    <string name="watermark_free_row">Gerar sem a marca da Vidsize · assista a um anuncio curto</string>
+    <string name="watermark_free_row_waiting">Preparando o anuncio…</string>
+    <string name="watermark_free_unavailable">Nao foi possivel carregar o anuncio. Seu video esta sendo gerado com a marca; voce pode tentar de novo na tela de resultado.</string>
 </resources>

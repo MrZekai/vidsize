@@ -113,4 +113,7 @@
     <string name="watermark_offer_title">Vidsize का निशान हटाएँ</string>
     <string name="watermark_offer_body">एक छोटा विज्ञापन वीडियो देखें और यह वीडियो बिना निशान के दोबारा बनाया जाएगा। पहली बार जितना ही समय लगता है।</string>
     <string name="watermark_offer_action">छोटा विज्ञापन वीडियो देखें</string>
+    <string name="watermark_free_row">Vidsize के निशान के बिना बनाएँ · छोटा विज्ञापन देखें</string>
+    <string name="watermark_free_row_waiting">विज्ञापन तैयार हो रहा है…</string>
+    <string name="watermark_free_unavailable">विज्ञापन लोड नहीं हो सका। आपका वीडियो निशान के साथ बन रहा है — आप परिणाम स्क्रीन से दोबारा कोशिश कर सकते हैं।</string>
 </resources>

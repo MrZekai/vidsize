@@ -143,4 +143,7 @@
     <string name="watermark_offer_title">Remove the Vidsize mark</string>
     <string name="watermark_offer_body">Watch a short ad video and this video is made again without the mark. Takes about as long as the first pass.</string>
     <string name="watermark_offer_action">Watch a short ad video</string>
+    <string name="watermark_free_row">Make it without the Vidsize mark · watch a short ad</string>
+    <string name="watermark_free_row_waiting">Preparing the ad…</string>
+    <string name="watermark_free_unavailable">The ad could not be loaded. Your video is being made with the mark — you can try again from the result screen.</string>
 </resources>

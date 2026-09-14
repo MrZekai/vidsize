@@ -113,4 +113,7 @@
     <string name="watermark_offer_title">Vidsize-Wasserzeichen entfernen</string>
     <string name="watermark_offer_body">Kurzes Werbevideo ansehen - das Video wird ohne Wasserzeichen neu erstellt. Dauert etwa so lange wie der erste Durchlauf.</string>
     <string name="watermark_offer_action">Kurzes Werbevideo ansehen</string>
+    <string name="watermark_free_row">Ohne Vidsize-Wasserzeichen erstellen · kurze Werbung ansehen</string>
+    <string name="watermark_free_row_waiting">Werbung wird vorbereitet…</string>
+    <string name="watermark_free_unavailable">Die Werbung konnte nicht geladen werden. Dein Video wird mit Wasserzeichen erstellt — du kannst es im Ergebnisbildschirm erneut versuchen.</string>
 </resources>
