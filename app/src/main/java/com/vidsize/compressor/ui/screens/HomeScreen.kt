@@ -531,7 +531,12 @@ private fun RecentRow(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = entry.displayName,
+                // Was entry.displayName. Every generated name shares a prefix
+                // long enough that the ellipsis cut before the part that made
+                // it unique, so same-day rows were indistinguishable. See
+                // Fmt.dateTime.
+                text = Fmt.dateTime(entry.completedAtMillis)
+                    .ifBlank { entry.displayName },
                 style = VidsizeType.cardTitle,
                 color = VidsizeColor.Ink,
                 maxLines = 1,

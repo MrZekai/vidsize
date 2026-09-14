@@ -43,6 +43,18 @@ object CompressionJobState {
         data class Running(
             val progress: Float,
             val progressKnown: Boolean,
+
+            /**
+             * Which encode of a size-target job is running, and out of how many.
+             *
+             * Both 1 for an ordinary job, and the UI says nothing. A size target
+             * can need a second or third encode to land under the ceiling, and
+             * without this the progress ring would drop back to zero with no
+             * explanation - which reads exactly like a crash-and-restart. The
+             * ring restarting is fine as long as the screen says why.
+             */
+            val pass: Int = 1,
+            val passCeiling: Int = 1,
         ) : Status
 
         data class Done(val result: CompressionResult) : Status
@@ -63,7 +75,33 @@ object CompressionJobState {
     }
 
     fun markProgress(progress: Float) {
-        status = Status.Running(progress, progressKnown = true)
+        // Carry the pass across a progress tick. Reading it back off the current
+        // status rather than taking it as a parameter keeps every existing
+        // caller correct: progress is reported from inside the encoder callback,
+        // which knows the fraction and has no idea which pass it is on.
+        val current = status as? Status.Running
+        status = Status.Running(
+            progress = progress,
+            progressKnown = true,
+            pass = current?.pass ?: 1,
+            passCeiling = current?.passCeiling ?: 1,
+        )
+    }
+
+    /**
+     * Starts a new encode within the same job.
+     *
+     * Resets the fraction to zero on purpose: the new pass really is starting
+     * over. [ProcessingOverlay] pairs that with the pass number so the reset
+     * reads as "second attempt" and not as "it crashed".
+     */
+    fun markPass(pass: Int, passCeiling: Int) {
+        status = Status.Running(
+            progress = 0f,
+            progressKnown = true,
+            pass = pass,
+            passCeiling = passCeiling,
+        )
     }
 
     fun markDone(result: CompressionResult) {

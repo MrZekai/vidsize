@@ -22,4 +22,24 @@ data class CompressionResult(
     val elapsedMs: Long,
     val preset: CompressionPreset,
     val watermarked: Boolean,
+
+    /**
+     * The size the user asked for, when this job came from a size target.
+     * Null when it came from a quality level.
+     */
+    val targetBytes: Long? = null,
+
+    /**
+     * Whether the requested size was actually reached.
+     *
+     * Always true in preset mode. In target mode it can be false: the encoder
+     * gets a fixed number of attempts, and some sources cannot be squeezed
+     * further without dropping below what the hardware will encode at all.
+     *
+     * The result screen must say so when it is false. Reporting "done" on a file
+     * that is over the limit the user is about to send it through would push the
+     * failure to the moment they try to attach it, which is the worst possible
+     * place to discover it.
+     */
+    val targetMet: Boolean = true,
 )

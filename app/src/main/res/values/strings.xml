@@ -150,4 +150,22 @@
     <string name="watermark_free_card_action">Make it without the mark</string>
     <string name="watermark_free_card_waiting">Preparing the ad…</string>
     <string name="cta_blocked_already_efficient">This video is already well compressed. Try Smaller or Smallest.</string>
+    <string name="mode_level">Level</string>
+    <string name="mode_size">Target size</string>
+    <string name="section_size">Target size</string>
+    <string name="size_custom">Custom</string>
+    <string name="size_custom_label">Size</string>
+    <string name="size_pending_title">Reading your video</string>
+    <string name="size_pending_body">The size plan appears once the video has been read.</string>
+    <string name="size_not_smaller_title">Already under that</string>
+    <string name="size_not_smaller_body">This video is %1$s. Pick a smaller target.</string>
+    <string name="size_too_small_title">Too small for this video</string>
+    <string name="size_too_small_body">This video is too long to fit that size at a quality any encoder will produce. Pick a larger target.</string>
+    <string name="size_plan_title">About %1$s</string>
+    <string name="size_plan_body">Output %1$d×%2$d. Vidsize re-encodes up to three times to land under your target.</string>
+    <string name="cta_blocked_target_missing">Enter a target size</string>
+    <string name="cta_blocked_target_not_smaller">Your video is already smaller than that</string>
+    <string name="cta_blocked_target_too_small">That size is not reachable for this video</string>
+    <string name="processing_pass">Pass %1$d of %2$d — closing in on your target</string>
+    <string name="result_target_missed">Couldn\'t get under %1$s. This is the smallest Vidsize could make it.</string>
 </resources>

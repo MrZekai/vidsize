@@ -52,6 +52,22 @@ fun HomeBannerAd(modifier: Modifier = Modifier) {
     )
 }
 
+/**
+ * Currently called from nowhere.
+ *
+ * v0.9.9 removed the compression screen's banner: that screen's fixed chrome
+ * had grown to the point where the third compression level was off screen, and
+ * this was the cheapest 59dp to reclaim, as well as the placement most likely to
+ * be tapped by accident while scrolling a list of options.
+ *
+ * Kept rather than deleted, and said out loud rather than left to be discovered.
+ * The unit id behind it (`VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID`) is still
+ * configured, still gated in CI, and still documented in docs/ADS.md; removing
+ * the composable would mean unpicking all of that for a function R8 already
+ * strips from every shipped build. If a second banner surface is ever wanted,
+ * this is the one to use - but a CI gate now forbids re-adding it to the
+ * compression screen specifically, because that is where it did damage.
+ */
 @Composable
 fun CompressionBannerAd(
     modifier: Modifier = Modifier,

@@ -2,6 +2,7 @@ package com.vidsize.compressor.media
 
 import com.vidsize.compressor.model.CompressionPlan
 import com.vidsize.compressor.model.CompressionPreset
+import com.vidsize.compressor.model.TargetVerdict
 import com.vidsize.compressor.model.VideoInfo
 import kotlin.math.max
 import kotlin.math.min
@@ -100,8 +101,25 @@ object CompressionPlanner {
     /** Short clips overshoot more, so this moves with [ENCODER_VARIANCE]. */
     private const val SHORT_CLIP_VARIANCE = 1.52
 
-    /** A preset must beat this share of the source to be worth running. */
-    private const val VIABLE_RATIO = 0.92
+    /**
+     * A preset must beat this share of the source to be worth running.
+     *
+     * ## Why 0.85 and not the 0.92 this used to be
+     *
+     * At 0.92 a job that saved 9% counted as viable. On a 17 MB clip that is
+     * 1.4 MB, bought with a minute of waiting, a warm phone, and a re-encode the
+     * user cannot undo - and the result screen then celebrated it with a party
+     * emoji. The app was technically right and practically wrong: it had done
+     * what it said, and the user had lost quality for nothing they would notice
+     * in their storage.
+     *
+     * 0.85 means the app only offers to run when it can take at least a seventh
+     * off. Below that it now says so up front, which is a better answer than a
+     * result screen nobody is happy with. Sources that fall below the bar are
+     * usually already-efficient ones, and [ALREADY_EFFICIENT_BPP] catches the
+     * subset of those that would also have failed outright.
+     */
+    private const val VIABLE_RATIO = 0.85
 
     /**
      * Bits per pixel per frame below which a source counts as already encoded
@@ -302,5 +320,259 @@ object CompressionPlanner {
     private fun Int.toEvenAtLeastTwo(): Int {
         val value = coerceAtLeast(2)
         return if (value % 2 == 0) value else value - 1
+    }
+
+    // ========================================================================
+    // Size targets
+    // ========================================================================
+
+    /**
+     * Short edges the target planner is allowed to step down to, largest first.
+     *
+     * A given bitrate always looks better spread over fewer pixels. When the
+     * requested size does not leave enough bits for the source resolution, the
+     * honest move is to hand back a smaller, clean frame rather than a full-size
+     * blocky one - so this walks down until the bits per pixel are acceptable.
+     */
+    private val TARGET_SHORT_EDGES = intArrayOf(2160, 1440, 1080, 720, 480, 360)
+
+    /**
+     * Bits per pixel per frame below which the target planner steps the
+     * resolution down instead of accepting the frame size.
+     *
+     * Chosen just under SMALLEST's 0.085: at this density the picture is
+     * visibly compressed but still clean, which is the correct trade when the
+     * user has explicitly asked for a hard size ceiling. Note this is a floor
+     * for CHOOSING a resolution, not a floor for the encode - once the ladder
+     * bottoms out at 360p the planner accepts whatever the budget allows, and
+     * only [MIN_ENCODABLE_VIDEO_BITRATE] can refuse outright.
+     */
+    private const val TARGET_MIN_BPP = 0.075
+
+    /**
+     * Audio floor in target mode, below the preset floor.
+     *
+     * At a 10 MB ceiling on a long clip, a 64 kbps audio track can be a double
+     * digit share of the whole budget. Speech stays intelligible at 48 kbps AAC,
+     * and an audible-but-thin soundtrack beats a video the app refuses to make.
+     */
+    private const val TARGET_MIN_AUDIO_BITRATE = 48_000
+
+    /** Aim slightly under the ceiling: landing exactly on it is landing over it. */
+    private const val TARGET_HEADROOM = 0.97
+
+    /**
+     * Plans an encode that aims at a requested output size instead of a quality
+     * level.
+     *
+     * ## Why this is the inverse of [plan] and not a new algorithm
+     *
+     * [plan] walks forward: preset -> bitrate -> predicted bytes. This walks the
+     * same chain backwards - bytes -> bitrate -> resolution - through the same
+     * [CONTAINER_OVERHEAD] and the same encoder variance. Using one set of
+     * constants in both directions is what keeps the estimate the user sees on
+     * this screen consistent with the estimate they see on the other one.
+     *
+     * ## Why the estimate is recomputed forward at the end
+     *
+     * The ladder and the clamps can move the bitrate away from the budget. If
+     * the screen showed the requested size as the estimate it would be showing
+     * the user their own input back, which tells them nothing - so the last step
+     * runs the forward arithmetic on the numbers actually chosen.
+     *
+     * The returned plan is not a promise. Hardware VBR does not hit a requested
+     * bitrate exactly, which is why [CompressionEngine] measures the result and
+     * re-encodes when it misses. This gets the first attempt close enough that
+     * one correction is usually the last one.
+     */
+    fun planForTarget(info: VideoInfo, targetBytes: Long): CompressionPlan {
+        require(info.durationMs > 0L) { "Video duration must be positive." }
+        require(info.width > 0 && info.height > 0) { "Video dimensions must be positive." }
+        require(targetBytes > 0L) { "Target size must be positive." }
+
+        val sourceTotalBitrate = inferSourceTotalBitrate(info)
+        val sourceShortEdge = min(info.width, info.height)
+        val frameRate = info.frameRate
+            .takeIf { it > 0.0 }
+            ?.coerceIn(MIN_FRAME_RATE, MAX_FRAME_RATE)
+            ?: DEFAULT_FRAME_RATE
+        val variance = if (info.durationSeconds < SHORT_CLIP_SECONDS) {
+            SHORT_CLIP_VARIANCE
+        } else {
+            ENCODER_VARIANCE
+        }
+
+        // Asking for a ceiling the file is already under is a question, not a
+        // mistake. Answer it here rather than letting the user wait for an
+        // encode that cannot improve on what they have.
+        if (info.sourceBytes > 0L && targetBytes >= (info.sourceBytes * VIABLE_RATIO).toLong()) {
+            return refusedTarget(
+                info, targetBytes, sourceShortEdge, TargetVerdict.NOT_SMALLER_THAN_SOURCE,
+            )
+        }
+
+        // bytes -> bits -> bits per second, minus what the container and the
+        // encoder's own overshoot will claim.
+        val budgetTotalBitrate = (
+            targetBytes * 8.0 * TARGET_HEADROOM /
+                (info.durationSeconds * CONTAINER_OVERHEAD * variance)
+            ).toInt()
+
+        val audioBitrate = if (info.hasAudio) {
+            val budgetShare = (budgetTotalBitrate * MAX_AUDIO_SOURCE_SHARE).toInt()
+            val sourceShare = (sourceTotalBitrate * MAX_AUDIO_SOURCE_SHARE).toInt()
+            min(
+                CompressionPreset.BALANCED.audioBitrate,
+                max(TARGET_MIN_AUDIO_BITRATE, min(budgetShare, sourceShare)),
+            )
+        } else {
+            0
+        }
+
+        // Never ask for more bits than the source carries: that inflates the
+        // file and buys nothing. The ceiling is the source, not the budget.
+        val videoBudget = min(
+            budgetTotalBitrate - audioBitrate,
+            (sourceTotalBitrate * VIABLE_RATIO).toInt() - audioBitrate,
+        )
+
+        val shortEdge = chooseShortEdgeForBudget(
+            sourceShortEdge = sourceShortEdge,
+            sourceWidth = info.width,
+            sourceHeight = info.height,
+            frameRate = frameRate,
+            videoBudget = videoBudget,
+        )
+        val (targetWidth, targetHeight) = frameFor(info, shortEdge)
+
+        if (videoBudget < MIN_ENCODABLE_VIDEO_BITRATE) {
+            return refusedTarget(
+                info, targetBytes, sourceShortEdge, TargetVerdict.TOO_SMALL_FOR_DURATION,
+            )
+        }
+
+        val outputTotalBitrate = videoBudget + audioBitrate
+        val estimatedBytes = ((outputTotalBitrate * info.durationSeconds / 8.0) *
+            CONTAINER_OVERHEAD * variance)
+            .toLong()
+            .coerceAtLeast(1L)
+
+        return CompressionPlan(
+            preset = presetLabelFor(shortEdge),
+            targetWidth = targetWidth,
+            targetHeight = targetHeight,
+            videoBitrate = videoBudget,
+            audioBitrate = audioBitrate,
+            estimatedOutputBytes = estimatedBytes,
+            viable = true,
+            targetBytes = targetBytes,
+            targetVerdict = TargetVerdict.REACHABLE,
+        )
+    }
+
+    /**
+     * The plan for the next attempt after one missed its target.
+     *
+     * Scales the video bitrate by how far the last attempt overshot. Hardware
+     * VBR error is broadly proportional - a run that came in 20% over at 3 Mbps
+     * lands close when asked for 2.4 - so a single multiply usually converges in
+     * one step, and [CompressionEngine] caps how many steps are allowed.
+     *
+     * The frame size is deliberately NOT reduced between passes. The user chose
+     * a size, not a resolution; silently shrinking the picture on the second
+     * attempt would change what they get without telling them. If the bitrate
+     * falls below what an encoder accepts, the attempt is abandoned and the best
+     * result so far is kept.
+     *
+     * Returns null when no useful correction exists.
+     */
+    fun correctedForTarget(plan: CompressionPlan, actualBytes: Long): CompressionPlan? {
+        val target = plan.targetBytes ?: return null
+        if (actualBytes <= 0L || actualBytes <= target) return null
+
+        val factor = (target.toDouble() / actualBytes.toDouble()) * TARGET_HEADROOM
+        val corrected = (plan.videoBitrate * factor).toInt()
+        if (corrected < MIN_ENCODABLE_VIDEO_BITRATE) return null
+        // A correction that barely moves is a wasted encode.
+        if (corrected >= (plan.videoBitrate * 0.98).toInt()) return null
+
+        return plan.copy(
+            videoBitrate = corrected,
+            estimatedOutputBytes = (plan.estimatedOutputBytes * factor).toLong().coerceAtLeast(1L),
+        )
+    }
+
+    /**
+     * The largest rung whose bits per pixel clear [TARGET_MIN_BPP], or the
+     * smallest rung when none of them do.
+     */
+    private fun chooseShortEdgeForBudget(
+        sourceShortEdge: Int,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        frameRate: Double,
+        videoBudget: Int,
+    ): Int {
+        val rungs = TARGET_SHORT_EDGES.filter { it <= sourceShortEdge }
+        if (rungs.isEmpty() || videoBudget <= 0) {
+            return min(sourceShortEdge, TARGET_SHORT_EDGES.last()).toEvenAtLeastTwo()
+        }
+        val longRatio = max(sourceWidth, sourceHeight).toDouble() /
+            min(sourceWidth, sourceHeight).toDouble()
+        rungs.forEach { edge ->
+            val pixels = edge.toDouble() * (edge * longRatio)
+            if (videoBudget / (pixels * frameRate) >= TARGET_MIN_BPP) {
+                return edge.toEvenAtLeastTwo()
+            }
+        }
+        return rungs.last().toEvenAtLeastTwo()
+    }
+
+    /** Frame size for a short edge, preserving the source aspect ratio. */
+    private fun frameFor(info: VideoInfo, shortEdge: Int): Pair<Int, Int> =
+        if (info.height > info.width) {
+            shortEdge to (info.height.toDouble() * shortEdge / info.width.toDouble())
+                .roundToInt()
+                .toEvenAtLeastTwo()
+        } else {
+            (info.width.toDouble() * shortEdge / info.height.toDouble())
+                .roundToInt()
+                .toEvenAtLeastTwo() to shortEdge
+        }
+
+    /**
+     * The preset whose resolution cap matches the frame a target plan settled
+     * on, used only as a label.
+     *
+     * Nothing in the encode path reads it - [CompressionEngine.buildAttempts]
+     * works purely from the geometry and bitrate - but [CompressionPlan] and
+     * [com.vidsize.compressor.model.CompressionResult] both carry a preset, and
+     * a plausible one beats a hardcoded default that would make every target
+     * job look like BALANCED in the history.
+     */
+    private fun presetLabelFor(shortEdge: Int): CompressionPreset = when {
+        shortEdge > 720 -> CompressionPreset.BALANCED
+        shortEdge > 480 -> CompressionPreset.SMALLER
+        else -> CompressionPreset.SMALLEST
+    }
+
+    private fun refusedTarget(
+        info: VideoInfo,
+        targetBytes: Long,
+        sourceShortEdge: Int,
+        verdict: TargetVerdict,
+    ): CompressionPlan {
+        val (width, height) = frameFor(info, sourceShortEdge.toEvenAtLeastTwo())
+        return CompressionPlan(
+            preset = CompressionPreset.BALANCED,
+            targetWidth = width,
+            targetHeight = height,
+            videoBitrate = 0,
+            audioBitrate = 0,
+            estimatedOutputBytes = targetBytes,
+            viable = false,
+            targetBytes = targetBytes,
+            targetVerdict = verdict,
+        )
     }
 }

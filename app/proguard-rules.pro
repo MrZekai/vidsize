@@ -20,5 +20,34 @@
 # UMP consent forms are driven from a WebView bridge.
 -keep class com.google.android.ump.** { *; }
 
+# --- Added in v0.9.9, when closedTest started building with R8 on ------------
+#
+# Until v0.9.8 `closedTest` had isMinifyEnabled = false while `release` had it
+# true, so every rule above this line had been written but never actually
+# exercised on a device. Turning R8 on for the tested artifact is the real fix;
+# these are the rules that were missing from the set while nobody was looking.
+
+# Media3 Transformer instantiates its default encoder and muxer factories by
+# name. -keepclassmembers above preserves members of classes that survive, but
+# does not stop R8 removing an entire class nothing references directly.
+-keep class androidx.media3.transformer.** { *; }
+-keep class androidx.media3.effect.** { *; }
+-keep class androidx.media3.common.** { *; }
+
+# The whole of Vidsize's own model layer. These are small, and every one of them
+# crosses a boundary R8 cannot follow - Compose state, a Parcelable-free service
+# Intent, or the history JSON.
+#
+# The history JSON itself is NOT at risk: PrefsHistoryRepository writes literal
+# string keys through JSONObject rather than reflecting over field names, which
+# was checked rather than assumed. This keep is for the enums, whose `name` IS
+# read and written across the service boundary - CompressionPreset.valueOf() in
+# CompressionService would throw on an obfuscated name.
+-keep class com.vidsize.compressor.model.** { *; }
+
+# Kotlin coroutines' internal service loader and the debug agent probe.
+-dontwarn kotlinx.coroutines.**
+-keepclassmembers class kotlinx.coroutines.** { volatile <fields>; }
+
 -dontwarn org.checkerframework.**
 -dontwarn javax.annotation.**

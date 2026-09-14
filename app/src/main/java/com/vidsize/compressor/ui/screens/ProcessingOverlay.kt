@@ -77,6 +77,8 @@ fun ProcessingOverlay(
     progress: Float,
     progressKnown: Boolean,
     onCancel: () -> Unit,
+    pass: Int = 1,
+    passCeiling: Int = 1,
 ) {
     val blocker = remember { MutableInteractionSource() }
 
@@ -139,6 +141,14 @@ fun ProcessingOverlay(
 
                 Text(
                     text = when {
+                        // A size target can need a second or third encode. The
+                        // ring genuinely restarts, and without a word for it
+                        // that looks like the job crashed and began again - so
+                        // this line takes priority over every other message
+                        // while a correction pass is running.
+                        pass > 1 -> stringResource(
+                            R.string.processing_pass, pass, passCeiling,
+                        )
                         !progressKnown -> stringResource(R.string.processing_preparing)
                         // The last 10% of the reported figure is the MediaStore
                         // copy, not the encode. Saying "saving" there is accurate.

@@ -154,8 +154,8 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 26
-        versionName = "0.9.8"
+        versionCode = 27
+        versionName = "0.9.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -276,8 +276,22 @@ android {
             matchingFallbacks += listOf("release")
             buildConfigField("boolean", "USE_TEST_ADS", "false")
             buildConfigField("boolean", "ENABLE_ADS", "$adsConfigured")
-            isMinifyEnabled = false
-            isShrinkResources = false
+
+            // R8 ON, matching `release` exactly, since v0.9.9.
+            //
+            // These were false, and `release` had them true. That meant the
+            // artifact uploaded to closed testing was NOT the artifact
+            // production would ship: the minified, resource-shrunk build - the
+            // one where a missing keep rule turns Media3's reflection or the
+            // native ad layout into a runtime crash - had never run on a
+            // physical device even once.
+            //
+            // The whole point of a closed test is that the testers exercise the
+            // thing the public will get. An R8 fault found by ten testers is a
+            // bad week; the same fault found after a production rollout is a
+            // one-star review that stays.
+            isMinifyEnabled = true
+            isShrinkResources = true
             manifestPlaceholders["ADMOB_APP_ID"] =
                 admobAppId.ifBlank { googleTestAdMobAppId }
 

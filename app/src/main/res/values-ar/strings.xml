@@ -124,4 +124,22 @@
     <string name="watermark_free_card_action">إنشاء بدون العلامة</string>
     <string name="watermark_free_card_waiting">جارٍ تحضير الإعلان…</string>
     <string name="cta_blocked_already_efficient">هذا الفيديو مضغوط جيدًا بالفعل. جرّب أصغر أو الأصغر.</string>
+    <string name="mode_level">المستوى</string>
+    <string name="mode_size">الحجم المستهدف</string>
+    <string name="section_size">الحجم المستهدف</string>
+    <string name="size_custom">مخصص</string>
+    <string name="size_custom_label">الحجم</string>
+    <string name="size_pending_title">جارٍ قراءة الفيديو</string>
+    <string name="size_pending_body">تظهر خطة الحجم بعد قراءة الفيديو.</string>
+    <string name="size_not_smaller_title">أصغر من ذلك بالفعل</string>
+    <string name="size_not_smaller_body">حجم هذا الفيديو %1$s. اختر هدفًا أصغر.</string>
+    <string name="size_too_small_title">أصغر من اللازم لهذا الفيديو</string>
+    <string name="size_too_small_body">هذا الفيديو أطول من أن يتسع في هذا الحجم بجودة يمكن لأي مُرمِّز إنتاجها. اختر هدفًا أكبر.</string>
+    <string name="size_plan_title">نحو %1$s</string>
+    <string name="size_plan_body">الإخراج %1$d×%2$d. يعيد Vidsize الترميز حتى ثلاث مرات للنزول تحت هدفك.</string>
+    <string name="cta_blocked_target_missing">أدخل حجمًا مستهدفًا</string>
+    <string name="cta_blocked_target_not_smaller">الفيديو أصغر من ذلك بالفعل</string>
+    <string name="cta_blocked_target_too_small">هذا الحجم غير قابل للتحقيق لهذا الفيديو</string>
+    <string name="processing_pass">المحاولة %1$d من %2$d — نقترب من هدفك</string>
+    <string name="result_target_missed">تعذّر النزول تحت %1$s. هذا أصغر حجم استطاع Vidsize إنتاجه.</string>
 </resources>

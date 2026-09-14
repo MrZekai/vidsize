@@ -9,6 +9,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +26,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -60,6 +65,8 @@ import com.vidsize.compressor.media.rememberVideoThumbnail
 import com.vidsize.compressor.model.CompressionPlan
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
+import com.vidsize.compressor.model.SizeTarget
+import com.vidsize.compressor.model.TargetVerdict
 import com.vidsize.compressor.model.VideoInfo
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
@@ -70,7 +77,6 @@ import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.RewardedAds
 import com.vidsize.compressor.ads.WatermarkOffer
 import com.vidsize.compressor.ads.findHostActivity
-import com.vidsize.compressor.ui.components.CompressionBannerAd
 import com.vidsize.compressor.ui.components.WatermarkFreeCard
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
@@ -165,9 +171,26 @@ fun CompressionScreen(
     // question.
     var pendingStart by remember(videoUri) { mutableStateOf(false) }
     var pendingWatermark by remember(videoUri) { mutableStateOf(true) }
+    // Held for the same reason as pendingWatermark: the permission dialog is a
+    // round trip, and a choice that does not survive it is a choice the user
+    // made and did not get.
+    var pendingTarget by remember(videoUri) { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
     var awaitingRewarded by remember(videoUri) { mutableStateOf(false) }
     var rewardedUnavailable by remember(videoUri) { mutableStateOf(false) }
+
+    // Which question the user is answering: "how much quality am I giving up?"
+    // or "what size does this have to be under?".
+    //
+    // Only one of the two is on screen at a time, deliberately. Showing both a
+    // preset list and a size row would take more vertical space than this screen
+    // has - which is the fault that shipped in v0.9.8, where the mark-free card
+    // pushed the third preset off the bottom - and would also ask the user to
+    // reconcile two answers that can contradict each other.
+    var sizeMode by remember(videoUri) { mutableStateOf(false) }
+    var sizeTarget by remember(videoUri) { mutableStateOf(SizeTarget.MB_16) }
+    var customMode by remember(videoUri) { mutableStateOf(false) }
+    var customText by remember(videoUri) { mutableStateOf("") }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {
@@ -175,8 +198,15 @@ fun CompressionScreen(
             pendingStart = false
             starting = true
             val chosen = pendingWatermark
+            val chosenTarget = pendingTarget
             InterstitialAds.preload(context)
-            CompressionService.start(context, videoUri, preset, watermark = chosen)
+            CompressionService.start(
+                context,
+                videoUri,
+                preset,
+                watermark = chosen,
+                targetBytes = chosenTarget,
+            )
         }
     }
 
@@ -191,7 +221,27 @@ fun CompressionScreen(
     val plans: Map<CompressionPreset, CompressionPlan>? = info?.let { probed ->
         CompressionPreset.entries.associateWith { CompressionPlanner.plan(probed, it) }
     }
-    val selectedPlan: CompressionPlan? = plans?.get(preset)
+    // The bytes the user is asking for, or null when they are picking a level.
+    val targetBytes: Long? = when {
+        !sizeMode -> null
+        customMode -> customText.toIntOrNull()?.let { SizeTarget.bytesFor(it) }
+        else -> sizeTarget.bytes
+    }
+
+    // Planned on the same probe as the presets, through the same constants, so
+    // the estimate on this screen means the same thing in both modes.
+    val targetPlan: CompressionPlan? = remember(info, targetBytes) {
+        val probed = info
+        val bytes = targetBytes
+        if (probed == null || bytes == null) {
+            null
+        } else {
+            runCatching { CompressionPlanner.planForTarget(probed, bytes) }.getOrNull()
+        }
+    }
+
+    val presetPlan: CompressionPlan? = plans?.get(preset)
+    val selectedPlan: CompressionPlan? = if (sizeMode) targetPlan else presetPlan
     val anyViable = plans?.values?.any { it.viable } ?: true
     val storage = remember(selectedPlan?.estimatedOutputBytes, info?.sourceBytes, context) {
         selectedPlan?.let {
@@ -251,13 +301,20 @@ fun CompressionScreen(
             // mark-free export and then met the permission dialog would get a
             // marked file after watching an ad for the opposite.
             pendingWatermark = watermark
+            pendingTarget = targetBytes
             pendingStart = true
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
         starting = true
         InterstitialAds.preload(context)
-        CompressionService.start(context, videoUri, preset, watermark = watermark)
+        CompressionService.start(
+            context,
+            videoUri,
+            preset,
+            watermark = watermark,
+            targetBytes = targetBytes,
+        )
     }
 
     /**
@@ -398,17 +455,22 @@ fun CompressionScreen(
                 Spacer(Modifier.height(Space.sm))
             }
 
-            // Fixed top banner: separated from Back by non-clickable intro copy,
-            // and far away from the primary COMPRESS button. Switched off for the
-            // whole processing phase - preparing included - so this one and the
-            // banner inside ProcessingOverlay are never live at the same time.
-            CompressionBannerAd(active = !processing)
-
-            // Without this divider the scrolling preset rows come to rest flush
-            // against the banner's bottom edge, which is an accidental-click
-            // surface the moment the user scrolls.
-            HairLine()
-            Spacer(Modifier.height(Space.xs))
+            // The fixed top banner was removed in v0.9.9. This is a decision
+            // screen, and it had run out of room:
+            //
+            // Measured on a 393x873dp device, the fixed chrome - banner 50dp,
+            // divider and spacing 9dp, mark-free card ~160dp, action bar ~73dp -
+            // left a ~366dp window for ~510dp of content. The third compression
+            // level was never on screen, and the second one's estimate was cut
+            // in half. The user could not see what they were choosing between.
+            //
+            // Two things paid that back: the mark-free card moved into the
+            // scrolling column below, and this banner went. A banner shown while
+            // someone is comparing three options is also the banner most likely
+            // to be hit by accident on a scroll, and the app still carries four
+            // other placements - home banner, result native, interstitial and
+            // app-open - so the inventory lost here is the least valuable of
+            // them. Space on this screen is worth more than one impression.
 
             Column(
                 modifier = Modifier
@@ -417,20 +479,6 @@ fun CompressionScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = Space.gutter),
             ) {
-                // The rewarded offer, repeated here on purpose.
-                //
-                // This is the strongest moment in the app to make it. The user
-                // is one tap from starting a job that will take two to five
-                // minutes and will end in an interstitial; "watch a short ad
-                // video, get ten minutes with no ads" is a trade that makes
-                // obvious sense right now in a way it does not on Home, where
-                // the user has not yet committed to anything.
-                //
-                // Hidden during processing: the offer opens a full-screen ad,
-                // and nothing covers a running job.
-                if (!processing) {
-                }
-
                 Spacer(Modifier.height(Space.lg))
 
                 SelectedVideoCard(videoUri = videoUri, info = info, failed = probeFailed)
@@ -493,22 +541,49 @@ fun CompressionScreen(
                 if (!probeFailed) {
                     Spacer(Modifier.height(Space.xl))
 
-                    SectionHeader(title = stringResource(R.string.section_level))
+                    // Which question is being asked. One selector, two bodies -
+                    // never both at once. See `sizeMode`.
+                    ModeSwitch(
+                        sizeMode = sizeMode,
+                        enabled = !processing,
+                        onSelect = { sizeMode = it },
+                    )
 
-                    Spacer(Modifier.height(Space.sm))
+                    Spacer(Modifier.height(Space.md))
 
-                    CompressionPreset.entries.forEach { option ->
-                        val plan = plans?.get(option)
-                        PresetRow(
-                            preset = option,
-                            selected = option == preset,
-                            estimateBytes = plan?.estimatedOutputBytes,
+                    if (sizeMode) {
+                        SizeTargetSection(
+                            selected = sizeTarget,
+                            custom = customMode,
+                            customText = customText,
+                            plan = targetPlan,
                             sourceBytes = currentInfo?.sourceBytes ?: 0L,
-                            viable = plan?.viable ?: true,
                             enabled = !processing,
-                            onClick = { if (plan?.viable != false) preset = option },
+                            onSelect = { chosen ->
+                                sizeTarget = chosen
+                                customMode = false
+                            },
+                            onCustom = { customMode = true },
+                            onCustomText = { customText = it },
                         )
-                        Spacer(Modifier.height(Space.xs))
+                    } else {
+                        SectionHeader(title = stringResource(R.string.section_level))
+
+                        Spacer(Modifier.height(Space.sm))
+
+                        CompressionPreset.entries.forEach { option ->
+                            val plan = plans?.get(option)
+                            PresetRow(
+                                preset = option,
+                                selected = option == preset,
+                                estimateBytes = plan?.estimatedOutputBytes,
+                                sourceBytes = currentInfo?.sourceBytes ?: 0L,
+                                viable = plan?.viable ?: true,
+                                enabled = !processing,
+                                onClick = { if (plan?.viable != false) preset = option },
+                            )
+                            Spacer(Modifier.height(Space.xs))
+                        }
                     }
 
                     Spacer(Modifier.height(Space.xxs))
@@ -518,41 +593,45 @@ fun CompressionScreen(
                         style = VidsizeType.caption,
                         color = VidsizeColor.Faint,
                     )
+
+                    // The mark-free card, INSIDE the scroll now.
+                    //
+                    // v0.9.7 pinned it above the action bar, and the card is
+                    // ~160dp: on a 393x873dp device that left ~366dp for ~510dp
+                    // of content, so the third compression level was never on
+                    // screen. The choice the user came here to make was hidden
+                    // by the offer attached to it.
+                    //
+                    // The card was right to be a card - as a caption line under
+                    // the button it read as a disclaimer - and it is unchanged.
+                    // What moved is where it is anchored. Scrolled to the
+                    // bottom, which is where a user is when they are about to
+                    // tap COMPRESS, it still sits directly above the action bar
+                    // and reads exactly as it did. Scrolled to the top, it is
+                    // out of the way of the levels.
+                    WatermarkFreeCard(
+                        enabled = info != null &&
+                            !processing &&
+                            selectedPlan?.viable == true &&
+                            storage?.hasRoom != false,
+                        waiting = awaitingRewarded,
+                        onChoose = { startWithoutWatermark() },
+                        modifier = Modifier.padding(top = Space.lg),
+                    )
+                    if (rewardedUnavailable) {
+                        Text(
+                            text = stringResource(R.string.watermark_free_unavailable),
+                            style = VidsizeType.caption,
+                            color = VidsizeColor.Muted,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = Space.xxs),
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(Space.xl))
-            }
-
-            // The mark-free card, ABOVE the action bar.
-            //
-            // v0.9.5 had this as a caption line under the primary button and it
-            // read as footer text - the most valuable action in the app styled
-            // like a disclaimer. It is now a card that sells the outcome, with
-            // the ad as a badge; the gradient primary below is still the only
-            // thing that looks like the main action, so the free path stays
-            // visually dominant.
-            if (!probeFailed) {
-                WatermarkFreeCard(
-                    enabled = info != null &&
-                        !processing &&
-                        selectedPlan?.viable == true &&
-                        storage?.hasRoom != false,
-                    waiting = awaitingRewarded,
-                    onChoose = { startWithoutWatermark() },
-                    modifier = Modifier.padding(horizontal = Space.gutter),
-                )
-                if (rewardedUnavailable) {
-                    Text(
-                        text = stringResource(R.string.watermark_free_unavailable),
-                        style = VidsizeType.caption,
-                        color = VidsizeColor.Muted,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Space.gutter, vertical = Space.xxs),
-                    )
-                }
-                Spacer(Modifier.height(Space.sm))
             }
 
             CompressionActionBar(
@@ -573,9 +652,20 @@ fun CompressionScreen(
                     probeFailed -> null
                     info == null -> null
                     processing -> null
+                    // Size-target refusals come first and are specific. "Pick a
+                    // different level" is wrong advice for someone who is not
+                    // looking at levels, and the two refusals point in opposite
+                    // directions - one says ask for less, the other says ask for
+                    // more - so they must never collapse into one sentence.
+                    sizeMode && targetBytes == null ->
+                        stringResource(R.string.cta_blocked_target_missing)
+                    targetPlan?.targetVerdict == TargetVerdict.NOT_SMALLER_THAN_SOURCE ->
+                        stringResource(R.string.cta_blocked_target_not_smaller)
+                    targetPlan?.targetVerdict == TargetVerdict.TOO_SMALL_FOR_DURATION ->
+                        stringResource(R.string.cta_blocked_target_too_small)
                     selectedPlan?.alreadyEfficient == true ->
                         stringResource(R.string.cta_blocked_already_efficient)
-                    !anyViable -> stringResource(R.string.cta_blocked_no_savings)
+                    !sizeMode && !anyViable -> stringResource(R.string.cta_blocked_no_savings)
                     blockedByStorage -> stringResource(R.string.cta_blocked_no_space)
                     selectedPlan?.viable == false -> stringResource(R.string.cta_blocked_level)
                     else -> null
@@ -600,6 +690,8 @@ fun CompressionScreen(
                     starting = false
                     CompressionService.cancel(context)
                 },
+                pass = running?.pass ?: 1,
+                passCeiling = running?.passCeiling ?: 1,
             )
         }
 
@@ -1031,15 +1123,20 @@ private fun SizeBar(fraction: Float, selected: Boolean) {
     }
 }
 
-private enum class NoticeTone { Info, Blocking, Error }
+internal enum class NoticeTone { Info, Blocking, Error }
 
 /**
  * One notice component for three situations: an informational heads-up, a
  * blocking pre-flight failure, and a post-run error. Same shape, different tone,
  * so the screen never grows a second visual language for messages.
+ *
+ * `internal` rather than file-private since v0.9.9: the result screen has to
+ * report a size target that was missed, and that is the same kind of message in
+ * the same visual language. Copying the component there would have been the
+ * first step towards the second visual language this exists to prevent.
  */
 @Composable
-private fun NoticeCard(
+internal fun NoticeCard(
     tone: NoticeTone,
     title: String,
     body: String,
@@ -1146,6 +1243,277 @@ private fun PresetRowPreview() {
                 enabled = true,
                 onClick = {},
             )
+        }
+    }
+}
+
+/**
+ * Chooses between "how much quality?" and "what size?".
+ *
+ * ## Why a switch and not both sections stacked
+ *
+ * Stacking them would put a three-row preset list and a six-chip size grid on a
+ * screen that, measured, has room for one of them. v0.9.8 already proved what
+ * happens when this screen is over-committed: content the user needs goes below
+ * the fold silently. It would also invite the user to answer both questions and
+ * then wonder which one won.
+ *
+ * ## Why it does not look like a tab bar
+ *
+ * Tabs imply two places. This is one place answering one question two ways, and
+ * the selected half is filled rather than underlined so the state survives a
+ * glance - the failure mode of an underline on a phone is that nobody sees it.
+ */
+@Composable
+private fun ModeSwitch(
+    sizeMode: Boolean,
+    enabled: Boolean,
+    onSelect: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(VidsizeShape.small)
+            .background(VidsizeColor.SurfaceMuted)
+            .padding(4.dp),
+    ) {
+        ModeSwitchHalf(
+            label = stringResource(R.string.mode_level),
+            selected = !sizeMode,
+            enabled = enabled,
+            onClick = { onSelect(false) },
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(4.dp))
+        ModeSwitchHalf(
+            label = stringResource(R.string.mode_size),
+            selected = sizeMode,
+            enabled = enabled,
+            onClick = { onSelect(true) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun ModeSwitchHalf(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(VidsizeShape.small)
+            .background(if (selected) VidsizeColor.Surface else Color.Transparent)
+            .clickable(enabled = enabled, role = Role.Tab, onClick = onClick)
+            .padding(vertical = Space.sm),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = VidsizeType.button,
+            color = if (selected) VidsizeColor.Ink else VidsizeColor.Muted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * The size-target body: the ceilings people actually run into, plus a field for
+ * the one they were given by somebody else.
+ *
+ * ## Why two fixed rows of three and not a flowing grid
+ *
+ * Six chips do not fit on one line at 393dp, and a horizontally scrolling row
+ * would hide options off the right edge - the same "the user cannot see what
+ * they are choosing between" failure this release exists to fix, rotated ninety
+ * degrees. Two rows of three, each chip on an equal weight, is deterministic at
+ * every width and every font scale.
+ *
+ * ## Why the outcome card is always present
+ *
+ * The chips say what was asked for. The card says what the app will actually do
+ * about it - the frame it will produce, or the reason it will not. A target the
+ * app is going to refuse has to say so here, next to the number, and not only as
+ * a hint under a greyed-out button at the bottom of the screen.
+ */
+@Composable
+private fun SizeTargetSection(
+    selected: SizeTarget,
+    custom: Boolean,
+    customText: String,
+    plan: CompressionPlan?,
+    sourceBytes: Long,
+    enabled: Boolean,
+    onSelect: (SizeTarget) -> Unit,
+    onCustom: () -> Unit,
+    onCustomText: (String) -> Unit,
+) {
+    SectionHeader(title = stringResource(R.string.section_size))
+
+    Spacer(Modifier.height(Space.sm))
+
+    val entries = SizeTarget.entries
+    Row(modifier = Modifier.fillMaxWidth()) {
+        entries.take(3).forEachIndexed { index, target ->
+            if (index > 0) Spacer(Modifier.width(Space.xs))
+            SizeChip(
+                label = "${target.megabytes} MB",
+                selected = !custom && target == selected,
+                enabled = enabled,
+                onClick = { onSelect(target) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+
+    Spacer(Modifier.height(Space.xs))
+
+    Row(modifier = Modifier.fillMaxWidth()) {
+        entries.drop(3).forEach { target ->
+            SizeChip(
+                label = "${target.megabytes} MB",
+                selected = !custom && target == selected,
+                enabled = enabled,
+                onClick = { onSelect(target) },
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(Space.xs))
+        }
+        SizeChip(
+            label = stringResource(R.string.size_custom),
+            selected = custom,
+            enabled = enabled,
+            onClick = onCustom,
+            modifier = Modifier.weight(1f),
+        )
+    }
+
+    if (custom) {
+        Spacer(Modifier.height(Space.sm))
+        OutlinedTextField(
+            value = customText,
+            // Digits only, filtered on the way in rather than validated on the
+            // way out: a numeric keyboard is a hint, not a guarantee, and a
+            // pasted "16 MB" would otherwise sit in the field looking accepted
+            // while toIntOrNull quietly returned null and the button stayed
+            // dead with no explanation.
+            onValueChange = { raw ->
+                onCustomText(raw.filter { it.isDigit() }.take(4))
+            },
+            enabled = enabled,
+            singleLine = true,
+            label = { Text(stringResource(R.string.size_custom_label)) },
+            suffix = { Text("MB") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
+    Spacer(Modifier.height(Space.sm))
+
+    SizeOutcomeCard(plan = plan, sourceBytes = sourceBytes)
+}
+
+@Composable
+private fun SizeChip(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(VidsizeShape.small)
+            .background(if (selected) VidsizeColor.IndigoSoft else VidsizeColor.Surface)
+            .border(
+                width = 1.dp,
+                color = if (selected) VidsizeColor.IndigoBorder else VidsizeColor.Border,
+                shape = VidsizeShape.small,
+            )
+            .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .padding(vertical = Space.sm, horizontal = Space.xxs)
+            .alpha(if (enabled) 1f else 0.5f),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = VidsizeType.button,
+            color = if (selected) VidsizeColor.IndigoDeep else VidsizeColor.InkSoft,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** What the app will do about the requested size, or why it will not. */
+@Composable
+private fun SizeOutcomeCard(plan: CompressionPlan?, sourceBytes: Long) {
+    val verdict = plan?.targetVerdict
+    when {
+        plan == null -> {
+            NoticeCard(
+                tone = NoticeTone.Info,
+                title = stringResource(R.string.size_pending_title),
+                body = stringResource(R.string.size_pending_body),
+            )
+        }
+
+        verdict == TargetVerdict.NOT_SMALLER_THAN_SOURCE -> {
+            NoticeCard(
+                tone = NoticeTone.Blocking,
+                title = stringResource(R.string.size_not_smaller_title),
+                body = stringResource(
+                    R.string.size_not_smaller_body,
+                    Fmt.bytes(sourceBytes),
+                ),
+            )
+        }
+
+        verdict == TargetVerdict.TOO_SMALL_FOR_DURATION -> {
+            NoticeCard(
+                tone = NoticeTone.Blocking,
+                title = stringResource(R.string.size_too_small_title),
+                body = stringResource(R.string.size_too_small_body),
+            )
+        }
+
+        else -> {
+            VidsizeCard(
+                modifier = Modifier.fillMaxWidth(),
+                color = VidsizeColor.SurfaceTint,
+                border = VidsizeColor.IndigoBorder,
+                elevation = 0.dp,
+                contentPadding = Space.md,
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.size_plan_title,
+                        Fmt.bytes(plan.estimatedOutputBytes),
+                    ),
+                    style = VidsizeType.cardTitle,
+                    color = VidsizeColor.Ink,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    // The resolution is here because the target planner is
+                    // allowed to step it down to make the number reachable, and
+                    // a user who asked for 10 MB and silently received 480p
+                    // would rightly call that a bug.
+                    text = stringResource(
+                        R.string.size_plan_body,
+                        plan.targetWidth,
+                        plan.targetHeight,
+                    ),
+                    style = VidsizeType.supporting,
+                    color = VidsizeColor.Muted,
+                )
+            }
         }
     }
 }

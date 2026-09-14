@@ -120,4 +120,22 @@
     <string name="watermark_free_card_action">Ohne Wasserzeichen erstellen</string>
     <string name="watermark_free_card_waiting">Werbung wird vorbereitet…</string>
     <string name="cta_blocked_already_efficient">Dieses Video ist bereits gut komprimiert. Versuche Kleiner oder Am kleinsten.</string>
+    <string name="mode_level">Stufe</string>
+    <string name="mode_size">Zielgröße</string>
+    <string name="section_size">Zielgröße</string>
+    <string name="size_custom">Eigene</string>
+    <string name="size_custom_label">Größe</string>
+    <string name="size_pending_title">Video wird gelesen</string>
+    <string name="size_pending_body">Der Größenplan erscheint, sobald das Video gelesen wurde.</string>
+    <string name="size_not_smaller_title">Schon darunter</string>
+    <string name="size_not_smaller_body">Dieses Video hat %1$s. Wähle ein kleineres Ziel.</string>
+    <string name="size_too_small_title">Zu klein für dieses Video</string>
+    <string name="size_too_small_body">Dieses Video ist zu lang, um in dieser Größe in einer Qualität zu landen, die ein Encoder liefern kann. Wähle ein größeres Ziel.</string>
+    <string name="size_plan_title">Etwa %1$s</string>
+    <string name="size_plan_body">Ausgabe %1$d×%2$d. Vidsize kodiert bis zu dreimal neu, um unter dein Ziel zu kommen.</string>
+    <string name="cta_blocked_target_missing">Zielgröße eingeben</string>
+    <string name="cta_blocked_target_not_smaller">Dein Video ist bereits kleiner</string>
+    <string name="cta_blocked_target_too_small">Diese Größe ist für dieses Video nicht erreichbar</string>
+    <string name="processing_pass">Durchgang %1$d von %2$d – näher am Ziel</string>
+    <string name="result_target_missed">%1$s wurden nicht unterschritten. Kleiner bekommt Vidsize es nicht.</string>
 </resources>

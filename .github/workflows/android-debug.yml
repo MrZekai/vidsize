@@ -81,8 +81,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 26' app/build.gradle.kts
-          grep -q 'versionName = "0.9.8"' app/build.gradle.kts
+          grep -q 'versionCode = 27' app/build.gradle.kts
+          grep -q 'versionName = "0.9.9"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -91,8 +91,20 @@ jobs:
           grep -q 'AdIds.appOpen' app/src/main/java/com/vidsize/compressor/ads/AppOpenAdManager.kt
           grep -q 'AdIds.nativeResult' app/src/main/java/com/vidsize/compressor/ads/NativeAdLoader.kt
           grep -q 'AdIds.homeBanner' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
-          grep -q 'CompressionBannerAd(active = !processing)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
-          test "$(grep -c 'CompressionBannerAd(active = !processing)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt)" -eq 1
+          # REVERSED in v0.9.9. This used to require the compression-screen
+          # banner to be present exactly once. The banner is now gone, on
+          # purpose.
+          #
+          # Measured on a 393x873dp device, the fixed chrome on that screen -
+          # banner 50dp, divider 9dp, mark-free card ~160dp, action bar ~73dp -
+          # left a ~366dp window for ~510dp of content, so the third compression
+          # level was off screen and the second one's estimate was cut in half.
+          # The banner was the cheapest 59dp to reclaim and the likeliest to be
+          # tapped by accident mid-scroll. Four placements remain.
+          #
+          # The gate is not deleted, it is inverted: re-adding it would silently
+          # re-break the layout this release exists to fix.
+          forbid 'CompressionBannerAd' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
           grep -q 'setAdSize(AdSize.BANNER)' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           forbid 'getLargeAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           grep -q 'ic_launcher_monochrome' app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
@@ -899,6 +911,130 @@ jobs:
       # Two of them turned out to be hiding nothing, and two more fired on
       # comments the moment they became real. Both outcomes were invisible for
       # as long as the checks were no-ops.
+      - name: v0.9.9 size targets, history integrity, layout budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/gate_helpers.sh
+          UI=app/src/main/java/com/vidsize/compressor/ui
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+          MODEL=app/src/main/java/com/vidsize/compressor/model
+          DATA=app/src/main/java/com/vidsize/compressor/data/history
+          COMPRESS=$UI/screens/CompressionScreen.kt
+
+          # --- P0-1: a replaced file takes its history row with it ------------
+          # The bug: deleteReplaced() removed the FILE and left the ROW. One
+          # missing call produced a row that opened nothing, a "Space saved"
+          # total inflated by every watermark removal, and two rows a user could
+          # not tell apart. Assert the repair, not just the method name.
+          grep -q 'fun removeByOutputUri' $DATA/HistoryModels.kt
+          grep -q 'override fun removeByOutputUri' $DATA/PrefsHistoryRepository.kt
+          grep -q 'removeByOutputUri(uri.toString())' $MEDIA/CompressionService.kt
+          # ...and that the call lives inside deleteReplaced, where the file goes.
+          awk '/private fun deleteReplaced/,/^    }/' $MEDIA/CompressionService.kt \
+            | grep -q 'removeByOutputUri'
+
+          # --- P0-2: the layout budget ---------------------------------------
+          # The mark-free card must be INSIDE the scrolling column, not pinned
+          # between it and the action bar. Pinned, it cost ~160dp of a ~366dp
+          # window and pushed the third compression level off screen.
+          #
+          # Checked by position, not by proximity. A first attempt at this gate
+          # grepped the last 40 lines before the action bar, which swept up the
+          # tail of the scrolling column too and fired on the correct layout.
+          #
+          # The real invariant: the card must appear BEFORE the scroll column
+          # closes. The column's closing brace is the last line at the action
+          # bar's own indentation before it - anything after that brace is
+          # pinned chrome, anything before it scrolls.
+          CTA_LINE="$(grep -n '^            CompressionActionBar(' $COMPRESS \
+            | head -1 | cut -d: -f1)"
+          CLOSE_LINE="$(awk -v cta="$CTA_LINE" \
+            'NR<cta && /^            }$/ {last=NR} END{print last+0}' $COMPRESS)"
+          # The LAST call site, not the first. A regression that ADDS a pinned
+          # card while leaving the scrolling one in place would slip past a
+          # head -1 check - which it did, on the first run of this gate's own
+          # negative test. If the last one scrolls, all of them do.
+          CARD_LINE="$(grep -n 'WatermarkFreeCard(' $COMPRESS \
+            | grep -v import | tail -1 | cut -d: -f1)"
+          test -n "$CTA_LINE" && test -n "$CARD_LINE" && test "$CLOSE_LINE" -gt 0
+          if [ "$CARD_LINE" -ge "$CLOSE_LINE" ]; then
+            echo "GATE FAILED: WatermarkFreeCard (line $CARD_LINE) is pinned" >&2
+            echo "between the scroll column (closes $CLOSE_LINE) and the action" >&2
+            echo "bar (line $CTA_LINE). Pinned it costs ~160dp of a ~366dp" >&2
+            echo "window and pushes the third compression level off screen." >&2
+            exit 1
+          fi
+          echo "ok: mark-free card scrolls (line $CARD_LINE < $CLOSE_LINE)"
+
+          # --- P1: the viability floor ---------------------------------------
+          # 0.92 meant a 9% saving counted as worth a minute of the user's time
+          # and a permanent quality loss.
+          grep -q 'VIABLE_RATIO = 0.85' $MEDIA/CompressionPlanner.kt
+          forbid 'VIABLE_RATIO = 0.92' $MEDIA/CompressionPlanner.kt
+
+          # --- P1: recent rows must be distinguishable ------------------------
+          # entry.displayName ellipsised before the seconds that made it unique.
+          grep -q 'Fmt.dateTime(entry.completedAtMillis)' $UI/screens/HomeScreen.kt
+          grep -q 'fun dateTime(' $UI/format/Formatters.kt
+
+          # --- P1: the tested artifact must be the shipped artifact -----------
+          # closedTest had R8 off while release had it on, so the minified path
+          # had never run on a device.
+          awk '/create\("closedTest"\)/,/^        }/' app/build.gradle.kts \
+            > /tmp/closedtest.txt
+          grep -q 'isMinifyEnabled = true' /tmp/closedtest.txt
+          grep -q 'isShrinkResources = true' /tmp/closedtest.txt
+          grep -q 'androidx.media3.transformer' app/proguard-rules.pro
+          grep -q 'com.vidsize.compressor.model' app/proguard-rules.pro
+
+          # --- P2: dead code and a comment describing a removed feature -------
+          forbid 'ten minutes with no ads' $COMPRESS
+
+          # --- size targets ---------------------------------------------------
+          test -f $MODEL/SizeTarget.kt
+          grep -q 'enum class TargetVerdict' $MODEL/CompressionPlan.kt
+          grep -q 'fun planForTarget' $MEDIA/CompressionPlanner.kt
+          grep -q 'fun correctedForTarget' $MEDIA/CompressionPlanner.kt
+          grep -q 'MAX_TARGET_PASSES = 3' $MEDIA/CompressionEngine.kt
+
+          # Every correction pass must start from the ORIGINAL, never from the
+          # previous output: chaining encodes compounds generation loss, which
+          # is the whole reason the watermark-free re-export carries sourceUri.
+          # The loop body must pass `input`, and must never feed a temp back in.
+          awk '/for \(pass in 1..passCeiling\)/,/^            }/' \
+            $MEDIA/CompressionEngine.kt > /tmp/passloop.txt
+          grep -q 'input = input,' /tmp/passloop.txt
+          forbid 'input = candidate' /tmp/passloop.txt
+          forbid 'input = best' /tmp/passloop.txt
+
+          # A missed target must be reported, not quietly rounded into success.
+          grep -q 'targetMet' $MODEL/CompressionResult.kt
+          grep -q 'result.targetMet' $UI/screens/ResultScreen.kt
+          grep -q 'result_target_missed' $UI/screens/ResultScreen.kt
+
+          # The two refusals point in opposite directions and must stay separate.
+          grep -q 'cta_blocked_target_not_smaller' $COMPRESS
+          grep -q 'cta_blocked_target_too_small' $COMPRESS
+
+          # A second encode must say why the ring restarted.
+          grep -q 'processing_pass' $UI/screens/ProcessingOverlay.kt
+          grep -q 'fun markPass' $MEDIA/CompressionJobState.kt
+
+          # Every new string in every locale. A missing translation is a blank
+          # control on somebody's phone.
+          for f in app/src/main/res/values*/strings.xml; do
+            for key in mode_level mode_size section_size size_custom \
+                       size_plan_title size_plan_body size_too_small_body \
+                       processing_pass result_target_missed \
+                       cta_blocked_target_missing; do
+              grep -q "name=\"$key\"" "$f" || {
+                echo "GATE FAILED: $key missing from $f" >&2; exit 1; }
+            done
+          done
+
+          echo 'ok: v0.9.9 gates'
+
       - name: Gate helpers must actually fail
         shell: bash
         run: |

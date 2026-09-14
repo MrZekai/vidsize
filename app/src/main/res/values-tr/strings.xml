@@ -120,4 +120,22 @@
     <string name="watermark_free_card_action">Filigransız üret</string>
     <string name="watermark_free_card_waiting">Reklam hazırlanıyor…</string>
     <string name="cta_blocked_already_efficient">Bu video zaten iyi sıkıştırılmış. Daha küçük veya En küçük seçeneğini dene.</string>
+    <string name="mode_level">Seviye</string>
+    <string name="mode_size">Hedef boyut</string>
+    <string name="section_size">Hedef boyut</string>
+    <string name="size_custom">Özel</string>
+    <string name="size_custom_label">Boyut</string>
+    <string name="size_pending_title">Video okunuyor</string>
+    <string name="size_pending_body">Boyut planı, video okunduktan sonra görünür.</string>
+    <string name="size_not_smaller_title">Zaten bunun altında</string>
+    <string name="size_not_smaller_body">Bu video %1$s. Daha küçük bir hedef seç.</string>
+    <string name="size_too_small_title">Bu video için fazla küçük</string>
+    <string name="size_too_small_body">Bu video, hiçbir kodlayıcının üretebileceği kalitede bu boyuta sığmayacak kadar uzun. Daha büyük bir hedef seç.</string>
+    <string name="size_plan_title">Yaklaşık %1$s</string>
+    <string name="size_plan_body">Çıktı %1$d×%2$d. Vidsize hedefin altına inmek için en fazla üç kez yeniden kodlar.</string>
+    <string name="cta_blocked_target_missing">Bir hedef boyut gir</string>
+    <string name="cta_blocked_target_not_smaller">Videon zaten bundan küçük</string>
+    <string name="cta_blocked_target_too_small">Bu boyut bu video için ulaşılabilir değil</string>
+    <string name="processing_pass">%2$d geçişten %1$d. geçiş — hedefe yaklaşıyor</string>
+    <string name="result_target_missed">%1$s altına inilemedi. Vidsize\'ın yapabildiği en küçük boyut bu.</string>
 </resources>

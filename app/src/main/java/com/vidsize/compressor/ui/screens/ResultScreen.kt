@@ -278,6 +278,28 @@ fun ResultScreen(
                     textAlign = TextAlign.Center,
                 )
 
+                // A size target that was not reached has to be said here.
+                //
+                // The user asked for "under 16 MB" because something else - a
+                // messaging app, a mail server, an upload form - is going to
+                // enforce that number. Reporting an unqualified success and
+                // letting them find out at the attach button would move the
+                // failure to the worst possible place: outside the app, with no
+                // explanation and nothing to act on. Here they can still choose
+                // a stronger setting, or send it somewhere else.
+                val missedTarget = result.targetBytes
+                if (missedTarget != null && !result.targetMet) {
+                    Spacer(Modifier.height(Space.md))
+                    NoticeCard(
+                        tone = NoticeTone.Blocking,
+                        title = stringResource(R.string.size_too_small_title),
+                        body = stringResource(
+                            R.string.result_target_missed,
+                            Fmt.bytes(missedTarget),
+                        ),
+                    )
+                }
+
                 Spacer(Modifier.height(Space.md))
 
                 // The action almost everyone wants next stays above the ad, so

@@ -20,6 +20,7 @@ import com.vidsize.compressor.data.history.CompressionHistoryEntry
 import com.vidsize.compressor.data.history.PrefsHistoryRepository
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
+import com.vidsize.compressor.model.SizeTarget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -82,6 +83,10 @@ class CompressionService : Service() {
         // Set only by the watermark-free re-export, and only ever to the file
         // that re-export replaces.
         val replacing = intent?.getStringExtra(EXTRA_REPLACE_URI)?.let(Uri::parse)
+        // Zero means "no target": an absent extra and an explicitly useless
+        // target land in the same place rather than reaching the planner, which
+        // requires a positive number.
+        val targetBytes = intent?.getLongExtra(EXTRA_TARGET_BYTES, 0L)?.takeIf { it > 0L }
 
         if (uri == null || preset == null) {
             stopSelf(startId)
@@ -108,9 +113,13 @@ class CompressionService : Service() {
                     input = uri,
                     preset = preset,
                     watermark = watermark,
+                    targetBytes = targetBytes,
                     onProgress = { value ->
                         CompressionJobState.markProgress(value)
                         updateNotification((value.coerceIn(0f, 1f) * 100f).roundToInt())
+                    },
+                    onPass = { pass, ceiling ->
+                        CompressionJobState.markPass(pass, ceiling)
                     },
                 )
             }.onSuccess { result ->
@@ -118,7 +127,7 @@ class CompressionService : Service() {
                 // new one exists. A delete before the export would leave the
                 // user with nothing if the second pass failed.
                 if (replacing != null) deleteReplaced(replacing)
-                recordHistory(result)
+                recordHistory(result, targetBytes)
                 CompressionJobState.markDone(result)
                 showCompletionNotification()
             }.onFailure { throwable ->
@@ -220,8 +229,27 @@ class CompressionService : Service() {
      * reason to report the successful export as failed. The Home list prunes
      * rows whose files are gone on its next refresh either way.
      */
+    /**
+     * Removes the file a re-export replaces, AND its history row.
+     *
+     * ## The bug this signature fixes
+     *
+     * Up to v0.9.8 this deleted only the file. The row survived, so removing a
+     * watermark left the user with:
+     *
+     *  - a recent-items row pointing at a URI that no longer resolved, which
+     *    did nothing when tapped;
+     *  - "Space saved" and the video count both one too high, because
+     *    `HistorySummary` sums and counts every stored row;
+     *  - two rows that looked identical, since both carried the same sizes and
+     *    the name was truncated before the seconds that told them apart.
+     *
+     * One missing call, three visible symptoms. The file and the record are one
+     * fact and have to leave together.
+     */
     private fun deleteReplaced(uri: Uri) {
         runCatching { contentResolver.delete(uri, null, null) }
+        runCatching { PrefsHistoryRepository(applicationContext).removeByOutputUri(uri.toString()) }
     }
 
     private fun startForegroundSafely(notification: Notification) {
@@ -333,7 +361,7 @@ class CompressionService : Service() {
         }
     }
 
-    private fun recordHistory(result: CompressionResult) {
+    private fun recordHistory(result: CompressionResult, targetBytes: Long?) {
         runCatching {
             PrefsHistoryRepository(applicationContext).add(
                 CompressionHistoryEntry(
@@ -342,7 +370,14 @@ class CompressionService : Service() {
                     displayName = queryDisplayName(result.outputUri),
                     sourceBytes = result.sourceBytes,
                     outputBytes = result.outputBytes,
-                    presetTitle = result.preset.title,
+                    // A size-target job is labelled by what the user asked for.
+                    // Recording "Balanced" would name a level they never chose
+                    // and never saw.
+                    presetTitle = if (targetBytes != null) {
+                        "${targetBytes / SizeTarget.BYTES_PER_MB} MB"
+                    } else {
+                        result.preset.title
+                    },
                     completedAtMillis = System.currentTimeMillis(),
                 ),
             )
@@ -366,6 +401,7 @@ class CompressionService : Service() {
         private const val EXTRA_PRESET = "preset"
         private const val EXTRA_WATERMARK = "watermark"
         private const val EXTRA_REPLACE_URI = "replace_uri"
+        private const val EXTRA_TARGET_BYTES = "target_bytes"
 
         /**
          * Starts a compression. Safe to call from the UI thread.
@@ -384,12 +420,18 @@ class CompressionService : Service() {
             preset: CompressionPreset,
             watermark: Boolean = true,
             replacing: Uri? = null,
+            targetBytes: Long? = null,
         ) {
             val intent = Intent(context, CompressionService::class.java)
                 .putExtra(EXTRA_URI, uri.toString())
                 .putExtra(EXTRA_PRESET, preset.name)
                 .putExtra(EXTRA_WATERMARK, watermark)
             if (replacing != null) intent.putExtra(EXTRA_REPLACE_URI, replacing.toString())
+            // `preset` is still sent in target mode and still has to be a valid
+            // enum name: onStartCommand refuses an intent without one, and a
+            // target job that silently did nothing would be far worse than an
+            // unused extra.
+            if (targetBytes != null) intent.putExtra(EXTRA_TARGET_BYTES, targetBytes)
             ContextCompat.startForegroundService(context, intent)
         }
 

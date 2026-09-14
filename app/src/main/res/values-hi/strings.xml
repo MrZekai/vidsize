@@ -120,4 +120,22 @@
     <string name="watermark_free_card_action">बिना निशान के बनाएँ</string>
     <string name="watermark_free_card_waiting">विज्ञापन तैयार हो रहा है…</string>
     <string name="cta_blocked_already_efficient">यह वीडियो पहले से अच्छी तरह कंप्रेस्ड है। छोटा या सबसे छोटा आज़माएँ।</string>
+    <string name="mode_level">स्तर</string>
+    <string name="mode_size">लक्ष्य आकार</string>
+    <string name="section_size">लक्ष्य आकार</string>
+    <string name="size_custom">अन्य</string>
+    <string name="size_custom_label">आकार</string>
+    <string name="size_pending_title">आपका वीडियो पढ़ा जा रहा है</string>
+    <string name="size_pending_body">वीडियो पढ़े जाने के बाद आकार योजना दिखेगी।</string>
+    <string name="size_not_smaller_title">पहले से ही उससे कम</string>
+    <string name="size_not_smaller_body">यह वीडियो %1$s का है। छोटा लक्ष्य चुनें।</string>
+    <string name="size_too_small_title">इस वीडियो के लिए बहुत छोटा</string>
+    <string name="size_too_small_body">यह वीडियो इतना लंबा है कि किसी भी एन्कोडर की गुणवत्ता पर उस आकार में नहीं आ सकता। बड़ा लक्ष्य चुनें।</string>
+    <string name="size_plan_title">लगभग %1$s</string>
+    <string name="size_plan_body">आउटपुट %1$d×%2$d। लक्ष्य से नीचे आने के लिए Vidsize तीन बार तक फिर से एन्कोड करता है।</string>
+    <string name="cta_blocked_target_missing">लक्ष्य आकार डालें</string>
+    <string name="cta_blocked_target_not_smaller">आपका वीडियो पहले से ही उससे छोटा है</string>
+    <string name="cta_blocked_target_too_small">यह आकार इस वीडियो के लिए संभव नहीं है</string>
+    <string name="processing_pass">%2$d में से %1$d चरण — लक्ष्य के करीब</string>
+    <string name="result_target_missed">%1$s से नीचे नहीं ला सके। Vidsize इससे छोटा नहीं बना सका।</string>
 </resources>

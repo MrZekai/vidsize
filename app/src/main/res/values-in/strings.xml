@@ -119,4 +119,22 @@
     <string name="watermark_free_card_action">Buat tanpa tanda</string>
     <string name="watermark_free_card_waiting">Menyiapkan iklan…</string>
     <string name="cta_blocked_already_efficient">Video ini sudah terkompresi dengan baik. Coba Lebih kecil atau Terkecil.</string>
+    <string name="mode_level">Tingkat</string>
+    <string name="mode_size">Ukuran target</string>
+    <string name="section_size">Ukuran target</string>
+    <string name="size_custom">Lainnya</string>
+    <string name="size_custom_label">Ukuran</string>
+    <string name="size_pending_title">Membaca videomu</string>
+    <string name="size_pending_body">Rencana ukuran muncul setelah video selesai dibaca.</string>
+    <string name="size_not_smaller_title">Sudah di bawah itu</string>
+    <string name="size_not_smaller_body">Video ini %1$s. Pilih target yang lebih kecil.</string>
+    <string name="size_too_small_title">Terlalu kecil untuk video ini</string>
+    <string name="size_too_small_body">Video ini terlalu panjang untuk muat dalam ukuran itu pada kualitas yang bisa dihasilkan encoder. Pilih target yang lebih besar.</string>
+    <string name="size_plan_title">Sekitar %1$s</string>
+    <string name="size_plan_body">Keluaran %1$d×%2$d. Vidsize mengodekan ulang hingga tiga kali agar berada di bawah targetmu.</string>
+    <string name="cta_blocked_target_missing">Masukkan ukuran target</string>
+    <string name="cta_blocked_target_not_smaller">Videomu sudah lebih kecil dari itu</string>
+    <string name="cta_blocked_target_too_small">Ukuran itu tidak bisa dicapai untuk video ini</string>
+    <string name="processing_pass">Proses %1$d dari %2$d — mendekati targetmu</string>
+    <string name="result_target_missed">Tidak bisa turun di bawah %1$s. Ini ukuran terkecil yang bisa dibuat Vidsize.</string>
 </resources>

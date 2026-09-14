@@ -121,4 +121,22 @@
     <string name="watermark_free_card_action">Crear sin la marca</string>
     <string name="watermark_free_card_waiting">Preparando el anuncio…</string>
     <string name="cta_blocked_already_efficient">Este video ya esta bien comprimido. Prueba Mas pequeno o El mas pequeno.</string>
+    <string name="mode_level">Nivel</string>
+    <string name="mode_size">Tamaño objetivo</string>
+    <string name="section_size">Tamaño objetivo</string>
+    <string name="size_custom">Otro</string>
+    <string name="size_custom_label">Tamaño</string>
+    <string name="size_pending_title">Leyendo tu vídeo</string>
+    <string name="size_pending_body">El plan de tamaño aparece cuando se haya leído el vídeo.</string>
+    <string name="size_not_smaller_title">Ya está por debajo</string>
+    <string name="size_not_smaller_body">Este vídeo ocupa %1$s. Elige un objetivo más pequeño.</string>
+    <string name="size_too_small_title">Demasiado pequeño para este vídeo</string>
+    <string name="size_too_small_body">Este vídeo es demasiado largo para caber en ese tamaño con una calidad que un codificador pueda producir. Elige un objetivo mayor.</string>
+    <string name="size_plan_title">Unos %1$s</string>
+    <string name="size_plan_body">Salida %1$d×%2$d. Vidsize vuelve a codificar hasta tres veces para quedar por debajo de tu objetivo.</string>
+    <string name="cta_blocked_target_missing">Introduce un tamaño objetivo</string>
+    <string name="cta_blocked_target_not_smaller">Tu vídeo ya es más pequeño</string>
+    <string name="cta_blocked_target_too_small">Ese tamaño no es alcanzable para este vídeo</string>
+    <string name="processing_pass">Pasada %1$d de %2$d: acercándose a tu objetivo</string>
+    <string name="result_target_missed">No se pudo bajar de %1$s. Este es el tamaño más pequeño que Vidsize ha logrado.</string>
 </resources>

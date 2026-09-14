@@ -89,15 +89,48 @@ object CompressionEngine {
      *        the caller, never here: a free export is marked, and an export the
      *        user has paid for with a rewarded ad is not. See [Watermark].
      */
+    /**
+     * How many times a size-target job may encode before it settles.
+     *
+     * ## Why a cap at all, and why three
+     *
+     * Hardware VBR does not land on a requested bitrate exactly, so the only way
+     * to hit a byte ceiling is to encode, measure, and correct. Left uncapped
+     * that is an unbounded loop on the user's battery, driven by an encoder that
+     * may simply be unable to go lower.
+     *
+     * Three is where the arithmetic stops paying. Pass one lands within roughly
+     * 20% - that is what [CompressionPlanner]'s variance constant is calibrated
+     * for - and a proportional correction closes most of that gap in pass two.
+     * Pass three exists for the stubborn cases. A fourth would double the wait
+     * again to chase a few percent, and the honest answer at that point is to
+     * hand back the smallest file produced and say what it is.
+     */
+    private const val MAX_TARGET_PASSES = 3
+
+    /**
+     * @param targetBytes when non-null, the job aims at this output size instead
+     *        of at [preset]'s quality level, and may encode up to
+     *        [MAX_TARGET_PASSES] times to reach it.
+     * @param onPass called before each encode with (pass number, pass ceiling),
+     *        so the UI can explain why a job is on its second lap rather than
+     *        appearing to restart.
+     */
     suspend fun compress(
         context: Context,
         input: Uri,
         preset: CompressionPreset,
         watermark: Boolean,
+        targetBytes: Long? = null,
         onProgress: ((Float) -> Unit)? = null,
+        onPass: ((Int, Int) -> Unit)? = null,
     ): CompressionResult {
         val info = withContext(Dispatchers.IO) { VideoProbe.probe(context, input) }
-        val plan = CompressionPlanner.plan(info, preset)
+        var plan = if (targetBytes != null) {
+            CompressionPlanner.planForTarget(info, targetBytes)
+        } else {
+            CompressionPlanner.plan(info, preset)
+        }
 
         // Fail before the encode, not four minutes into it. The UI already
         // blocks this, but a share-sheet entry or a stale pre-flight check can
@@ -108,30 +141,60 @@ object CompressionEngine {
         if (!storage.hasRoom) throw OutOfSpaceException()
 
         val started = System.currentTimeMillis()
-        val temp = File(context.cacheDir, "$TEMP_PREFIX${System.nanoTime()}.mp4")
+        val passCeiling = if (targetBytes != null) MAX_TARGET_PASSES else 1
+
+        // The best file produced so far, and its size. Each pass writes its own
+        // temp file rather than overwriting: a correction that overshoots
+        // downward is still a worse file than the one before it, and
+        // overwriting would have thrown the better one away.
+        var best: File? = null
+        var bestBytes = Long.MAX_VALUE
 
         try {
-            val export = runExportWithFallbacks(
-                context = context,
-                input = input,
-                output = temp,
-                plan = plan,
-                hasAudio = info.hasAudio,
-                watermark = watermark,
-                onProgress = onProgress?.let { report ->
-                    { fraction -> report(fraction * ENCODE_PROGRESS_SHARE) }
-                },
-            )
-            val actual = temp.length().takeIf { it > 0 } ?: export.fileSizeBytes
-            require(actual > 0) { "Compression finished without a readable output file." }
+            for (pass in 1..passCeiling) {
+                onPass?.invoke(pass, passCeiling)
+                val candidate = File(context.cacheDir, "$TEMP_PREFIX${System.nanoTime()}.mp4")
+                val export = runExportWithFallbacks(
+                    context = context,
+                    input = input,
+                    output = candidate,
+                    plan = plan,
+                    hasAudio = info.hasAudio,
+                    watermark = watermark,
+                    onProgress = onProgress?.let { report ->
+                        { fraction -> report(fraction * ENCODE_PROGRESS_SHARE) }
+                    },
+                )
+                val actual = candidate.length().takeIf { it > 0 } ?: export.fileSizeBytes
+                require(actual > 0) { "Compression finished without a readable output file." }
+
+                if (actual < bestBytes) {
+                    best?.delete()
+                    best = candidate
+                    bestBytes = actual
+                } else {
+                    candidate.delete()
+                }
+
+                // Preset mode, or the ceiling was met: nothing left to correct.
+                if (targetBytes == null || bestBytes <= targetBytes) break
+
+                // Every pass re-encodes from the ORIGINAL. Chaining passes would
+                // compound generation loss, so the second attempt is a different
+                // encode of the same source, never a re-encode of the first.
+                plan = CompressionPlanner.correctedForTarget(plan, actual) ?: break
+            }
+
+            val output = best
+            require(output != null && bestBytes > 0) { "Compression produced no output." }
 
             // Do not publish a "successful" file that consumes the same or more
             // storage than the original. The user keeps the better original.
-            if (info.sourceBytes > 0L && actual >= info.sourceBytes) {
+            if (info.sourceBytes > 0L && bestBytes >= info.sourceBytes) {
                 throw NoCompressionSavingsException()
             }
 
-            val published = publish(context, temp) { fraction ->
+            val published = publish(context, output) { fraction ->
                 onProgress?.invoke(
                     ENCODE_PROGRESS_SHARE + fraction * (1f - ENCODE_PROGRESS_SHARE),
                 )
@@ -140,13 +203,15 @@ object CompressionEngine {
                 outputUri = published,
                 sourceUri = input,
                 sourceBytes = info.sourceBytes,
-                outputBytes = actual,
+                outputBytes = bestBytes,
                 elapsedMs = System.currentTimeMillis() - started,
-                preset = preset,
+                preset = plan.preset,
                 watermarked = watermark,
+                targetBytes = targetBytes,
+                targetMet = targetBytes == null || bestBytes <= targetBytes,
             )
         } finally {
-            temp.delete()
+            best?.delete()
         }
     }
 
