@@ -278,7 +278,38 @@ jobs:
             echo "$leaked" >&2
             exit 1
           fi
-          grep -qx 'ads.properties' .gitignore
+          # .gitignore must list ads.properties as a whole line - a substring
+          # match would be satisfied by "ads.properties.example".
+          #
+          # Why the \r and why this gate got its own error message.
+          #
+          # Run 34903198496 died here, silently, in twenty seconds. The repo
+          # carries Windows line endings in the files that came from the
+          # developer's machine, and `ads.properties` happened to be the LAST
+          # line of .gitignore with no terminator at all - so `grep -qx` saw
+          # exactly "ads.properties" and passed. Appending new rules below it
+          # gave that line a CRLF terminator, grep started seeing
+          # "ads.properties\r", -x stopped matching, and `set -e` killed the
+          # step with no output. The rule had not changed. Its line ending had.
+          #
+          # .gitignore is now LF, which is the real fix. This tolerates \r
+          # anyway, because a file that round-trips through Windows must not be
+          # able to switch a security gate off by accident - and it says so out
+          # loud instead of dying mute.
+          if ! grep -qE '^ads\.properties[[:space:]]*$' .gitignore; then
+            echo 'GATE FAILED: .gitignore does not list ads.properties on its own line.' >&2
+            echo 'Real AdMob identifiers would be committable. Refusing to build.' >&2
+            exit 1
+          fi
+
+          # And keep the file itself LF, so the failure above cannot come back
+          # through the back door on the next Windows round-trip.
+          if grep -q $'\r' .gitignore; then
+            echo 'GATE FAILED: .gitignore contains CR (Windows line endings).' >&2
+            echo 'Run: sed -i "s/\r$//" .gitignore' >&2
+            exit 1
+          fi
+
           test -f ads.properties.example
           if git ls-files --error-unmatch ads.properties >/dev/null 2>&1; then
             echo 'GATE FAILED (must not match): git ls-files --error-unmatch ads.properties >/dev/null 2>&1' >&2
