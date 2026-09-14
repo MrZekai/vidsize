@@ -459,7 +459,14 @@ fun CompressionScreen(
                         title = stringResource(R.string.notice_no_savings_title),
                         body = stringResource(R.string.error_no_savings),
                     )
-                } else if (blockedByStorage && storage != null) {
+                } else if (storage != null && !storage.hasRoom) {
+                    // This was `blockedByStorage && storage != null`, and the
+                    // compiler warned that the second half is always true:
+                    // blockedByStorage is itself defined as
+                    // `storage != null && !storage.hasRoom`, so K2 already knew
+                    // storage was non-null here. Spelling the predicate out is
+                    // the identical condition, drops the dead test, and is the
+                    // null check that grants the smart cast used just below.
                     Spacer(Modifier.height(Space.md))
                     NoticeCard(
                         tone = NoticeTone.Blocking,
