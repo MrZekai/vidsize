@@ -653,6 +653,60 @@ jobs:
             done
           done
 
+      # Runs BEFORE the first Gradle invocation on purpose.
+      #
+      # v0.9.2 postmortem: two new strings carried a bare apostrophe. The XML
+      # was well-formed - an apostrophe is perfectly legal XML - so every
+      # structural check passed, and the failure only surfaced 46 seconds into
+      # aapt2 as "Invalid unicode escape sequence", naming a line but not the
+      # character. Well-formedness and resource validity are two different
+      # things, and only the second one is what the build actually needs.
+      #
+      # This closes that gap for every locale at once, in under a second,
+      # before any compiler is started.
+      - name: Android string resource escaping
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_string_resources.py
+
+      - name: String resource check must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A gate nobody has ever seen fail is a gate nobody knows works.
+          tmp="$(mktemp -d)"
+          cp -r app "$tmp/app"
+          trap 'rm -rf "$tmp"' EXIT
+
+          probe() {
+            rm -rf app_backup
+            cp -r app app_backup
+            python3 - "$1" <<'PY'
+          import sys
+          p = 'app/src/main/res/values/strings.xml'
+          s = open(p, encoding='utf-8').read()
+          i = s.index('<string ')
+          s = s[:i] + sys.argv[1] + '\n    ' + s[i:]
+          open(p, 'w', encoding='utf-8').write(s)
+          PY
+            if python3 tools/check_string_resources.py >/dev/null 2>&1; then
+              rm -rf app; mv app_backup app
+              echo "NEGATIVE TEST FAILED: checker accepted $1" >&2
+              exit 1
+            fi
+            rm -rf app; mv app_backup app
+            echo "ok: rejected -> $1"
+          }
+
+          probe '<string name="neg_apos">it'"'"'s broken</string>'
+          probe '<string name="neg_escape">bad \q escape</string>'
+          probe '<string name="neg_uni">bad \u12 escape</string>'
+          probe '<string name="neg_at">@drawable/x</string>'
+
+          python3 tools/check_string_resources.py
+          echo "ok: restored tree still passes"
+
       - name: Debug QA gate
         run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleAdsQa --stacktrace
 
