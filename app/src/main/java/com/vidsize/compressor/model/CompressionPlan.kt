@@ -17,4 +17,14 @@ data class CompressionPlan(
      * clamping hid exactly this situation by reporting "estimate == original".
      */
     val viable: Boolean,
+    /**
+     * True when the SOURCE is already efficiently encoded and this preset does
+     * not reduce the resolution, so re-encoding would gain little or nothing.
+     *
+     * Separate from [viable] because the two need different words. A plan that
+     * is not viable because the estimate is close to the source size is a
+     * "pick a stronger level" problem; this is a "your video is already well
+     * compressed" fact, and the user should be told which one they have hit.
+     */
+    val alreadyEfficient: Boolean = false,
 )

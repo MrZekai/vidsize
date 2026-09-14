@@ -139,6 +139,7 @@ class CompressionService : Service() {
                         else ->
                             CompressionJobState.FailureReason.GENERIC
                     }
+                    LastFailure.record(reason, throwable.diagnostic())
                     CompressionJobState.markFailed(
                         reason = reason,
                         debugMessage = throwable.diagnostic(),

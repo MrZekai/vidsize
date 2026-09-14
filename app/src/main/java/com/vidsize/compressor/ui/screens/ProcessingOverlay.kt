@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,14 +19,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
-import com.vidsize.compressor.ads.AdSlots
-import com.vidsize.compressor.ui.components.CompressionBannerAd
 import com.vidsize.compressor.ui.components.ProgressRing
 import com.vidsize.compressor.ui.components.SecondaryButton
 import com.vidsize.compressor.ui.components.VidsizeCard
@@ -37,8 +33,6 @@ import com.vidsize.compressor.ui.theme.VidsizeTheme
 import com.vidsize.compressor.ui.theme.VidsizeType
 import kotlin.math.roundToInt
 
-/** Width a standard `AdSize.BANNER` creative needs to render without clipping. */
-private val StandardBannerWidth = 320.dp
 
 /**
  * Processing state.
@@ -62,22 +56,19 @@ private val StandardBannerWidth = 320.dp
  * it ends. [progressKnown] only changes what is painted inside the ring, never
  * the layout, so nothing moves when the first real figure arrives.
  *
- * ## The banner
+ * ## No advertising on this surface at all
  *
- * Compression is the longest wait in the product, so it carries the compression
- * banner: the same [CompressionBannerAd] used at the top of the screen, standard
- * 320x50 `AdSize.BANNER`, same consent gate, same ad unit, same AdView
- * lifecycle. The top banner is switched off for the whole processing phase so
- * only one compression banner is ever live.
+ * Up to v0.9.6 this panel carried a 320x50 banner above the ring. Review
+ * finding, and it was right: while the user is watching a task they are waiting
+ * on, an ad above the progress indicator makes the panel read as an advertising
+ * container, competes with the one thing the user is actually looking at, and
+ * puts a tappable creative in a modal whose only other control is Cancel.
  *
- * The banner spans the card's full width rather than sitting inside its content
- * padding. With `contentPadding` on a 360dp phone the usable width is 272dp and
- * a 320dp creative would be clipped - which is both ugly and an AdMob policy
- * problem. Text and controls carry their own horizontal padding instead, and
- * [BoxWithConstraints] drops the banner entirely if the panel is ever narrower
- * than a standard banner (split-screen, very small windows).
+ * The placement was removed rather than moved. Rewarded is where this product
+ * earns; a banner bought at the cost of the app's most anxious moment is a bad
+ * trade even before the accidental-click risk.
  *
- * No full-screen ad is ever shown on this surface. A full-screen ad over a
+ * No full-screen ad is ever shown here either. A full-screen ad over a
  * running task is the placement AdMob's policy calls out explicitly, and it is
  * the single loudest complaint in this category's one-star reviews.
  */
@@ -88,11 +79,6 @@ fun ProcessingOverlay(
     onCancel: () -> Unit,
 ) {
     val blocker = remember { MutableInteractionSource() }
-
-    // When no banner will render - ads off, consent refused, or the rewarded
-    // ad-free window open - dropping the surrounding spacers too keeps the panel
-    // from carrying a dead gap above the progress ring.
-    val bannerVisible = LocalInspectionMode.current || AdSlots.bannerVisible
 
     Box(
         modifier = Modifier
@@ -116,29 +102,6 @@ fun ProcessingOverlay(
                 .widthIn(max = 400.dp)
                 .verticalScroll(rememberScrollState()),
             elevation = 24.dp,
-            // Zero content padding so the banner can use the card's full width.
-            // Everything else carries its own horizontal padding.
-            contentPadding = 0.dp,
-        ) {
-            // QA v0.8.7 UX finding: "ads inside the modal progress dialog".
-            //
-            // The banner used to sit directly above Cancel - an ad with a
-            // tappable OPEN button immediately adjacent to the only escape
-            // control in a modal dialog. It is now at the top of the panel,
-            // with the ring, the status copy and 24dp of clearance between it
-            // and Cancel, so a thumb reaching for Cancel travels away from the
-            // creative rather than through it.
-            if (bannerVisible) {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                    if (maxWidth >= StandardBannerWidth) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Spacer(Modifier.height(Space.md))
-                            CompressionBannerAd(modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-            }
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

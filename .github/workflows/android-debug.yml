@@ -62,8 +62,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 24' app/build.gradle.kts
-          grep -q 'versionName = "0.9.6"' app/build.gradle.kts
+          grep -q 'versionCode = 25' app/build.gradle.kts
+          grep -q 'versionName = "0.9.7"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -143,8 +143,10 @@ jobs:
           # rewarded offer and the in-content native. The progress panel keeps
           # its banner; that surface is the longest-dwell one in the app.
           forbid 'HomeBannerAd' $UI/screens/HomeScreen.kt
-          grep -q 'AdSlots.bannerVisible' $UI/screens/ProcessingOverlay.kt
-          grep -q 'CompressionBannerAd' $UI/screens/ProcessingOverlay.kt
+          # The progress panel used to carry a banner; v0.9.7 removed it. The
+          # compression screen itself still has one, and that is the surface the
+          # chokepoint now has to cover here.
+          grep -q 'AdSlots.requestable' $UI/components/HomeBannerAd.kt
           forbid 'ConsentManager' $UI/components/HomeBannerAd.kt
           forbid 'ConsentManager' $UI/screens/ProcessingOverlay.kt
 
@@ -395,10 +397,10 @@ jobs:
           # second primary. Two equal buttons make the free path a vocabulary
           # test and start to look like an ad wall.
           # The CALL, not the import: a stale import alone used to satisfy this.
-          grep -q 'WatermarkFreeRow(' $COMPRESS
+          grep -q 'WatermarkFreeCard(' $COMPRESS
           grep -q 'fun startWithoutWatermark' $COMPRESS
           grep -q 'startCompression(watermark = false)' $COMPRESS
-          forbid 'PrimaryButton' $UI/components/WatermarkFreeRow.kt
+          forbid 'PrimaryButton' $UI/components/WatermarkFreeCard.kt
 
           # An unloaded rewarded ad must not block the job the user came for.
           grep -q 'withTimeoutOrNull(REWARDED_WAIT_MILLIS)' $COMPRESS
@@ -424,6 +426,40 @@ jobs:
           # Returning from a still-marked output must not be met by an
           # interstitial: that return is the rewarded ad's best moment.
           grep -q 'if (!watermarked) context.deferInterstitialOnReturn()' $RESULT
+
+          # --- Gate 12f: v0.9.7 production review findings -------------------
+          # No internal exception text in a user-facing build. `adsQa` and
+          # `debug` are debuggable and keep it; closedTest and release do not.
+          grep -q 'failure.debugMessage.takeIf { BuildConfig.DEBUG }' $COMPRESS
+
+          # The already-efficient source is refused BEFORE the encode, not after
+          # a job the user waited through.
+          # The names existing is not the same as the logic being live: assert
+          # the comparison itself and the clause that actually blocks the job.
+          grep -q 'sourceBpp < ALREADY_EFFICIENT_BPP' $MEDIA/CompressionPlanner.kt
+          grep -q 'viable = savesEnough && encodable && !alreadyEfficient' \
+            $MEDIA/CompressionPlanner.kt
+          grep -q 'alreadyEfficient = alreadyEfficient' $MEDIA/CompressionPlanner.kt
+          grep -q 'val alreadyEfficient: Boolean' \
+            app/src/main/java/com/vidsize/compressor/model/CompressionPlan.kt
+          grep -q 'cta_blocked_already_efficient' $COMPRESS
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="cta_blocked_already_efficient"' "$f" || {
+              echo "$f lacks the already-compressed copy" >&2; exit 1; }
+          done
+
+          # No advertising of any kind inside the progress modal.
+          forbid 'CompressionBannerAd' $UI/screens/ProcessingOverlay.kt
+          forbid 'AdSlots' $UI/screens/ProcessingOverlay.kt
+
+          # The offer is a card selling the outcome, with the ad as a badge -
+          # and the free path keeps the only gradient primary on the screen.
+          grep -q 'watermark_free_card_badge' $UI/components/WatermarkFreeCard.kt
+          grep -q 'SecondaryButton(' $UI/components/WatermarkFreeCard.kt
+
+          # Continuing the core task must not require scrolling past an ad.
+          test "$(grep -n 'R.string.result_another' $RESULT | head -1 | cut -d: -f1)" \
+             -lt "$(grep -n 'NativeAdCard(' $RESULT | head -1 | cut -d: -f1)"
 
           # --- Gate 13: the published policy declares every format and the reward ---
           for term in 'Banner' 'Result-screen ad' 'App-open ad' 'Interstitial' 'Rewarded ad' \
@@ -526,22 +562,18 @@ jobs:
           has    "$OVERLAY" 'trackOnly = !progressKnown'
           nothasre "$RING"  'sweepAngle = 72'
 
-          # 2 - the processing panel carries the compression banner, reusing the
-          # standard 320x50 AdSize.BANNER infrastructure and its consent gate.
-          has "$OVERLAY" 'CompressionBannerAd('
+          # 2 - the compression banner keeps its own infrastructure, but the
+          # PROCESSING PANEL no longer carries it.
+          #
+          # v0.9.7 removed that placement outright. An ad above a progress
+          # indicator, in a modal whose only other control is Cancel, makes the
+          # panel read as an advertising container and puts a tappable creative
+          # next to the one button the user is reaching for. The unit still
+          # exists and still serves the compression screen itself; see Gate 12f,
+          # which forbids any ad reference inside the overlay.
           has "$BANNER"  'setAdSize(AdSize.BANNER)'
           has "$BANNER"  'AdIds.compressionBanner'
-          # v0.9.0 supersedes the old `has "$OVERLAY" 'ConsentManager'` check.
-          # The intent was "this surface respects consent"; it now does so
-          # through the single AdSlots chokepoint, which is strictly stronger -
-          # it covers consent AND the rewarded ad-free window. Asserting the
-          # literal ConsentManager reference would now force the surface to
-          # re-derive the condition itself, which is the exact divergence the
-          # chokepoint exists to prevent.
-          has "$OVERLAY" 'AdSlots.bannerVisible'
-          # exactly one banner call site inside the overlay
-          test "$(grep -c 'CompressionBannerAd(' "$OVERLAY")" -eq 1
-          # and no full-screen ad format anywhere on this surface
+          nothas "$OVERLAY" 'CompressionBannerAd'
           nothas "$OVERLAY" 'Interstitial'
           nothas "$OVERLAY" 'AppOpenAd'
 
@@ -638,7 +670,12 @@ jobs:
           test "$SHARE_LINE" -lt "$GALLERY_LINE"
           test "$GALLERY_LINE" -lt "$OPEN_LINE"
           test "$OPEN_LINE" -lt "$AD_LINE"
-          test "$AD_LINE" -lt "$ANOTHER_LINE"
+          # v0.9.7 inverted the last pair. The native creative used to sit
+          # between the finished job and the way to start the next one, so
+          # continuing the core task meant scrolling past an advertisement. The
+          # ad keeps its labelled section with real content after it - it is
+          # simply no longer standing in the user's path.
+          test "$ANOTHER_LINE" -lt "$AD_LINE"
 
           # Q3 - the anchored home banner keeps a divider and a dead buffer
           # between the creative and the system navigation area.
@@ -649,7 +686,6 @@ jobs:
           # Q4 - the v0.8.4 processing transition must not have been touched.
           test "$(grep -c 'ProcessingOverlay(' "$SCREEN")" -eq 1
           has "$OVERLAY" 'trackOnly = !progressKnown'
-          has "$OVERLAY" 'CompressionBannerAd('
 
           # ==================== v0.8.8 guards (QA v0.8.7) ====================
 
@@ -704,10 +740,21 @@ jobs:
           has "$STATE"    'ENCODER_UNSUPPORTED'
           has "$SCREEN"   'AlertDialog('
           has "$SCREEN"   'FailureDialog('
-          # The v0.8.7 shape - a failure card appended inside the scrolling
-          # column, with its detail line hidden behind BuildConfig.DEBUG - must
-          # not come back.
-          nothas "$SCREEN" 'failure.debugMessage.takeIf'
+          # v0.8.7 hid the detail behind BuildConfig.DEBUG inside a failure
+          # CARD appended to the scrolling column, and v0.8.8 replaced the card
+          # with a dialog and made the detail unconditional so QA could report
+          # more than "it does nothing".
+          #
+          # v0.9.7 split the difference rather than reversing either: the dialog
+          # stays, the detail is debuggable-only (a production user was shown
+          # "NoCompressionSavingsException: ..."), and every build records it for
+          # the hidden diagnostics screen so a closed-test tester keeps the exact
+          # string. The card shape must still not come back.
+          nothas "$SCREEN" 'FailureCard('
+          has "$SCREEN" 'failure.debugMessage.takeIf { BuildConfig.DEBUG }'
+          has app/src/main/java/com/vidsize/compressor/media/LastFailure.kt 'object LastFailure'
+          has app/src/main/java/com/vidsize/compressor/media/CompressionService.kt 'LastFailure.record('
+          has app/src/main/java/com/vidsize/compressor/ui/screens/AdDiagnosticsSheet.kt 'LastFailure.detail'
           # and the reason a disabled button is disabled must be next to it.
           has "$SCREEN" 'hint = when {'
           has "$SCREEN" 'R.string.cta_blocked_no_savings'

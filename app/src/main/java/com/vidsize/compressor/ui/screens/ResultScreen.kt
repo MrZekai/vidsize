@@ -358,6 +358,21 @@ fun ResultScreen(
                     enabled = interactive,
                 )
 
+                // "Compress another video" comes BEFORE the ad section.
+                //
+                // Review finding: the native creative used to sit between the
+                // finished job and the way to start the next one, so continuing
+                // the core task meant scrolling past an advertisement. The ad
+                // keeps its labelled section with real content after it; it is
+                // simply no longer standing in the user's path.
+                TertiaryButton(
+                    text = stringResource(R.string.result_another),
+                    onClick = onCompressAnother,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = interactive,
+                )
+
+
                 if (adsVisible) {
                     // A divider, a label and 24dp of dead space above; a divider
                     // and 32dp below. The creative's boundary is unambiguous in
@@ -377,13 +392,6 @@ fun ResultScreen(
                 } else {
                     Spacer(Modifier.height(Space.xs))
                 }
-
-                TertiaryButton(
-                    text = stringResource(R.string.result_another),
-                    onClick = onCompressAnother,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = interactive,
-                )
 
                 Spacer(Modifier.height(Space.xs))
 

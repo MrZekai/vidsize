@@ -103,6 +103,35 @@ object CompressionPlanner {
     /** A preset must beat this share of the source to be worth running. */
     private const val VIABLE_RATIO = 0.92
 
+    /**
+     * Bits per pixel per frame below which a source counts as already encoded
+     * efficiently.
+     *
+     * ## The failure this exists to stop
+     *
+     * A 1080x1920 clip of 51s at 9.6 MB is 1.5 Mbps, which is 0.024 bpp. The
+     * planner asked for 85% of that and predicted 8.3 MB; the hardware encoder
+     * returned a file LARGER than the source and the job failed after the user
+     * had waited for it. Straight-up broken trust: the app promised 8.3 MB and
+     * then said it could not do better than 9.6.
+     *
+     * The fixed [ENCODER_VARIANCE] cannot model this. Hardware VBR tracks a
+     * requested bitrate well when there is slack in the source and overshoots
+     * badly when there is none - and at 0.024 bpp there is none. Asking for a
+     * lower number does not make the encoder produce one.
+     *
+     * A phone camera writes 1080p at roughly 0.08-0.15 bpp, so this threshold
+     * sits far below anything straight off a camera and catches the case it is
+     * meant to: video that has already been through WhatsApp, Instagram or
+     * another compressor.
+     *
+     * Only applied when the preset keeps the source resolution. Dropping the
+     * frame size changes the arithmetic completely - fewer pixels need fewer
+     * bits - which is exactly why "Smaller" and "Smallest" remain available and
+     * honest on a source this tight.
+     */
+    private const val ALREADY_EFFICIENT_BPP = 0.035
+
     /** Audio may never claim more than this share of a low-bitrate source. */
     private const val MAX_AUDIO_SOURCE_SHARE = 0.15
     private const val MIN_AUDIO_BITRATE = 64_000
@@ -232,6 +261,15 @@ object CompressionPlanner {
             estimatedBytes < (info.sourceBytes * VIABLE_RATIO).toLong()
         val encodable = videoBitrate >= MIN_ENCODABLE_VIDEO_BITRATE
 
+        // Refuse BEFORE the encode, not after a job the user waited through.
+        val keepsResolution = targetShortEdge >= sourceShortEdge
+        val sourceBpp = if (frameRate > 0.0) {
+            sourceTotalBitrate / (info.width.toDouble() * info.height.toDouble() * frameRate)
+        } else {
+            Double.MAX_VALUE
+        }
+        val alreadyEfficient = keepsResolution && sourceBpp < ALREADY_EFFICIENT_BPP
+
         return CompressionPlan(
             preset = preset,
             targetWidth = targetWidth,
@@ -239,7 +277,8 @@ object CompressionPlanner {
             videoBitrate = videoBitrate,
             audioBitrate = outputAudioBitrate,
             estimatedOutputBytes = estimatedBytes,
-            viable = savesEnough && encodable,
+            viable = savesEnough && encodable && !alreadyEfficient,
+            alreadyEfficient = alreadyEfficient,
         )
     }
 

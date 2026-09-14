@@ -35,6 +35,7 @@ import com.vidsize.compressor.VidsizeApplication
 import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.AdGate
 import com.vidsize.compressor.ads.AdPacing
+import com.vidsize.compressor.media.LastFailure
 import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.SecondaryButton
 import com.vidsize.compressor.ui.theme.Space
@@ -167,6 +168,13 @@ fun AdDiagnosticsSheet(onDismiss: () -> Unit) {
                     Line("Grant in hand (unspent)", snapshot.watermarkGranted.yesNo())
                     Line("Grant buys", "1 export, no mark")
                     Line("Suppresses any ad", "no")
+
+                    // v0.9.7: the failure detail left the user-facing dialog
+                    // in non-debuggable builds. It lands here instead, so a
+                    // closed-test tester can still read the exact string.
+                    Section("Last compression failure")
+                    Line("Reason", LastFailure.reason ?: "none this session")
+                    LastFailure.detail?.let { Line("Detail", it) }
 
                     Section("Inventory")
                     Line("Interstitial preloaded", snapshot.interstitialLoaded.yesNo())

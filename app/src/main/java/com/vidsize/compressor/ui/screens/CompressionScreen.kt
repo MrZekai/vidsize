@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.R
 import com.vidsize.compressor.media.CompressionJobState
 import com.vidsize.compressor.media.CompressionPlanner
@@ -70,7 +71,7 @@ import com.vidsize.compressor.ads.RewardedAds
 import com.vidsize.compressor.ads.WatermarkOffer
 import com.vidsize.compressor.ads.findHostActivity
 import com.vidsize.compressor.ui.components.CompressionBannerAd
-import com.vidsize.compressor.ui.components.WatermarkFreeRow
+import com.vidsize.compressor.ui.components.WatermarkFreeCard
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SectionHeader
@@ -515,6 +516,38 @@ fun CompressionScreen(
                 Spacer(Modifier.height(Space.xl))
             }
 
+            // The mark-free card, ABOVE the action bar.
+            //
+            // v0.9.5 had this as a caption line under the primary button and it
+            // read as footer text - the most valuable action in the app styled
+            // like a disclaimer. It is now a card that sells the outcome, with
+            // the ad as a badge; the gradient primary below is still the only
+            // thing that looks like the main action, so the free path stays
+            // visually dominant.
+            if (!probeFailed) {
+                WatermarkFreeCard(
+                    enabled = info != null &&
+                        !processing &&
+                        selectedPlan?.viable == true &&
+                        storage?.hasRoom != false,
+                    waiting = awaitingRewarded,
+                    onChoose = { startWithoutWatermark() },
+                    modifier = Modifier.padding(horizontal = Space.gutter),
+                )
+                if (rewardedUnavailable) {
+                    Text(
+                        text = stringResource(R.string.watermark_free_unavailable),
+                        style = VidsizeType.caption,
+                        color = VidsizeColor.Muted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Space.gutter, vertical = Space.xxs),
+                    )
+                }
+                Spacer(Modifier.height(Space.sm))
+            }
+
             CompressionActionBar(
                 text = stringResource(
                     if (probeFailed) R.string.cta_select_video else R.string.cta_compress,
@@ -533,6 +566,8 @@ fun CompressionScreen(
                     probeFailed -> null
                     info == null -> null
                     processing -> null
+                    selectedPlan?.alreadyEfficient == true ->
+                        stringResource(R.string.cta_blocked_already_efficient)
                     !anyViable -> stringResource(R.string.cta_blocked_no_savings)
                     blockedByStorage -> stringResource(R.string.cta_blocked_no_space)
                     selectedPlan?.viable == false -> stringResource(R.string.cta_blocked_level)
@@ -540,29 +575,6 @@ fun CompressionScreen(
                 },
                 onClick = {
                     if (probeFailed) onSelectAnother() else startCompression()
-                },
-                // The mark-free option rides under the button, on the one
-                // screen where the choice still costs a single encode.
-                belowButton = {
-                    if (!probeFailed) {
-                        WatermarkFreeRow(
-                            enabled = info != null &&
-                                !processing &&
-                                selectedPlan?.viable == true &&
-                                storage?.hasRoom != false,
-                            waiting = awaitingRewarded,
-                            onChoose = { startWithoutWatermark() },
-                        )
-                        if (rewardedUnavailable) {
-                            Text(
-                                text = stringResource(R.string.watermark_free_unavailable),
-                                style = VidsizeType.caption,
-                                color = VidsizeColor.Muted,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    }
                 },
             )
         }
@@ -651,11 +663,18 @@ private fun FailureDialog(
             Column {
                 Text(stringResource(bodyRes))
 
-                // Shown in every build, not just debug. When a user reports
-                // "it does nothing", this one line is the difference between a
-                // reproducible bug and a shrug - and it is the reason QA had to
-                // read logcat to characterise BUG-05 at all.
-                val detail = failure.debugMessage
+                // Debuggable builds only.
+                //
+                // Review finding, and it was right: a production user was shown
+                // "NoCompressionSavingsException: Compressed output is not
+                // smaller than the source." A Java class name in a dialog tells
+                // the user nothing and tells them the app is unfinished.
+                //
+                // The QA value is real though, so it is not deleted - it is
+                // moved. `adsQa` and `debug` are debuggable and keep the line;
+                // closedTest and release do not, and a tester on those builds
+                // reads the same text from the hidden diagnostics screen.
+                val detail = failure.debugMessage.takeIf { BuildConfig.DEBUG }
                 if (!detail.isNullOrBlank()) {
                     Spacer(Modifier.height(Space.xs))
                     Text(
@@ -722,7 +741,6 @@ private fun CompressionActionBar(
     enabled: Boolean,
     onClick: () -> Unit,
     hint: String? = null,
-    belowButton: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -752,7 +770,6 @@ private fun CompressionActionBar(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = enabled,
             )
-            belowButton()
         }
     }
 }
