@@ -803,6 +803,57 @@ jobs:
           fi
           echo 'ok: forbid_span rejects a real span'
 
+      # Resolution, not parsing.
+      #
+      # v0.9.4 postmortem: a new file used VidsizeTheme in its @Preview and did
+      # not import it. Every check in this workflow passed - the file parses,
+      # the XML is valid, every grep matched - because none of them resolved a
+      # single symbol. The failure surfaced only inside kotlinc, 46 seconds into
+      # the Gradle step, as two errors that were really one:
+      #
+      #   Unresolved reference 'VidsizeTheme'
+      #   @Composable invocations can only happen from a @Composable function
+      #
+      # The second was the first one's shadow. This step finds the first one in
+      # under a second, before any compiler starts.
+      - name: Kotlin reference resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_kotlin_references.py
+
+      - name: Reference check must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe() {
+            rm -rf app_backup
+            cp -r app app_backup
+            sed -i "$2" "$1"
+            if python3 tools/check_kotlin_references.py >/dev/null 2>&1; then
+              rm -rf app; mv app_backup app
+              echo "NEGATIVE TEST FAILED: checker accepted $3" >&2
+              exit 1
+            fi
+            rm -rf app; mv app_backup app
+            echo "ok: rejected -> $3"
+          }
+
+          W=app/src/main/java/com/vidsize/compressor/ui/components/WatermarkStrip.kt
+          R=app/src/main/java/com/vidsize/compressor/ui/screens/ResultScreen.kt
+
+          # The exact v0.9.4 failure, reproduced.
+          probe "$W" '/import com.vidsize.compressor.ui.theme.VidsizeTheme/d' \
+                "a deleted VidsizeTheme import"
+          probe "$R" '/import com.vidsize.compressor.ads.WatermarkOffer/d' \
+                "a deleted WatermarkOffer import"
+          # A symbol that exists nowhere at all.
+          probe "$R" 's/val context = LocalContext.current/val context = NoSuchHelper.get()/' \
+                "a reference to a class that does not exist"
+
+          python3 tools/check_kotlin_references.py
+          echo "ok: restored tree still passes"
+
       - name: Android string resource escaping
         shell: bash
         run: |

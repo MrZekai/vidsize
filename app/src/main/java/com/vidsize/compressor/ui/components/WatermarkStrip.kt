@@ -29,6 +29,7 @@ import com.vidsize.compressor.ads.findHostActivity
 import com.vidsize.compressor.ui.theme.Space
 import com.vidsize.compressor.ui.theme.VidsizeColor
 import com.vidsize.compressor.ui.theme.VidsizeShape
+import com.vidsize.compressor.ui.theme.VidsizeTheme
 import com.vidsize.compressor.ui.theme.VidsizeType
 
 /**
