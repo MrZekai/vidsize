@@ -102,6 +102,11 @@ fun ProcessingOverlay(
                 .widthIn(max = 400.dp)
                 .verticalScroll(rememberScrollState()),
             elevation = 24.dp,
+            // Zero content padding, with each child carrying its own horizontal
+            // padding. Kept from the banner era: it costs nothing now and the
+            // children are already written for it.
+            contentPadding = 0.dp,
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

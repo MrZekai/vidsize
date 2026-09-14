@@ -62,8 +62,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 25' app/build.gradle.kts
-          grep -q 'versionName = "0.9.7"' app/build.gradle.kts
+          grep -q 'versionCode = 26' app/build.gradle.kts
+          grep -q 'versionName = "0.9.8"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -900,6 +900,61 @@ jobs:
       #
       # The second was the first one's shadow. This step finds the first one in
       # under a second, before any compiler starts.
+      # Structure, before resolution and long before the compiler.
+      #
+      # v0.9.7 postmortem: a regex that removed a block from ProcessingOverlay
+      # matched across a brace boundary and deleted the closing `) {` of a
+      # `VidsizeCard(` call. The file no longer parsed, but every check in this
+      # repository passed - the reference checker only asks whether symbols are
+      # imported - so the first thing to notice was kotlinc, forty seconds into
+      # the Gradle step, reporting "Mixing named and positional arguments",
+      # "Unresolved reference 'Spacer'" and "Expecting ')'" from three different
+      # places, none of them the edit.
+      #
+      # Bracket balance is not parsing, but every mechanical edit that cuts
+      # across a block boundary unbalances something, and this names the line
+      # where the edit went wrong rather than where the compiler gave up.
+      - name: Kotlin structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_kotlin_syntax.py
+
+      - name: Structure check must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          O=app/src/main/java/com/vidsize/compressor/ui/screens/ProcessingOverlay.kt
+          probe() {
+            rm -rf app_backup
+            cp -r app app_backup
+            python3 - "$1" "$2" "$3" <<'PY'
+          import sys
+          p, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
+          s = open(p, encoding='utf-8').read()
+          assert old in s, f"probe text not found in {p}"
+          open(p, 'w', encoding='utf-8').write(s.replace(old, new, 1))
+          PY
+            if python3 tools/check_kotlin_syntax.py >/dev/null 2>&1; then
+              rm -rf app; mv app_backup app
+              echo "NEGATIVE TEST FAILED: checker accepted $4" >&2
+              exit 1
+            fi
+            rm -rf app; mv app_backup app
+            echo "ok: rejected -> $4"
+          }
+
+          # The exact v0.9.7 damage: a removed closing `) {`.
+          probe "$O" '            contentPadding = 0.dp,
+                  ) {' '            contentPadding = 0.dp,' \
+                "a deleted closing paren-brace"
+          # And an extra closer, the other direction.
+          probe "$O" '        VidsizeCard(' '        VidsizeCard()' \
+                "an extra closing paren"
+
+          python3 tools/check_kotlin_syntax.py
+          echo "ok: restored tree still passes"
+
       - name: Kotlin reference resolution
         shell: bash
         run: |
