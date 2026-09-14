@@ -7,6 +7,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.annotation.OptIn
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
@@ -131,7 +132,7 @@ object CompressionEngine {
                 throw NoCompressionSavingsException()
             }
 
-            val published = publish(context, temp) { fraction ->
+            val published = publish(context, input, temp) { fraction ->
                 onProgress?.invoke(
                     ENCODE_PROGRESS_SHARE + fraction * (1f - ENCODE_PROGRESS_SHARE),
                 )
@@ -425,11 +426,35 @@ object CompressionEngine {
      * created in the same second get `(1)` appended by the provider. A counter
      * here would only duplicate that, and less reliably.
      */
-    internal fun outputDisplayName(nowMillis: Long = System.currentTimeMillis()): String {
+    internal fun outputDisplayName(
+        nowMillis: Long = System.currentTimeMillis(),
+        sourceDisplayName: String? = null,
+    ): String {
+        val base = sourceDisplayName
+            ?.substringBeforeLast('.')
+            ?.replace(Regex("""[\/:*?"<>|]"""), "_")
+            ?.trim(' ', '.', '_')
+            ?.take(80)
+            ?.takeIf { it.isNotBlank() }
+        if (base != null) return "${base}_VidSize.mp4"
+
         val stamp = SimpleDateFormat(NAME_TIMESTAMP_PATTERN, Locale.US)
             .format(Date(nowMillis))
         return "Vidsize_$stamp.mp4"
     }
+
+    private fun sourceDisplayName(context: Context, uri: Uri): String? = runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+        }
+    }.getOrNull()
 
     /**
      * Copies the encoded temp file into MediaStore.
@@ -441,11 +466,16 @@ object CompressionEngine {
      */
     private suspend fun publish(
         context: Context,
+        input: Uri,
         source: File,
         onProgress: (Float) -> Unit,
     ): Uri = withContext(Dispatchers.IO) {
+        val originalDisplayName = sourceDisplayName(context, input)
         val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, outputDisplayName())
+            put(
+                MediaStore.Video.Media.DISPLAY_NAME,
+                outputDisplayName(sourceDisplayName = originalDisplayName),
+            )
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Vidsize")
             put(MediaStore.Video.Media.IS_PENDING, 1)

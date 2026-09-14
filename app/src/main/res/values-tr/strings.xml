@@ -113,7 +113,7 @@
     <string name="watermark_offer_title">Vidsize filigranını kaldır</string>
     <string name="watermark_offer_body">Kısa bir reklam videosu izle, video filigransız olarak yeniden üretilsin. İlk üretim kadar sürer.</string>
     <string name="watermark_offer_action">Kısa bir reklam videosu izle</string>
-    <string name="watermark_free_unavailable">Reklam yüklenemedi. Videon filigranlı üretiliyor — sonuç ekranından tekrar deneyebilirsin.</string>
+    <string name="watermark_free_unavailable">Ödüllü reklam şu anda kullanılamıyor. Standart sıkıştırmaya devam edebilir veya biraz sonra tekrar deneyebilirsin.</string>
     <string name="watermark_free_card_title">Vidsize filigranı olmadan kaydet</string>
     <string name="watermark_free_card_body">Ücretsiz videolarda köşede küçük bir Vidsize filigranı olur.</string>
     <string name="watermark_free_card_badge">1 KISA REKLAM</string>

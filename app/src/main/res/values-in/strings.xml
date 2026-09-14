@@ -112,7 +112,7 @@
     <string name="watermark_offer_title">Hapus tanda Vidsize</string>
     <string name="watermark_offer_body">Tonton video iklan singkat, lalu video dibuat ulang tanpa tanda. Lamanya kira-kira sama dengan proses pertama.</string>
     <string name="watermark_offer_action">Tonton video iklan singkat</string>
-    <string name="watermark_free_unavailable">Iklan tidak dapat dimuat. Videomu dibuat dengan tanda — kamu bisa mencoba lagi dari layar hasil.</string>
+    <string name="watermark_free_unavailable">Iklan berhadiah sedang tidak tersedia. Lanjutkan dengan kompresi standar atau coba lagi sebentar lagi.</string>
     <string name="watermark_free_card_title">Simpan tanpa tanda Vidsize</string>
     <string name="watermark_free_card_body">Video gratis membawa tanda Vidsize kecil di sudut.</string>
     <string name="watermark_free_card_badge">1 IKLAN SINGKAT</string>

@@ -143,7 +143,7 @@
     <string name="watermark_offer_title">Remove the Vidsize mark</string>
     <string name="watermark_offer_body">Watch a short ad video and this video is made again without the mark. Takes about as long as the first pass.</string>
     <string name="watermark_offer_action">Watch a short ad video</string>
-    <string name="watermark_free_unavailable">The ad could not be loaded. Your video is being made with the mark — you can try again from the result screen.</string>
+    <string name="watermark_free_unavailable">A rewarded ad is not available right now. Continue with standard compression or try again in a moment.</string>
     <string name="watermark_free_card_title">Save without the Vidsize mark</string>
     <string name="watermark_free_card_body">Free videos carry a small Vidsize mark in the corner.</string>
     <string name="watermark_free_card_badge">1 SHORT AD</string>

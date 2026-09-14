@@ -65,12 +65,13 @@ fun WatermarkFreeCard(
     val context = LocalContext.current
     val inspecting = LocalInspectionMode.current
 
-    // Rewarded is the one format not gated on AdSlots.requestable: the user
-    // asks for it by name. Consent still applies.
-    if (!inspecting && !AdSlots.rewardedRequestable) return
+    // Keep the disclosure visible even when rewarded inventory cannot be
+    // requested. The normal export still contains the mark, and hiding this
+    // card would hide that fact along with the ad button.
+    val rewardedRequestable = inspecting || AdSlots.rewardedRequestable
 
-    LaunchedEffect(Unit) {
-        if (!inspecting) RewardedAds.preload(context)
+    LaunchedEffect(rewardedRequestable) {
+        if (!inspecting && rewardedRequestable) RewardedAds.preload(context)
     }
 
     VidsizeCard(
@@ -145,8 +146,17 @@ fun WatermarkFreeCard(
             ),
             onClick = onChoose,
             modifier = Modifier.fillMaxWidth(),
-            enabled = enabled && !waiting,
+            enabled = enabled && !waiting && rewardedRequestable,
         )
+
+        if (!rewardedRequestable) {
+            Spacer(Modifier.height(Space.xs))
+            Text(
+                text = stringResource(R.string.watermark_free_unavailable),
+                style = VidsizeType.caption,
+                color = VidsizeColor.Muted,
+            )
+        }
     }
 }
 

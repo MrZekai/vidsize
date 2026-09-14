@@ -62,8 +62,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 26' app/build.gradle.kts
-          grep -q 'versionName = "0.9.8"' app/build.gradle.kts
+          grep -q 'versionCode = 27' app/build.gradle.kts
+          grep -q 'versionName = "0.9.9"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -914,6 +914,51 @@ jobs:
       # Bracket balance is not parsing, but every mechanical edit that cuts
       # across a block boundary unbalances something, and this names the line
       # where the edit went wrong rather than where the compiler gave up.
+      - name: v0.9.9 red-team regression gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMPRESS=app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          OFFER=app/src/main/java/com/vidsize/compressor/ads/WatermarkOffer.kt
+          CARD=app/src/main/java/com/vidsize/compressor/ui/components/WatermarkFreeCard.kt
+          APP=app/src/main/java/com/vidsize/compressor/VidsizeApplication.kt
+          ENGINE=app/src/main/java/com/vidsize/compressor/media/CompressionEngine.kt
+          DIAG=app/src/main/java/com/vidsize/compressor/ui/screens/AdDiagnosticsSheet.kt
+
+          if grep -q 'failure.debugMessage' "$COMPRESS"; then
+            echo 'Raw failure details are visible in CompressionScreen.' >&2
+            exit 1
+          fi
+          grep -q 'LastFailure.detail' "$DIAG"
+
+          grep -q 'fun init(context: Context)' "$OFFER"
+          grep -q 'getSharedPreferences' "$OFFER"
+          grep -q 'KEY_GRANTED_AT' "$OFFER"
+          grep -q 'GRANT_TTL_MILLIS' "$OFFER"
+          grep -q 'WatermarkOffer.init(this)' "$APP"
+
+          grep -q 'val rewardedRequestable' "$CARD"
+          if grep -q 'if (!inspecting && !AdSlots.rewardedRequestable) return' "$CARD"; then
+            echo 'Watermark disclosure disappears when rewarded inventory is unavailable.' >&2
+            exit 1
+          fi
+
+          grep -q 'OpenableColumns.DISPLAY_NAME' "$ENGINE"
+          grep -q '_VidSize.mp4' "$ENGINE"
+          grep -q 'sourceDisplayName' "$ENGINE"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt')
+          s = p.read_text(encoding='utf-8')
+          start = s.index('    fun startWithoutWatermark() {')
+          end = s.index('\n    // The grant is spent HERE', start)
+          block = s[start:end]
+          assert 'startCompression(watermark = true)' not in block, \
+              'watermark-free request silently falls back to marked output'
+          assert 'rewardedUnavailable = true' in block
+          PY
+
       - name: Kotlin structure
         shell: bash
         run: |
@@ -1168,13 +1213,13 @@ jobs:
 
       - name: Create exact source audit ZIP
         shell: bash
-        run: git archive --format=zip --output=vidsize-v089-source-audit.zip HEAD
+        run: git archive --format=zip --output=vidsize-v099-source-audit.zip HEAD
 
       - name: Upload QA APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-qa-apk
+          name: vidsize-v099-qa-apk
           path: app/build/outputs/apk/*/*.apk
           if-no-files-found: warn
 
@@ -1182,7 +1227,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-closed-test-UNSIGNED-audit-aab
+          name: vidsize-v099-closed-test-UNSIGNED-audit-aab
           path: app/build/outputs/bundle/closedTest/*.aab
           if-no-files-found: warn
 
@@ -1190,15 +1235,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-source-audit
-          path: vidsize-v089-source-audit.zip
+          name: vidsize-v099-source-audit
+          path: vidsize-v099-source-audit.zip
           if-no-files-found: warn
 
       - name: Upload lint reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-lint
+          name: vidsize-v099-lint
           path: |
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-closedTest.html

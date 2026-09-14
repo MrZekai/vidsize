@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.R
 import com.vidsize.compressor.media.CompressionJobState
 import com.vidsize.compressor.media.CompressionPlanner
@@ -270,6 +269,10 @@ fun CompressionScreen(
      * outcome than a dead control.
      */
     fun startWithoutWatermark() {
+        // Every tap is a fresh attempt. A previous no-fill message must not
+        // linger while the user retries.
+        rewardedUnavailable = false
+
         // A grant already in hand is one the user paid for and did not receive -
         // a previous mark-free export that failed. Charging them a second ad for
         // the same reward would be taking payment twice.
@@ -278,7 +281,7 @@ fun CompressionScreen(
             return
         }
         val activity = context.findHostActivity() ?: run {
-            startCompression(watermark = true)
+            rewardedUnavailable = true
             return
         }
         awaitingRewarded = true
@@ -290,11 +293,11 @@ fun CompressionScreen(
             } == true
             awaitingRewarded = false
             if (!ready) {
-                // Not an error and not silent: the user asked for something the
-                // network could not supply, and the result screen still carries
-                // the offer, so say so and start the free export.
+                // The user explicitly chose a clean export. Never silently
+                // downgrade that choice to a marked file. Keep the core path
+                // available via the normal COMPRESS button and let the user
+                // decide whether to retry the rewarded option.
                 rewardedUnavailable = true
-                startCompression(watermark = true)
                 return@launch
             }
             // RewardedAds grants from the SDK's own reward callback; this
@@ -663,28 +666,6 @@ private fun FailureDialog(
             Column {
                 Text(stringResource(bodyRes))
 
-                // Debuggable builds only.
-                //
-                // Review finding, and it was right: a production user was shown
-                // "NoCompressionSavingsException: Compressed output is not
-                // smaller than the source." A Java class name in a dialog tells
-                // the user nothing and tells them the app is unfinished.
-                //
-                // The QA value is real though, so it is not deleted - it is
-                // moved. `adsQa` and `debug` are debuggable and keep the line;
-                // closedTest and release do not, and a tester on those builds
-                // reads the same text from the hidden diagnostics screen.
-                val detail = failure.debugMessage.takeIf { BuildConfig.DEBUG }
-                if (!detail.isNullOrBlank()) {
-                    Spacer(Modifier.height(Space.xs))
-                    Text(
-                        text = detail,
-                        style = VidsizeType.micro,
-                        color = VidsizeColor.Faint,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
         },
         confirmButton = {

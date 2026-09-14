@@ -11,6 +11,7 @@ import com.vidsize.compressor.ads.AdPacing
 import com.vidsize.compressor.ads.AppOpenAdManager
 import com.vidsize.compressor.ads.AppOpenAdPolicy
 import com.vidsize.compressor.ads.InterstitialAds
+import com.vidsize.compressor.ads.WatermarkOffer
 import com.vidsize.compressor.growth.ReviewPrompt
 import com.vidsize.compressor.media.CompressionEngine
 
@@ -39,6 +40,7 @@ class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks
         AdPacing.init(this)
         AdDiagnostics.init(this)
         InterstitialAds.init(this)
+        WatermarkOffer.init(this)
         ReviewPrompt.init(this)
 
         // Scratch files from a process that was killed mid-job. Safe here and
