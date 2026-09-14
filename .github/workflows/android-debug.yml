@@ -47,22 +47,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          . tools/gate_helpers.sh
           legacy_brand="fit""size"
           legacy_package="com\\.fit""size"
           if grep -RIniE "${legacy_brand}|${legacy_package}" app docs README.md store --exclude='*.png'; then
             echo 'Legacy brand reference found.' >&2
             exit 1
           fi
-          ! grep -q 'FOREGROUND_SERVICE_DATA_SYNC' app/src/main/AndroidManifest.xml
-          ! grep -q 'foregroundServiceType="[^"]*dataSync' app/src/main/AndroidManifest.xml
+          forbid 'FOREGROUND_SERVICE_DATA_SYNC' app/src/main/AndroidManifest.xml
+          forbid 'foregroundServiceType="[^"]*dataSync' app/src/main/AndroidManifest.xml
           grep -q 'android:allowBackup="false"' app/src/main/AndroidManifest.xml
           grep -q 'android:dataExtractionRules="@xml/data_extraction_rules"' app/src/main/AndroidManifest.xml
           test -f app/src/main/res/xml/data_extraction_rules.xml
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 20' app/build.gradle.kts
-          grep -q 'versionName = "0.9.2"' app/build.gradle.kts
+          grep -q 'versionCode = 21' app/build.gradle.kts
+          grep -q 'versionName = "0.9.3"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -74,7 +75,7 @@ jobs:
           grep -q 'CompressionBannerAd(active = !processing)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
           test "$(grep -c 'CompressionBannerAd(active = !processing)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt)" -eq 1
           grep -q 'setAdSize(AdSize.BANNER)' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
-          ! grep -q 'getLargeAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
+          forbid 'getLargeAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           grep -q 'ic_launcher_monochrome' app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
           test -f store/assets/icon-512.png
           test -f docs/index.html
@@ -87,6 +88,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          . tools/gate_helpers.sh
           ADS=app/src/main/java/com/vidsize/compressor/ads
           UI=app/src/main/java/com/vidsize/compressor/ui
           RESULT=$UI/screens/ResultScreen.kt
@@ -128,11 +130,11 @@ jobs:
           # v0.9.1: Home no longer carries the anchored banner - it keeps the
           # rewarded offer and the in-content native. The progress panel keeps
           # its banner; that surface is the longest-dwell one in the app.
-          ! grep -q 'HomeBannerAd' $UI/screens/HomeScreen.kt
+          forbid 'HomeBannerAd' $UI/screens/HomeScreen.kt
           grep -q 'AdSlots.bannerVisible' $UI/screens/ProcessingOverlay.kt
           grep -q 'CompressionBannerAd' $UI/screens/ProcessingOverlay.kt
-          ! grep -q 'ConsentManager' $UI/components/HomeBannerAd.kt
-          ! grep -q 'ConsentManager' $UI/screens/ProcessingOverlay.kt
+          forbid 'ConsentManager' $UI/components/HomeBannerAd.kt
+          forbid 'ConsentManager' $UI/screens/ProcessingOverlay.kt
 
           # --- Gate 5: preloading still happens while the job runs ---
           # Three call sites since v0.9.2: screen open, job start, and the
@@ -143,7 +145,7 @@ jobs:
           # If any of these reverts to suppressAppOpenOnReturn alone, the
           # interstitial silently stops earning on its most common path.
           test "$(grep -c 'context.deferInterstitialOnReturn()' $RESULT)" -eq 3
-          ! grep -q 'suppressAppOpenOnReturn' $RESULT
+          forbid 'suppressAppOpenOnReturn' $RESULT
           # ...and both immediate exits from the result screen carry one too, so
           # "an interstitial after every compression" is true for every path a
           # user can actually take out of a finished job, not just some of them.
@@ -178,7 +180,7 @@ jobs:
           # free of any show call.
           grep -q 'BackHandler { onSystemBack() }' $RESULT
           grep -Pzoq 'onSystemBack = \{ CompressionJobState\.reset\(\) \},' $COMPRESS
-          ! grep -Pzoq 'onSystemBack[\s\S]{0,120}?InterstitialAds' $COMPRESS
+          forbid_span 'onSystemBack[\s\S]{0,120}?InterstitialAds' $COMPRESS
 
           # --- Gate 7c: growth surfaces are wired --------------------------
           # The share-sheet path has existed since v0.8.x and was never
@@ -190,7 +192,7 @@ jobs:
           # Play review asked at the result, never on the exit the ad owns.
           test -f app/src/main/java/com/vidsize/compressor/growth/ReviewPrompt.kt
           grep -q 'ReviewPrompt.maybeAsk' $RESULT
-          ! grep -q 'ReviewPrompt' $COMPRESS
+          forbid 'ReviewPrompt' $COMPRESS
           grep -q 'review-ktx' app/build.gradle.kts
 
           # --- Gate 8: the share-sheet entry point still suppresses app open ---
@@ -210,7 +212,7 @@ jobs:
           grep -q 'verifyAdsOffWithoutRealIds' app/build.gradle.kts
           # closedTest must no longer be pinned ads-off, or T1-T7 cannot be run
           # against the artefact that ships.
-          ! grep -Pzoq 'create\("closedTest"\)[\s\S]{0,600}?ENABLE_ADS", "false"' app/build.gradle.kts
+          forbid_span 'create\("closedTest"\)[\s\S]{0,600}?ENABLE_ADS", "false"' app/build.gradle.kts
           # ...and the test-creative variant must be debuggable, or AdIds' sample
           # backstop refuses every unit and the variant shows nothing.
           grep -Pzoq 'create\("adsQa"\)[\s\S]{0,400}?isDebuggable = true' app/build.gradle.kts
@@ -237,7 +239,10 @@ jobs:
           fi
           grep -qx 'ads.properties' .gitignore
           test -f ads.properties.example
-          ! git ls-files --error-unmatch ads.properties >/dev/null 2>&1
+          if git ls-files --error-unmatch ads.properties >/dev/null 2>&1; then
+            echo 'GATE FAILED (must not match): git ls-files --error-unmatch ads.properties >/dev/null 2>&1' >&2
+            exit 1
+          fi
 
           # --- Gate 12: required and optional identifier sets are as designed --
           # App Open is optional because this account has no unit for it; making
@@ -255,7 +260,7 @@ jobs:
           # Pacing reads a clock the user cannot set. A wall-clock read here
           # would let a forward clock change stack two full-screen ads.
           grep -q 'SystemClock.elapsedRealtime()' $ADSDIR/AdPacing.kt
-          ! grep -q 'System.currentTimeMillis' $ADSDIR/AdPacing.kt
+          forbid 'System.currentTimeMillis' $ADSDIR/AdPacing.kt
           # The reward window keeps wall clock (it must survive reboot) but
           # cannot be stretched past what was granted.
           grep -q 'remaining > REWARD_DURATION_MILLIS' $ADSDIR/AdFreeWindow.kt
@@ -273,7 +278,7 @@ jobs:
           # A platform-killed job is reported, not silently reset.
           grep -q 'FailureReason.TIMEOUT' $MEDIA/CompressionService.kt
           grep -q 'TIMEOUT,' $MEDIA/CompressionJobState.kt
-          ! grep -Pzoq 'private fun handleTimeout\(\)[\s\S]{0,200}?cancelJob\(\)' $MEDIA/CompressionService.kt
+          forbid_span 'private fun handleTimeout\(\)[\s\S]{0,200}?cancelJob\(\)' $MEDIA/CompressionService.kt
           for f in app/src/main/res/values*/strings.xml; do
             grep -q 'name="notification_timeout_title"' "$f" || { echo "$f lacks timeout copy" >&2; exit 1; }
           done
@@ -294,10 +299,38 @@ jobs:
           grep -q 'if (adsConfigured) dependsOn(verifyProductionAdConfig)' app/build.gradle.kts
 
           # The diagnostics sheet must never print an ad unit id.
-          ! grep -qE 'Line\(.*AdIds\.' $UI/screens/AdDiagnosticsSheet.kt
+          if grep -qE 'Line\(.*AdIds\.' $UI/screens/AdDiagnosticsSheet.kt; then
+            echo 'GATE FAILED (must not match): grep -qE Line\(.*AdIds\. $UI/screens/AdDiagnosticsSheet.kt' >&2
+            exit 1
+          fi
 
           # Stale duplicate build script must stay deleted.
-          ! test -f app/build.gradle-1.kts
+          if test -f app/build.gradle-1.kts; then
+            echo 'GATE FAILED (must not match): test -f app/build.gradle-1.kts' >&2
+            exit 1
+          fi
+
+          # --- Gate 12c: v0.9.3 device-test findings -------------------------
+          # The output carries a readable date, not an epoch.
+          grep -q 'NAME_TIMESTAMP_PATTERN = "yyyy-MM-dd_HH-mm-ss"' $MEDIA/CompressionEngine.kt
+          grep -q 'fun outputDisplayName' $MEDIA/CompressionEngine.kt
+          forbid 'Vidsize_\${System.currentTimeMillis()}' $MEDIA/CompressionEngine.kt
+
+          # The share sheet gets a name and a thumbnail, which it reads from
+          # ClipData - EXTRA_STREAM alone left it showing the MediaStore row id.
+          grep -q 'ClipData.newUri' $UI/MediaIntents.kt
+          grep -q 'putExtra(Intent.EXTRA_STREAM, uri)' $UI/MediaIntents.kt
+          grep -q 'buildVideoShareIntent(context, uri)' $RESULT
+          grep -q 'buildVideoShareIntent(context, Uri.parse(entry.outputUri))' $UI/VidsizeRoot.kt
+          # No screen may hand-roll a share intent again.
+          forbid 'Intent(Intent.ACTION_SEND)' $RESULT
+          forbid 'Intent(Intent.ACTION_SEND)' $UI/VidsizeRoot.kt
+
+          # "Open Gallery" opens the gallery, not a player. The item URI means
+          # "play this"; the COLLECTION uri is what a gallery app registers for.
+          grep -q 'MediaStore.Video.Media.EXTERNAL_CONTENT_URI' $RESULT
+          grep -q 'private fun showInGallery(context: Context)' $RESULT
+          forbid 'showInGallery(context, ' $RESULT
 
           # --- Gate 13: the published policy declares every format and the reward ---
           for term in 'Banner' 'Result-screen ad' 'App-open ad' 'Interstitial' 'Rewarded ad' \
@@ -664,6 +697,56 @@ jobs:
       #
       # This closes that gap for every locale at once, in under a second,
       # before any compiler is started.
+      # The gate that guards the gates.
+      #
+      # v0.9.3 postmortem: nineteen "this must NOT be in the source" checks were
+      # written as `! grep -q ...` under `set -euo pipefail`. None of them could
+      # ever fail a build - POSIX exempts a command whose status is inverted
+      # with `!` from `set -e`, so the line reported failure and the script
+      # carried on. Among the checks that were decoration: consent handling on
+      # the banner surfaces, the removed home banner, and the ad-pacing clock.
+      #
+      # Two of them turned out to be hiding nothing, and two more fired on
+      # comments the moment they became real. Both outcomes were invisible for
+      # as long as the checks were no-ops.
+      - name: Gate helpers must actually fail
+        shell: bash
+        run: |
+          set -euo pipefail
+          . tools/gate_helpers.sh
+
+          # No negated check may come back. This is the actual regression guard:
+          # the bug was a shell idiom, so the guard is against the idiom.
+          if grep -nE '^[[:space:]]*![[:space:]]+(grep|test|git|cmp)' .github/workflows/*.yml; then
+            echo 'A negated check was reintroduced. `set -e` does not fail on `!`.' >&2
+            echo 'Use forbid / forbid_span from tools/gate_helpers.sh instead.' >&2
+            exit 1
+          fi
+
+          probe="$(mktemp)"
+          trap 'rm -f "$probe"' EXIT
+
+          # A mention in a comment is documentation, and must pass.
+          printf '// ConsentManager was removed here\nval x = 1\n' > "$probe"
+          forbid 'ConsentManager' "$probe"
+          echo 'ok: comment mention accepted'
+
+          # The same symbol in code must fail, and must say so.
+          printf 'val y = ConsentManager.adsAllowed\n' >> "$probe"
+          if ( forbid 'ConsentManager' "$probe" ) >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: forbid accepted a real match' >&2
+            exit 1
+          fi
+          echo 'ok: code match rejected'
+
+          # Same for the multi-line form.
+          printf 'fun handleTimeout() {\n    cancelJob()\n}\n' > "$probe"
+          if ( forbid_span 'fun handleTimeout\(\)[\s\S]{0,200}?cancelJob\(\)' "$probe" ) >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: forbid_span accepted a real match' >&2
+            exit 1
+          fi
+          echo 'ok: forbid_span rejects a real span'
+
       - name: Android string resource escaping
         shell: bash
         run: |

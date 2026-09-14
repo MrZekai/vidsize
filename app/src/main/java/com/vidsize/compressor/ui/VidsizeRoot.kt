@@ -136,11 +136,9 @@ private fun openHistoryEntry(context: Context, entry: CompressionHistoryEntry) {
 private fun shareHistoryEntry(context: Context, entry: CompressionHistoryEntry) {
     if (entry.outputUri.isBlank()) return
     context.suppressAppOpenOnReturn()
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "video/mp4"
-        putExtra(Intent.EXTRA_STREAM, Uri.parse(entry.outputUri))
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
+    // Same builder as the result screen, so a share started from a Recent row
+    // gets the same named, thumbnailed preview rather than a bare row id.
+    val intent = buildVideoShareIntent(context, Uri.parse(entry.outputUri))
     runCatching {
         context.startActivity(
             Intent.createChooser(intent, context.getString(R.string.share_chooser)),

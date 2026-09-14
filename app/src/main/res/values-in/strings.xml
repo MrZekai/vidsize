@@ -101,7 +101,7 @@
     <string name="notification_done_title">Video siap</string>
     <string name="notification_done_body">Video terkompresimu disimpan di Movies/Vidsize.</string>
     <string name="ad_badge">Iklan</string>
-    <string name="result_show_in_gallery">Lihat di Galeri</string>
+    <string name="result_show_in_gallery">Buka Galeri</string>
     <string name="preset_not_viable">Tidak ada penghematan</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->

@@ -3,6 +3,7 @@ package com.vidsize.compressor.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -46,6 +47,7 @@ import com.vidsize.compressor.ads.findHostActivity
 import com.vidsize.compressor.growth.ReviewPrompt
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
+import com.vidsize.compressor.ui.buildVideoShareIntent
 import com.vidsize.compressor.ui.components.AdFreeStrip
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.HairLine
@@ -301,7 +303,7 @@ fun ResultScreen(
 
                 SecondaryButton(
                     text = stringResource(R.string.result_show_in_gallery),
-                    onClick = { showInGallery(context, result.outputUri) },
+                    onClick = { showInGallery(context) },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = interactive,
                 )
@@ -469,11 +471,7 @@ private fun ResultFigures(
 
 private fun shareVideo(context: Context, uri: Uri) {
     context.deferInterstitialOnReturn()
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "video/mp4"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
+    val intent = buildVideoShareIntent(context, uri)
     runCatching {
         context.startActivity(
             Intent.createChooser(intent, context.getString(R.string.share_chooser)),
@@ -482,28 +480,41 @@ private fun shareVideo(context: Context, uri: Uri) {
 }
 
 /**
- * Opens the saved file in the device's gallery/photos app, which is the only
- * reliable way to "show the file where it lives" across OEMs.
+ * Opens the device's gallery app at its video collection.
  *
- * A literal folder-browser intent (ACTION_VIEW on a directory document) is
- * honoured by some Files apps and ignored by many others, so the gallery route
- * is used first and a generic chooser is the fallback.
+ * ## QA finding: this button and "Open video" did the same thing
+ *
+ * Both built `ACTION_VIEW` on the file's own URI. That intent means "play this
+ * video", so both buttons handed the file to a player and the user got the same
+ * screen twice - the gallery was never opened, and nothing on the result screen
+ * led to where the file actually lives.
+ *
+ * The fix is to point the intent at the COLLECTION rather than at the item:
+ * `ACTION_VIEW` on [MediaStore.Video.Media.EXTERNAL_CONTENT_URI] is what a
+ * gallery app registers for, so it opens the gallery's video list instead of a
+ * player.
+ *
+ * Being honest about the limit: Android has no intent that means "reveal this
+ * one file in its folder". Some OEM galleries land on the newest item, some
+ * open the top of the list. The output is the most recent video on the device
+ * at this moment, so in practice it is the first thing on screen either way -
+ * but the button's own copy promises the gallery, not a scroll position, which
+ * is the promise the platform can actually keep.
  */
-private fun showInGallery(context: Context, uri: Uri) {
+private fun showInGallery(context: Context) {
     context.deferInterstitialOnReturn()
     val gallery = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "video/*")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        setDataAndType(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "video/*")
     }
-    val launched = runCatching {
-        context.startActivity(gallery)
-    }.isSuccess
-    if (!launched) {
-        runCatching {
-            context.startActivity(
-                Intent.createChooser(gallery, context.getString(R.string.result_show_in_gallery)),
-            )
-        }
+    val launched = runCatching { context.startActivity(gallery) }.isSuccess
+    if (launched) return
+
+    // No single app claimed the collection. Ask the user, rather than silently
+    // falling back to a player - which is the bug this function exists to fix.
+    runCatching {
+        context.startActivity(
+            Intent.createChooser(gallery, context.getString(R.string.result_show_in_gallery)),
+        )
     }
 }
 

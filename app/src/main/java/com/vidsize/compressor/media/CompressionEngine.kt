@@ -33,6 +33,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -62,6 +65,13 @@ object CompressionEngine {
             }?.forEach { runCatching { it.delete() } }
         }
     }
+
+    /**
+     * `Vidsize_2026-09-14_06-50-32.mp4`. Sorts chronologically as text, is
+     * legal on every filesystem Android exposes, and reads as a date at a
+     * glance.
+     */
+    private const val NAME_TIMESTAMP_PATTERN = "yyyy-MM-dd_HH-mm-ss"
 
     private const val PROGRESS_POLL_MS = 300L
     private const val PENDING_EXPIRY_MILLIS = 24L * 60L * 60L * 1000L
@@ -382,6 +392,29 @@ object CompressionEngine {
     }
 
     /**
+     * The name the user actually sees.
+     *
+     * QA finding: the output was named `Vidsize_<epoch millis>.mp4`. That string
+     * carries the same information as a date and communicates none of it - in
+     * the recent list it reads as a serial number, and in a share sheet or a
+     * chat it tells the recipient nothing about what they were sent.
+     *
+     * Local time, not UTC: this name exists to be recognised by the person who
+     * made the file, and they think in their own clock. Colons are illegal in a
+     * file name and dots would fight the extension, so the time is separated
+     * with hyphens.
+     *
+     * Collisions are MediaStore's problem, not this function's: two files
+     * created in the same second get `(1)` appended by the provider. A counter
+     * here would only duplicate that, and less reliably.
+     */
+    internal fun outputDisplayName(nowMillis: Long = System.currentTimeMillis()): String {
+        val stamp = SimpleDateFormat(NAME_TIMESTAMP_PATTERN, Locale.US)
+            .format(Date(nowMillis))
+        return "Vidsize_$stamp.mp4"
+    }
+
+    /**
      * Copies the encoded temp file into MediaStore.
      *
      * Written as a cancellable manual copy rather than `copyTo`: `copyTo` has no
@@ -395,7 +428,7 @@ object CompressionEngine {
         onProgress: (Float) -> Unit,
     ): Uri = withContext(Dispatchers.IO) {
         val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, "Vidsize_${System.currentTimeMillis()}.mp4")
+            put(MediaStore.Video.Media.DISPLAY_NAME, outputDisplayName())
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Vidsize")
             put(MediaStore.Video.Media.IS_PENDING, 1)

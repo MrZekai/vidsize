@@ -102,7 +102,7 @@
     <string name="notification_done_title">वीडियो तैयार है</string>
     <string name="notification_done_body">आपका कंप्रेस किया गया वीडियो Movies/Vidsize में सेव हो गया है।</string>
     <string name="ad_badge">विज्ञापन</string>
-    <string name="result_show_in_gallery">गैलरी में दिखाएँ</string>
+    <string name="result_show_in_gallery">गैलरी खोलें</string>
     <string name="preset_not_viable">कोई वास्तविक बचत नहीं</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
