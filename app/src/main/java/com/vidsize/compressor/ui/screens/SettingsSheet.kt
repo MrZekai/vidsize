@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,8 +30,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -55,11 +59,18 @@ import com.vidsize.compressor.ui.theme.Space
 import com.vidsize.compressor.ui.theme.VidsizeColor
 import com.vidsize.compressor.ui.theme.VidsizeShape
 import com.vidsize.compressor.ui.theme.VidsizeType
+import kotlinx.coroutines.delay
 
 private enum class LegalPage(val assetFileName: String) {
     Privacy("privacy.html"),
     Terms("terms.html"),
 }
+
+/** Taps on the version row that open the hidden ad diagnostics screen. */
+private const val DIAGNOSTICS_TAP_COUNT = 7
+
+/** How long a partial tap sequence survives before it is forgotten. */
+private const val DIAGNOSTICS_TAP_WINDOW_MS = 2_000L
 
 @Composable
 fun SettingsSheet(
@@ -69,6 +80,36 @@ fun SettingsSheet(
     val context = LocalContext.current
     var legalPageName by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
+
+    // Seven taps on the version row opens the ad diagnostics screen.
+    //
+    // Hidden rather than shipped as a visible row because it is a developer
+    // surface, and gesture-based rather than build-flag-gated because the build
+    // that most needs diagnosing is the signed one on a real tester's phone -
+    // the same binary that goes to Play. A debug-only diagnostics screen can
+    // only ever explain a debug build's behaviour, which is not the behaviour
+    // anyone is confused about.
+    var versionTaps by remember { mutableIntStateOf(0) }
+    var showDiagnostics by rememberSaveable { mutableStateOf(false) }
+
+    // Stray taps decay, so a count never accumulates across a session and opens
+    // the screen by accident hours later.
+    LaunchedEffect(versionTaps) {
+        if (versionTaps in 1 until DIAGNOSTICS_TAP_COUNT) {
+            delay(DIAGNOSTICS_TAP_WINDOW_MS)
+            versionTaps = 0
+        }
+    }
+
+    if (showDiagnostics) {
+        AdDiagnosticsSheet(
+            onDismiss = {
+                showDiagnostics = false
+                versionTaps = 0
+            },
+        )
+        return
+    }
 
     val page = legalPageName?.let { name ->
         LegalPage.values().firstOrNull { it.name == name }
@@ -227,6 +268,23 @@ fun SettingsSheet(
                         text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
                         style = VidsizeType.micro,
                         color = VidsizeColor.Faint,
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                // No ripple and no role: to a user this stays a
+                                // caption, not a control. Announcing it to the
+                                // accessibility tree as a button would put a
+                                // developer surface in front of screen-reader
+                                // users with no way to know what it does.
+                                indication = null,
+                            ) {
+                                versionTaps += 1
+                                if (versionTaps >= DIAGNOSTICS_TAP_COUNT) {
+                                    versionTaps = 0
+                                    showDiagnostics = true
+                                }
+                            }
+                            .padding(vertical = Space.xxs),
                     )
 
                     Spacer(Modifier.height(Space.lg))

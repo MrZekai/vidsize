@@ -33,11 +33,45 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 @OptIn(UnstableApi::class)
 object CompressionEngine {
+
+    /** Prefix every scratch file shares, so a sweep can recognise them. */
+    private const val TEMP_PREFIX = "vidsize_"
+
+    /**
+     * Deletes scratch files a previous process left in the cache.
+     *
+     * QA finding: the temp file is removed in a `finally`, which covers success,
+     * failure and cancellation but not the one case that matters most for a job
+     * running several minutes in the background - the process being killed. Each
+     * orphan is the size of a video, and StorageGuard refuses to start a new job
+     * when free space is low, so a few killed jobs could leave the app
+     * permanently reporting "not enough space" on a device with plenty of it.
+     *
+     * Called once at startup, when by definition no job of ours is running, so
+     * any `vidsize_*` file present is from a process that no longer exists.
+     */
+    fun sweepOrphanedTempFiles(context: Context) {
+        runCatching {
+            context.cacheDir.listFiles { file ->
+                file.isFile && file.name.startsWith(TEMP_PREFIX)
+            }?.forEach { runCatching { it.delete() } }
+        }
+    }
+
+    /**
+     * `Vidsize_2026-09-14_06-50-32.mp4`. Sorts chronologically as text, is
+     * legal on every filesystem Android exposes, and reads as a date at a
+     * glance.
+     */
+    private const val NAME_TIMESTAMP_PATTERN = "yyyy-MM-dd_HH-mm-ss"
 
     private const val PROGRESS_POLL_MS = 300L
     private const val PENDING_EXPIRY_MILLIS = 24L * 60L * 60L * 1000L
@@ -50,14 +84,53 @@ object CompressionEngine {
      */
     private const val ENCODE_PROGRESS_SHARE = 0.90f
 
+    /**
+     * @param watermark whether the output carries the Vidsize mark. Decided by
+     *        the caller, never here: a free export is marked, and an export the
+     *        user has paid for with a rewarded ad is not. See [Watermark].
+     */
+    /**
+     * How many times a size-target job may encode before it settles.
+     *
+     * ## Why a cap at all, and why three
+     *
+     * Hardware VBR does not land on a requested bitrate exactly, so the only way
+     * to hit a byte ceiling is to encode, measure, and correct. Left uncapped
+     * that is an unbounded loop on the user's battery, driven by an encoder that
+     * may simply be unable to go lower.
+     *
+     * Three is where the arithmetic stops paying. Pass one lands within roughly
+     * 20% - that is what [CompressionPlanner]'s variance constant is calibrated
+     * for - and a proportional correction closes most of that gap in pass two.
+     * Pass three exists for the stubborn cases. A fourth would double the wait
+     * again to chase a few percent, and the honest answer at that point is to
+     * hand back the smallest file produced and say what it is.
+     */
+    private const val MAX_TARGET_PASSES = 3
+
+    /**
+     * @param targetBytes when non-null, the job aims at this output size instead
+     *        of at [preset]'s quality level, and may encode up to
+     *        [MAX_TARGET_PASSES] times to reach it.
+     * @param onPass called before each encode with (pass number, pass ceiling),
+     *        so the UI can explain why a job is on its second lap rather than
+     *        appearing to restart.
+     */
     suspend fun compress(
         context: Context,
         input: Uri,
         preset: CompressionPreset,
+        watermark: Boolean,
+        targetBytes: Long? = null,
         onProgress: ((Float) -> Unit)? = null,
+        onPass: ((Int, Int) -> Unit)? = null,
     ): CompressionResult {
         val info = withContext(Dispatchers.IO) { VideoProbe.probe(context, input) }
-        val plan = CompressionPlanner.plan(info, preset)
+        var plan = if (targetBytes != null) {
+            CompressionPlanner.planForTarget(info, targetBytes)
+        } else {
+            CompressionPlanner.plan(info, preset)
+        }
 
         // Fail before the encode, not four minutes into it. The UI already
         // blocks this, but a share-sheet entry or a stale pre-flight check can
@@ -68,42 +141,102 @@ object CompressionEngine {
         if (!storage.hasRoom) throw OutOfSpaceException()
 
         val started = System.currentTimeMillis()
-        val temp = File(context.cacheDir, "vidsize_${System.nanoTime()}.mp4")
+        val passCeiling = if (targetBytes != null) MAX_TARGET_PASSES else 1
+
+        // The best file produced so far, and its size. Each pass writes its own
+        // temp file rather than overwriting: a correction that overshoots
+        // downward is still a worse file than the one before it, and
+        // overwriting would have thrown the better one away.
+        var best: File? = null
+        var bestBytes = Long.MAX_VALUE
 
         try {
-            val export = runExportWithFallbacks(
-                context = context,
-                input = input,
-                output = temp,
-                plan = plan,
-                hasAudio = info.hasAudio,
-                onProgress = onProgress?.let { report ->
-                    { fraction -> report(fraction * ENCODE_PROGRESS_SHARE) }
-                },
+            for (pass in 1..passCeiling) {
+                onPass?.invoke(pass, passCeiling)
+                val candidate = File(context.cacheDir, "$TEMP_PREFIX${System.nanoTime()}.mp4")
+                val export = runExportWithFallbacks(
+                    context = context,
+                    input = input,
+                    output = candidate,
+                    plan = plan,
+                    hasAudio = info.hasAudio,
+                    watermark = watermark,
+                    // Display dimensions: VideoProbe has already applied any
+                    // rotation metadata, and the shape check is only meaningful
+                    // against what the viewer sees.
+                    sourceWidth = info.width,
+                    sourceHeight = info.height,
+                    onProgress = onProgress?.let { report ->
+                        { fraction -> report(fraction * ENCODE_PROGRESS_SHARE) }
+                    },
+                )
+                val actual = candidate.length().takeIf { it > 0 } ?: export.fileSizeBytes
+                require(actual > 0) { "Compression finished without a readable output file." }
+
+                if (actual < bestBytes) {
+                    best?.delete()
+                    best = candidate
+                    bestBytes = actual
+                } else {
+                    candidate.delete()
+                }
+
+                // Preset mode, or the ceiling was met: nothing left to correct.
+                if (targetBytes == null || bestBytes <= targetBytes) break
+
+                // Every pass re-encodes from the ORIGINAL. Chaining passes would
+                // compound generation loss, so the second attempt is a different
+                // encode of the same source, never a re-encode of the first.
+                //
+                // The correction that feeds the LAST pass may also drop the
+                // frame size. Bitrate alone bottoms out at what the hardware
+                // will accept, and a job that stops there reports the target as
+                // missed - the one outcome this mode exists to avoid. Given a
+                // last chance, it spends it on a smaller, clean frame instead of
+                // giving up.
+                plan = CompressionPlanner.correctedForTarget(
+                    info = info,
+                    plan = plan,
+                    actualBytes = actual,
+                    allowResolutionDrop = pass == passCeiling - 1,
+                ) ?: break
+            }
+
+            // Not `require(output != null && ...)`. That leans on the compiler
+            // smart-casting through a contract on a compound condition to turn
+            // File? into File for the publish() call below - which it may well
+            // do, but "may well" is not a thing to ship in the one place that
+            // decides whether the user's file exists. An explicit elvis makes
+            // the type non-null by construction.
+            val output = best ?: throw IllegalStateException(
+                "Compression produced no output file.",
             )
-            val actual = temp.length().takeIf { it > 0 } ?: export.fileSizeBytes
-            require(actual > 0) { "Compression finished without a readable output file." }
+            require(bestBytes > 0L) { "Compression produced an empty output file." }
 
             // Do not publish a "successful" file that consumes the same or more
             // storage than the original. The user keeps the better original.
-            if (info.sourceBytes > 0L && actual >= info.sourceBytes) {
+            if (info.sourceBytes > 0L && bestBytes >= info.sourceBytes) {
                 throw NoCompressionSavingsException()
             }
 
-            val published = publish(context, temp) { fraction ->
+            val published = publish(context, output) { fraction ->
                 onProgress?.invoke(
                     ENCODE_PROGRESS_SHARE + fraction * (1f - ENCODE_PROGRESS_SHARE),
                 )
             }
             return CompressionResult(
                 outputUri = published,
+                sourceUri = input,
                 sourceBytes = info.sourceBytes,
-                outputBytes = actual,
+                outputBytes = bestBytes,
                 elapsedMs = System.currentTimeMillis() - started,
-                preset = preset,
+                preset = plan.preset,
+                watermarked = watermark,
+                targetBytes = targetBytes,
+                targetMet = targetBytes == null || bestBytes <= targetBytes,
             )
         } finally {
-            temp.delete()
+            best?.delete()
         }
     }
 
@@ -160,6 +293,9 @@ object CompressionEngine {
         output: File,
         plan: CompressionPlan,
         hasAudio: Boolean,
+        watermark: Boolean,
+        sourceWidth: Int,
+        sourceHeight: Int,
         onProgress: ((Float) -> Unit)?,
     ): ExportResult {
         val attempts = buildAttempts(plan)
@@ -167,7 +303,7 @@ object CompressionEngine {
 
         attempts.forEachIndexed { index, attempt ->
             try {
-                return runExport(
+                val export = runExport(
                     context = context,
                     input = input,
                     output = output,
@@ -177,8 +313,24 @@ object CompressionEngine {
                     targetHeight = attempt.height,
                     useRequestedSettings = attempt.useRequestedSettings,
                     hasAudio = hasAudio,
+                    watermark = watermark,
                     onProgress = onProgress,
                 )
+
+                // QA NEW-01. The export "succeeded" and the file was wrong.
+                //
+                // Media3 reshapes a request the encoder will not take, under its
+                // own fallback, and reports success for whatever came out. On
+                // the QA device a 1080x1920 portrait became a 1080x1088 squash
+                // and the app put it in the user's gallery behind a green tick.
+                //
+                // So the result is measured rather than assumed, and a wrong
+                // shape is treated as this rung failing - which is exactly what
+                // it is. The catch below deletes the file and moves to the next
+                // configuration.
+                verifyGeometry(output, sourceWidth, sourceHeight)
+
+                return export
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (throwable: Throwable) {
@@ -199,6 +351,40 @@ object CompressionEngine {
             attempted = attempts.joinToString(", ") { "${it.label} ${it.width}x${it.height}" },
             cause = lastFailure,
         )
+    }
+
+    /**
+     * Throws unless the file at [output] has the same shape as the source.
+     *
+     * Separated from the ladder so the decision is one testable predicate
+     * ([OutputVerification.aspectMatches]) and the I/O is one call. The
+     * exceptions it throws are ordinary attempt failures: the caller deletes the
+     * file and tries the next encoder configuration.
+     */
+    private fun verifyGeometry(output: File, sourceWidth: Int, sourceHeight: Int) {
+        // Nothing to compare against. Probing the source is what normally
+        // supplies these, and a source with no readable size never reaches here,
+        // but a caller is not made to prove that: an unknown source shape means
+        // the check abstains rather than rejecting a file it cannot judge.
+        if (sourceWidth <= 0 || sourceHeight <= 0) return
+
+        val geometry = VideoProbe.probeGeometry(output.absolutePath)
+            ?: throw OutputUnreadableException()
+
+        if (!OutputVerification.aspectMatches(
+                sourceWidth = sourceWidth,
+                sourceHeight = sourceHeight,
+                outputWidth = geometry.width,
+                outputHeight = geometry.height,
+            )
+        ) {
+            throw OutputGeometryException(
+                sourceWidth = sourceWidth,
+                sourceHeight = sourceHeight,
+                outputWidth = geometry.width,
+                outputHeight = geometry.height,
+            )
+        }
     }
 
     private fun buildAttempts(plan: CompressionPlan): List<Attempt> {
@@ -249,6 +435,7 @@ object CompressionEngine {
         targetHeight: Int,
         useRequestedSettings: Boolean,
         hasAudio: Boolean,
+        watermark: Boolean,
         onProgress: ((Float) -> Unit)?,
     ): ExportResult = suspendCancellableCoroutine { continuation ->
         val encoderFactoryBuilder = DefaultEncoderFactory.Builder(context)
@@ -316,16 +503,21 @@ object CompressionEngine {
         // source ratio by at most half the encoder's alignment - well under 1% -
         // and a sub-1% stretch is invisible, whereas SCALE_TO_FIT would bake a
         // thin black bar into every output.
-        val effects = Effects(
-            emptyList(),
-            listOf<Effect>(
+        // Presentation first, Watermark second. Order is the pipeline order, so
+        // the mark is applied to the frame Vidsize is actually writing - sized
+        // from targetHeight, which is why it is the same relative size on a 4K
+        // source and a 480p one.
+        val videoEffects = buildList<Effect> {
+            add(
                 Presentation.createForWidthAndHeight(
                     targetWidth,
                     targetHeight,
                     Presentation.LAYOUT_STRETCH_TO_FIT,
                 ),
-            ),
-        )
+            )
+            if (watermark) add(Watermark.effect(targetHeight))
+        }
+        val effects = Effects(emptyList(), videoEffects)
         val item = EditedMediaItem.Builder(MediaItem.fromUri(input))
             .setEffects(effects)
             .build()
@@ -358,6 +550,29 @@ object CompressionEngine {
     }
 
     /**
+     * The name the user actually sees.
+     *
+     * QA finding: the output was named `Vidsize_<epoch millis>.mp4`. That string
+     * carries the same information as a date and communicates none of it - in
+     * the recent list it reads as a serial number, and in a share sheet or a
+     * chat it tells the recipient nothing about what they were sent.
+     *
+     * Local time, not UTC: this name exists to be recognised by the person who
+     * made the file, and they think in their own clock. Colons are illegal in a
+     * file name and dots would fight the extension, so the time is separated
+     * with hyphens.
+     *
+     * Collisions are MediaStore's problem, not this function's: two files
+     * created in the same second get `(1)` appended by the provider. A counter
+     * here would only duplicate that, and less reliably.
+     */
+    internal fun outputDisplayName(nowMillis: Long = System.currentTimeMillis()): String {
+        val stamp = SimpleDateFormat(NAME_TIMESTAMP_PATTERN, Locale.US)
+            .format(Date(nowMillis))
+        return "Vidsize_$stamp.mp4"
+    }
+
+    /**
      * Copies the encoded temp file into MediaStore.
      *
      * Written as a cancellable manual copy rather than `copyTo`: `copyTo` has no
@@ -371,7 +586,7 @@ object CompressionEngine {
         onProgress: (Float) -> Unit,
     ): Uri = withContext(Dispatchers.IO) {
         val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, "Vidsize_${System.currentTimeMillis()}.mp4")
+            put(MediaStore.Video.Media.DISPLAY_NAME, outputDisplayName())
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
             put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Vidsize")
             put(MediaStore.Video.Media.IS_PENDING, 1)

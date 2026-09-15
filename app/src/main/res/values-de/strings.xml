@@ -5,10 +5,11 @@
     <string name="hero_eyebrow">VIDEO-KOMPRESSOR</string>
     <string name="hero_headline">Mach dein Video kleiner.</string>
     <string name="hero_body">Dateigröße reduzieren und die Qualität behalten, die du brauchst.</string>
+    <string name="hero_share_hint">Tipp: Teile ein Video aus der Galerie direkt an Vidsize – du musst die App nicht erst öffnen.</string>
     <string name="cta_select_video">VIDEO AUSWÄHLEN</string>
     <string name="trust_on_device">Auf dem Gerät</string>
     <string name="trust_fast">Schnell</string>
-    <string name="trust_no_watermark">Ohne Wasserzeichen</string>
+    <string name="trust_no_watermark">Ohne Anmeldung</string>
     <string name="section_recent">Zuletzt</string>
     <string name="recent_empty_title">Noch keine Videos</string>
     <string name="recent_empty_body">Deine komprimierten Videos erscheinen hier.</string>
@@ -74,7 +75,7 @@
     <string name="settings_privacy_title">Datenschutz</string>
     <string name="settings_privacy_body">Deine Videos werden auf diesem Gerät komprimiert. Es wird nichts auf einen Server hochgeladen.</string>
     <string name="settings_ads_title">Werbung</string>
-    <string name="settings_ads_body">Vidsize ist kostenlos und werbefinanziert.</string>
+    <string name="settings_ads_body">Vidsize ist kostenlos und werbefinanziert: ein Banner, eine Anzeige auf dem Ergebnisbildschirm, eine beim App-Start und eine nach einer Komprimierung. Kostenlose Exporte tragen ein kleines Vidsize-Wasserzeichen; sieh ein kurzes Werbevideo an, um das Video ohne Wasserzeichen neu erstellen zu lassen.</string>
     <string name="settings_legal_section">RECHTLICHES</string>
     <string name="settings_privacy_policy">Datenschutzerklärung</string>
     <string name="settings_terms">Nutzungsbedingungen</string>
@@ -88,11 +89,15 @@
     <string name="notification_channel_name">Komprimierungsfortschritt</string>
     <string name="notification_channel_description">Zeigt den Fortschritt, während ein Video komprimiert wird.</string>
     <string name="notification_title">Video wird komprimiert</string>
+    <string name="notification_timeout_title">Komprimierung gestoppt</string>
+    <string name="notification_timeout_body">Android hat den Vorgang vor dem Ende beendet. Lange Videos können das Tageslimit des Systems für Hintergrundarbeit erreichen – probiere ein kürzeres Video oder eine stärkere Komprimierung.</string>
+    <string name="error_timeout_title">Komprimierung gestoppt</string>
+    <string name="error_timeout_body">Android hat den Vorgang vor dem Ende beendet. Lange Videos können das Tageslimit des Systems für Hintergrundarbeit erreichen – probiere ein kürzeres Video oder eine stärkere Komprimierung.</string>
     <string name="result_default_name">Komprimiertes Video</string>
     <string name="notification_done_title">Video fertig</string>
     <string name="notification_done_body">Dein komprimiertes Video wurde unter Movies/Vidsize gespeichert.</string>
     <string name="ad_badge">Anzeige</string>
-    <string name="result_show_in_gallery">In Galerie anzeigen</string>
+    <string name="result_show_in_gallery">Galerie öffnen</string>
     <string name="preset_not_viable">Keine echte Ersparnis</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -105,4 +110,32 @@
     <string name="cta_pick_another">Anderes Video wählen</string>
     <string name="preset_not_viable_hint">Dieses Video ist für diese Stufe schon klein genug.</string>
     <string name="result_recent_hint">Du kannst dieses Video jederzeit über „Kürzlich“ auf dem Startbildschirm wieder öffnen.</string>
+    <string name="watermark_offer_title">Vidsize-Wasserzeichen entfernen</string>
+    <string name="watermark_offer_body">Kurzes Werbevideo ansehen - das Video wird ohne Wasserzeichen neu erstellt. Dauert etwa so lange wie der erste Durchlauf.</string>
+    <string name="watermark_offer_action">Kurzes Werbevideo ansehen</string>
+    <string name="watermark_free_unavailable">Die Werbung konnte nicht geladen werden. Dein Video wird mit Wasserzeichen erstellt — du kannst es im Ergebnisbildschirm erneut versuchen.</string>
+    <string name="watermark_free_card_title">Ohne Vidsize-Wasserzeichen speichern</string>
+    <string name="watermark_free_card_body">Kostenlose Videos tragen ein kleines Vidsize-Wasserzeichen in der Ecke.</string>
+    <string name="watermark_free_card_badge">1 KURZE WERBUNG</string>
+    <string name="watermark_free_card_action">Ohne Wasserzeichen erstellen</string>
+    <string name="watermark_free_card_waiting">Werbung wird vorbereitet…</string>
+    <string name="cta_blocked_already_efficient">Dieses Video ist bereits gut komprimiert. Versuche Kleiner oder Am kleinsten.</string>
+    <string name="mode_level">Stufe</string>
+    <string name="mode_size">Zielgröße</string>
+    <string name="section_size">Zielgröße</string>
+    <string name="size_custom">Eigene</string>
+    <string name="size_custom_label">Größe</string>
+    <string name="size_pending_title">Video wird gelesen</string>
+    <string name="size_pending_body">Der Größenplan erscheint, sobald das Video gelesen wurde.</string>
+    <string name="size_not_smaller_title">Schon darunter</string>
+    <string name="size_not_smaller_body">Dieses Video hat %1$s. Wähle ein kleineres Ziel.</string>
+    <string name="size_too_small_title">Zu klein für dieses Video</string>
+    <string name="size_too_small_body">Dieses Video ist zu lang, um in dieser Größe in einer Qualität zu landen, die ein Encoder liefern kann. Wähle ein größeres Ziel.</string>
+    <string name="size_plan_title">Etwa %1$s</string>
+    <string name="size_plan_body">Ausgabe %1$d×%2$d. Vidsize kodiert bis zu dreimal neu, um unter dein Ziel zu kommen.</string>
+    <string name="cta_blocked_target_missing">Zielgröße eingeben</string>
+    <string name="cta_blocked_target_not_smaller">Dein Video ist bereits kleiner</string>
+    <string name="cta_blocked_target_too_small">Diese Größe ist für dieses Video nicht erreichbar</string>
+    <string name="processing_pass">Durchgang %1$d von %2$d – näher am Ziel</string>
+    <string name="result_target_missed">%1$s wurden nicht unterschritten. Kleiner bekommt Vidsize es nicht.</string>
 </resources>

@@ -5,10 +5,11 @@
     <string name="hero_eyebrow">COMPRESSOR DE VÍDEO</string>
     <string name="hero_headline">Deixe seu vídeo menor.</string>
     <string name="hero_body">Reduza o tamanho do arquivo mantendo a qualidade que você precisa.</string>
+    <string name="hero_share_hint">Dica: compartilhe um vídeo da galeria para o Vidsize — não precisa abrir o app antes.</string>
     <string name="cta_select_video">ESCOLHER VÍDEO</string>
     <string name="trust_on_device">No aparelho</string>
     <string name="trust_fast">Rápido</string>
-    <string name="trust_no_watermark">Sem marca d\'água</string>
+    <string name="trust_no_watermark">Sem cadastro</string>
     <string name="section_recent">Recentes</string>
     <string name="recent_empty_title">Nenhum vídeo ainda</string>
     <string name="recent_empty_body">Seus vídeos comprimidos vão aparecer aqui.</string>
@@ -74,7 +75,7 @@
     <string name="settings_privacy_title">Privacidade</string>
     <string name="settings_privacy_body">Seus vídeos são comprimidos neste aparelho. Nada é enviado para servidores.</string>
     <string name="settings_ads_title">Anúncios</string>
-    <string name="settings_ads_body">O Vidsize é gratuito e mantido por anúncios.</string>
+    <string name="settings_ads_body">A Vidsize e gratuita e mantida por anuncios: um banner, um anuncio na tela de resultado, um ao abrir o app e outro apos uma compressao. Exportacoes gratuitas levam uma pequena marca da Vidsize; assista a um video de anuncio curto para gerar o video de novo sem ela.</string>
     <string name="settings_legal_section">JURÍDICO</string>
     <string name="settings_privacy_policy">Política de Privacidade</string>
     <string name="settings_terms">Termos de Uso</string>
@@ -89,11 +90,15 @@
     <string name="notification_channel_name">Progresso da compressão</string>
     <string name="notification_channel_description">Mostra o progresso enquanto um vídeo é comprimido.</string>
     <string name="notification_title">Comprimindo seu vídeo</string>
+    <string name="notification_timeout_title">Compressão interrompida</string>
+    <string name="notification_timeout_body">O Android interrompeu a tarefa antes de concluir. Vídeos longos podem atingir o limite diário do sistema para trabalho em segundo plano — tente um vídeo mais curto ou um nível de compressão menor.</string>
+    <string name="error_timeout_title">Compressão interrompida</string>
+    <string name="error_timeout_body">O Android interrompeu a tarefa antes de concluir. Vídeos longos podem atingir o limite diário do sistema para trabalho em segundo plano — tente um vídeo mais curto ou um nível de compressão menor.</string>
     <string name="result_default_name">Vídeo comprimido</string>
     <string name="notification_done_title">Vídeo pronto</string>
     <string name="notification_done_body">Seu vídeo comprimido foi salvo em Movies/Vidsize.</string>
     <string name="ad_badge">Anúncio</string>
-    <string name="result_show_in_gallery">Ver na galeria</string>
+    <string name="result_show_in_gallery">Abrir galeria</string>
     <string name="preset_not_viable">Sem economia real</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -106,4 +111,32 @@
     <string name="cta_pick_another">Escolher outro vídeo</string>
     <string name="preset_not_viable_hint">Este vídeo já é pequeno o suficiente para este nível.</string>
     <string name="result_recent_hint">Você pode reabrir este vídeo quando quiser em Recentes na tela inicial.</string>
+    <string name="watermark_offer_title">Remover a marca da Vidsize</string>
+    <string name="watermark_offer_body">Assista a um video de anuncio curto e o video e gerado de novo sem a marca. Leva o mesmo tempo da primeira vez.</string>
+    <string name="watermark_offer_action">Assistir a um video de anuncio curto</string>
+    <string name="watermark_free_unavailable">Nao foi possivel carregar o anuncio. Seu video esta sendo gerado com a marca; voce pode tentar de novo na tela de resultado.</string>
+    <string name="watermark_free_card_title">Salvar sem a marca da Vidsize</string>
+    <string name="watermark_free_card_body">Videos gratuitos levam uma pequena marca da Vidsize no canto.</string>
+    <string name="watermark_free_card_badge">1 ANUNCIO CURTO</string>
+    <string name="watermark_free_card_action">Gerar sem a marca</string>
+    <string name="watermark_free_card_waiting">Preparando o anuncio…</string>
+    <string name="cta_blocked_already_efficient">Este video ja esta bem comprimido. Tente Menor ou O menor.</string>
+    <string name="mode_level">Nível</string>
+    <string name="mode_size">Tamanho alvo</string>
+    <string name="section_size">Tamanho alvo</string>
+    <string name="size_custom">Outro</string>
+    <string name="size_custom_label">Tamanho</string>
+    <string name="size_pending_title">Lendo seu vídeo</string>
+    <string name="size_pending_body">O plano de tamanho aparece depois que o vídeo for lido.</string>
+    <string name="size_not_smaller_title">Já está abaixo disso</string>
+    <string name="size_not_smaller_body">Este vídeo tem %1$s. Escolha um alvo menor.</string>
+    <string name="size_too_small_title">Pequeno demais para este vídeo</string>
+    <string name="size_too_small_body">Este vídeo é longo demais para caber nesse tamanho com uma qualidade que algum codificador consiga produzir. Escolha um alvo maior.</string>
+    <string name="size_plan_title">Cerca de %1$s</string>
+    <string name="size_plan_body">Saída %1$d×%2$d. O Vidsize recodifica até três vezes para ficar abaixo do seu alvo.</string>
+    <string name="cta_blocked_target_missing">Informe um tamanho alvo</string>
+    <string name="cta_blocked_target_not_smaller">Seu vídeo já é menor que isso</string>
+    <string name="cta_blocked_target_too_small">Esse tamanho não é alcançável para este vídeo</string>
+    <string name="processing_pass">Passagem %1$d de %2$d — chegando perto do alvo</string>
+    <string name="result_target_missed">Não deu para ficar abaixo de %1$s. Este é o menor tamanho que o Vidsize conseguiu.</string>
 </resources>

@@ -3,6 +3,7 @@ package com.vidsize.compressor.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -40,10 +41,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
-import com.vidsize.compressor.ads.ConsentManager
-import com.vidsize.compressor.ads.suppressAppOpenOnReturn
+import com.vidsize.compressor.ads.AdDiagnostics
+import com.vidsize.compressor.ads.deferInterstitialOnReturn
+import com.vidsize.compressor.ads.findHostActivity
+import com.vidsize.compressor.growth.ReviewPrompt
+import com.vidsize.compressor.media.CompressionService
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
+import com.vidsize.compressor.ui.buildVideoShareIntent
+import com.vidsize.compressor.ui.components.WatermarkStrip
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.IconAction
@@ -67,6 +73,14 @@ import kotlinx.coroutines.delay
  * who deliberately reaches for SHARE never notices it.
  */
 private const val ARRIVAL_GUARD_MS = 450L
+
+/**
+ * How long the result screen settles before a Play review is requested.
+ *
+ * Long enough that the dialog reads as a question rather than a glitch, short
+ * enough that the user is still on the screen whose result prompted it.
+ */
+private const val REVIEW_PROMPT_DELAY_MS = 1_800L
 
 /**
  * Result page.
@@ -122,10 +136,14 @@ private const val ARRIVAL_GUARD_MS = 450L
 fun ResultScreen(
     result: CompressionResult,
     onBack: () -> Unit,
+    onSystemBack: () -> Unit,
     onCompressAnother: () -> Unit,
 ) {
     val context = LocalContext.current
-    val adsVisible = AdSlots.enabled && ConsentManager.adsAllowed || LocalInspectionMode.current
+    // One predicate, asked once. A consent refusal gives this screen no ad
+    // section at all - no divider, no "Advertisement" label, no reserved 340dp
+    // slot - rather than a labelled empty band.
+    val adsVisible = AdSlots.requestable || LocalInspectionMode.current
     val savedBytes = (result.sourceBytes - result.outputBytes).coerceAtLeast(0L)
     val percent = Fmt.percentSmaller(result.sourceBytes, result.outputBytes)
 
@@ -144,7 +162,39 @@ fun ResultScreen(
         interactive = true
     }
 
-    BackHandler { onBack() }
+    // The system back gesture and the in-app arrow do the same navigation but
+    // are NOT the same event.
+    //
+    // The arrow is a control this app drew: tapping it is a deliberate in-app
+    // transition out of a finished job, and it carries the interstitial like
+    // every other such transition.
+    //
+    // The system gesture is part of Android, not part of Vidsize. Answering it
+    // with a full-screen ad is the pattern Play's Better Ads Experiences
+    // describes as interfering with navigation, and it is the one placement in
+    // this model with a bad risk-to-revenue ratio: the users who leave a result
+    // by swiping back rather than tapping an action are a small minority, and
+    // every one of them would meet an ad in response to a system gesture.
+    //
+    // Same destination, different callback, deliberately.
+    BackHandler { onSystemBack() }
+
+    // Ask for a Play review at the peak of the experience, not on the way out.
+    //
+    // The user is looking at a measured result they waited minutes for. That is
+    // the moment a person feels like saying something nice, and it is also the
+    // moment that is NOT contested by anything else: the interstitial fires on
+    // exit, so the two never race for the same instant.
+    //
+    // The delay lets the screen settle first - a system dialog that arrives in
+    // the same frame as the page reads as a glitch rather than a question. It
+    // reuses the arrival guard the screen already waits out for BUG-08.
+    LaunchedEffect(result.outputUri) {
+        delay(REVIEW_PROMPT_DELAY_MS)
+        context.findHostActivity()?.let { activity ->
+            ReviewPrompt.maybeAsk(activity, AdDiagnostics.compressionCount())
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -228,10 +278,73 @@ fun ResultScreen(
                     textAlign = TextAlign.Center,
                 )
 
+                // A size target that was not reached has to be said here.
+                //
+                // The user asked for "under 16 MB" because something else - a
+                // messaging app, a mail server, an upload form - is going to
+                // enforce that number. Reporting an unqualified success and
+                // letting them find out at the attach button would move the
+                // failure to the worst possible place: outside the app, with no
+                // explanation and nothing to act on. Here they can still choose
+                // a stronger setting, or send it somewhere else.
+                val missedTarget = result.targetBytes
+                if (missedTarget != null && !result.targetMet) {
+                    Spacer(Modifier.height(Space.md))
+                    NoticeCard(
+                        tone = NoticeTone.Blocking,
+                        title = stringResource(R.string.size_too_small_title),
+                        body = stringResource(
+                            R.string.result_target_missed,
+                            Fmt.bytes(missedTarget),
+                        ),
+                    )
+                }
+
                 Spacer(Modifier.height(Space.md))
 
                 // The action almost everyone wants next stays above the ad, so
                 // the common path never has to scroll past a creative.
+                // The offer sits ABOVE Share, not below it.
+                //
+                // QA finding: it used to sit 48 lines under the primary button,
+                // after Share, Open Gallery and Open video. The brightest
+                // control on the screen therefore sent the marked file before
+                // the user had any reason to know there was a mark - and a user
+                // who only notices the logo inside the chat they sent it to is
+                // past the point where any offer helps.
+                //
+                // Shown only while this file still carries the mark. Once the
+                // clean export lands the offer has nothing left to sell, and a
+                // card still sitting there would read as a second charge for
+                // something already paid for.
+                if (result.watermarked) {
+                    WatermarkStrip(
+                        enabled = interactive,
+                        onRewardGranted = {
+                            // Re-encoding starts from the ORIGINAL, never from
+                            // the marked output: the mark is burned into those
+                            // pixels, and a second pass over an encode
+                            // compounds the loss for nothing.
+                            //
+                            // The grant is NOT consumed here. A failed second
+                            // pass would otherwise leave the user having
+                            // watched an ad for nothing, which is both a bad
+                            // trade and an AdMob policy problem - the reward
+                            // has to be delivered. It is spent by the export
+                            // that succeeds; see CompressionScreen.
+                            CompressionService.start(
+                                context = context,
+                                uri = result.sourceUri,
+                                preset = result.preset,
+                                watermark = false,
+                                replacing = result.outputUri,
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(Space.md))
+                }
+
                 PrimaryButton(
                     text = stringResource(R.string.result_share),
                     onClick = { shareVideo(context, result.outputUri) },
@@ -253,7 +366,7 @@ fun ResultScreen(
 
                 SecondaryButton(
                     text = stringResource(R.string.result_show_in_gallery),
-                    onClick = { showInGallery(context, result.outputUri) },
+                    onClick = { showInGallery(context) },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = interactive,
                 )
@@ -262,10 +375,25 @@ fun ResultScreen(
 
                 SecondaryButton(
                     text = stringResource(R.string.result_open),
-                    onClick = { openVideo(context, result.outputUri) },
+                    onClick = { openVideo(context, result.outputUri, result.watermarked) },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = interactive,
                 )
+
+                // "Compress another video" comes BEFORE the ad section.
+                //
+                // Review finding: the native creative used to sit between the
+                // finished job and the way to start the next one, so continuing
+                // the core task meant scrolling past an advertisement. The ad
+                // keeps its labelled section with real content after it; it is
+                // simply no longer standing in the user's path.
+                TertiaryButton(
+                    text = stringResource(R.string.result_another),
+                    onClick = onCompressAnother,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = interactive,
+                )
+
 
                 if (adsVisible) {
                     // A divider, a label and 24dp of dead space above; a divider
@@ -286,13 +414,6 @@ fun ResultScreen(
                 } else {
                     Spacer(Modifier.height(Space.xs))
                 }
-
-                TertiaryButton(
-                    text = stringResource(R.string.result_another),
-                    onClick = onCompressAnother,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = interactive,
-                )
 
                 Spacer(Modifier.height(Space.xs))
 
@@ -382,13 +503,27 @@ private fun ResultFigures(
 /* Intents                                                                    */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * The three exits below are the deferred-interstitial paths, and they are the
+ * reason this pattern earns anything at all.
+ *
+ * The intuitive wiring is the opposite of this: show an ad when the user leaves
+ * for Home, and cancel it when they go to view their file, so nothing gets
+ * between them and their video. That reasoning is right about the *placement*
+ * and catastrophically wrong about the *outcome* - practically everyone who just
+ * compressed a video wants to share, open or find it, so the cancelling branch
+ * is the common one and the format earns close to nothing.
+ *
+ * deferInterstitialOnReturn() keeps the placement and recovers the revenue: no
+ * ad now, on the way out; one ad when the user comes back with that task done.
+ * It also suppresses the app-open ad in the same call, because an app-open ad on
+ * re-entry would both break the "content the user asked for" rule and consume
+ * the 60-second window the interstitial needs.
+ */
+
 private fun shareVideo(context: Context, uri: Uri) {
-    context.suppressAppOpenOnReturn()
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "video/mp4"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
+    context.deferInterstitialOnReturn()
+    val intent = buildVideoShareIntent(context, uri)
     runCatching {
         context.startActivity(
             Intent.createChooser(intent, context.getString(R.string.share_chooser)),
@@ -397,33 +532,55 @@ private fun shareVideo(context: Context, uri: Uri) {
 }
 
 /**
- * Opens the saved file in the device's gallery/photos app, which is the only
- * reliable way to "show the file where it lives" across OEMs.
+ * Opens the device's gallery app at its video collection.
  *
- * A literal folder-browser intent (ACTION_VIEW on a directory document) is
- * honoured by some Files apps and ignored by many others, so the gallery route
- * is used first and a generic chooser is the fallback.
+ * ## QA finding: this button and "Open video" did the same thing
+ *
+ * Both built `ACTION_VIEW` on the file's own URI. That intent means "play this
+ * video", so both buttons handed the file to a player and the user got the same
+ * screen twice - the gallery was never opened, and nothing on the result screen
+ * led to where the file actually lives.
+ *
+ * The fix is to point the intent at the COLLECTION rather than at the item:
+ * `ACTION_VIEW` on [MediaStore.Video.Media.EXTERNAL_CONTENT_URI] is what a
+ * gallery app registers for, so it opens the gallery's video list instead of a
+ * player.
+ *
+ * Being honest about the limit: Android has no intent that means "reveal this
+ * one file in its folder". Some OEM galleries land on the newest item, some
+ * open the top of the list. The output is the most recent video on the device
+ * at this moment, so in practice it is the first thing on screen either way -
+ * but the button's own copy promises the gallery, not a scroll position, which
+ * is the promise the platform can actually keep.
  */
-private fun showInGallery(context: Context, uri: Uri) {
-    context.suppressAppOpenOnReturn()
+private fun showInGallery(context: Context) {
+    context.deferInterstitialOnReturn()
     val gallery = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "video/*")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        setDataAndType(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "video/*")
     }
-    val launched = runCatching {
-        context.startActivity(gallery)
-    }.isSuccess
-    if (!launched) {
-        runCatching {
-            context.startActivity(
-                Intent.createChooser(gallery, context.getString(R.string.result_show_in_gallery)),
-            )
-        }
+    val launched = runCatching { context.startActivity(gallery) }.isSuccess
+    if (launched) return
+
+    // No single app claimed the collection. Ask the user, rather than silently
+    // falling back to a player - which is the bug this function exists to fix.
+    runCatching {
+        context.startActivity(
+            Intent.createChooser(gallery, context.getString(R.string.result_show_in_gallery)),
+        )
     }
 }
 
-private fun openVideo(context: Context, uri: Uri) {
-    context.suppressAppOpenOnReturn()
+private fun openVideo(context: Context, uri: Uri, watermarked: Boolean) {
+    // QA finding: coming back from the player is the single highest-intent
+    // moment for the rewarded ad - the user has just seen the mark with their
+    // own eyes. Arming the deferred interstitial here meant that return was met
+    // by a full-screen ad, and the offer they came back for was behind it.
+    //
+    // A rewarded impression is worth more than an interstitial one, so trading
+    // the interstitial away here is not a concession: it is the better half of
+    // the trade. And nothing is lost permanently - the interstitial re-arms on
+    // the next exit from this screen.
+    if (!watermarked) context.deferInterstitialOnReturn()
     val intent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "video/mp4")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

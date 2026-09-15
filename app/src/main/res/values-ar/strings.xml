@@ -5,10 +5,11 @@
     <string name="hero_eyebrow">ضاغط الفيديو</string>
     <string name="hero_headline">اجعل الفيديو أصغر.</string>
     <string name="hero_body">قلّل حجم الملف مع الحفاظ على الجودة التي تحتاجها.</string>
+    <string name="hero_share_hint">‏نصيحة: شارك أي فيديو من المعرض إلى Vidsize مباشرةً — لا حاجة لفتح التطبيق أولًا.</string>
     <string name="cta_select_video">اختر فيديو</string>
     <string name="trust_on_device">على الجهاز</string>
     <string name="trust_fast">سريع</string>
-    <string name="trust_no_watermark">بدون علامة مائية</string>
+    <string name="trust_no_watermark">بدون تسجيل</string>
     <string name="section_recent">الأحدث</string>
     <string name="recent_empty_title">لا توجد مقاطع بعد</string>
     <string name="recent_empty_body">ستظهر هنا مقاطعك المضغوطة.</string>
@@ -74,7 +75,7 @@
     <string name="settings_privacy_title">الخصوصية</string>
     <string name="settings_privacy_body">تُضغط مقاطعك على هذا الجهاز. لا يُرفع أي شيء إلى أي خادم.</string>
     <string name="settings_ads_title">الإعلانات</string>
-    <string name="settings_ads_body">Vidsize مجاني ومموَّل بالإعلانات.</string>
+    <string name="settings_ads_body">تطبيق Vidsize مجاني ومدعوم بالإعلانات: لافتة، وإعلان في شاشة النتيجة، وإعلان عند فتح التطبيق، وآخر بعد الضغط. تحمل الملفات المجانية علامة Vidsize صغيرة؛ شاهد فيديو إعلانيًا قصيرًا لإعادة إنشاء الفيديو بدونها.</string>
     <string name="settings_legal_section">قانوني</string>
     <string name="settings_privacy_policy">سياسة الخصوصية</string>
     <string name="settings_terms">شروط الاستخدام</string>
@@ -92,11 +93,15 @@
     <string name="notification_channel_name">تقدّم الضغط</string>
     <string name="notification_channel_description">يعرض التقدّم أثناء ضغط الفيديو.</string>
     <string name="notification_title">جارٍ ضغط الفيديو</string>
+    <string name="notification_timeout_title">توقف الضغط</string>
+    <string name="notification_timeout_body">أوقف Android المهمة قبل اكتمالها. قد تبلغ مقاطع الفيديو الطويلة الحدَّ اليومي للنظام للعمل في الخلفية — جرّب مقطعًا أقصر أو مستوى ضغط أقل.</string>
+    <string name="error_timeout_title">توقف الضغط</string>
+    <string name="error_timeout_body">أوقف Android المهمة قبل اكتمالها. قد تبلغ مقاطع الفيديو الطويلة الحدَّ اليومي للنظام للعمل في الخلفية — جرّب مقطعًا أقصر أو مستوى ضغط أقل.</string>
     <string name="result_default_name">فيديو مضغوط</string>
     <string name="notification_done_title">الفيديو جاهز</string>
     <string name="notification_done_body">تم حفظ الفيديو المضغوط في Movies/Vidsize.</string>
     <string name="ad_badge">إعلان</string>
-    <string name="result_show_in_gallery">عرض في المعرض</string>
+    <string name="result_show_in_gallery">فتح المعرض</string>
     <string name="preset_not_viable">لا يوجد توفير فعلي</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -109,4 +114,32 @@
     <string name="cta_pick_another">اختيار فيديو آخر</string>
     <string name="preset_not_viable_hint">هذا الفيديو صغير بما يكفي لهذا المستوى بالفعل.</string>
     <string name="result_recent_hint">يمكنك إعادة فتح هذا الفيديو في أي وقت من قسم "الأخيرة" في الشاشة الرئيسية.</string>
+    <string name="watermark_offer_title">إزالة علامة Vidsize</string>
+    <string name="watermark_offer_body">شاهد فيديو إعلانيًا قصيرًا وسيُنشأ الفيديو من جديد بدون العلامة. يستغرق وقتًا مماثلًا للمرة الأولى.</string>
+    <string name="watermark_offer_action">مشاهدة فيديو إعلاني قصير</string>
+    <string name="watermark_free_unavailable">تعذّر تحميل الإعلان. يجري إنشاء الفيديو مع العلامة — يمكنك المحاولة مجددًا من شاشة النتيجة.</string>
+    <string name="watermark_free_card_title">الحفظ بدون علامة Vidsize</string>
+    <string name="watermark_free_card_body">تحمل الفيديوهات المجانية علامة Vidsize صغيرة في الزاوية.</string>
+    <string name="watermark_free_card_badge">إعلان قصير واحد</string>
+    <string name="watermark_free_card_action">إنشاء بدون العلامة</string>
+    <string name="watermark_free_card_waiting">جارٍ تحضير الإعلان…</string>
+    <string name="cta_blocked_already_efficient">هذا الفيديو مضغوط جيدًا بالفعل. جرّب أصغر أو الأصغر.</string>
+    <string name="mode_level">المستوى</string>
+    <string name="mode_size">الحجم المستهدف</string>
+    <string name="section_size">الحجم المستهدف</string>
+    <string name="size_custom">مخصص</string>
+    <string name="size_custom_label">الحجم</string>
+    <string name="size_pending_title">جارٍ قراءة الفيديو</string>
+    <string name="size_pending_body">تظهر خطة الحجم بعد قراءة الفيديو.</string>
+    <string name="size_not_smaller_title">أصغر من ذلك بالفعل</string>
+    <string name="size_not_smaller_body">حجم هذا الفيديو %1$s. اختر هدفًا أصغر.</string>
+    <string name="size_too_small_title">أصغر من اللازم لهذا الفيديو</string>
+    <string name="size_too_small_body">هذا الفيديو أطول من أن يتسع في هذا الحجم بجودة يمكن لأي مُرمِّز إنتاجها. اختر هدفًا أكبر.</string>
+    <string name="size_plan_title">نحو %1$s</string>
+    <string name="size_plan_body">الإخراج %1$d×%2$d. يعيد Vidsize الترميز حتى ثلاث مرات للنزول تحت هدفك.</string>
+    <string name="cta_blocked_target_missing">أدخل حجمًا مستهدفًا</string>
+    <string name="cta_blocked_target_not_smaller">الفيديو أصغر من ذلك بالفعل</string>
+    <string name="cta_blocked_target_too_small">هذا الحجم غير قابل للتحقيق لهذا الفيديو</string>
+    <string name="processing_pass">المحاولة %1$d من %2$d — نقترب من هدفك</string>
+    <string name="result_target_missed">تعذّر النزول تحت %1$s. هذا أصغر حجم استطاع Vidsize إنتاجه.</string>
 </resources>

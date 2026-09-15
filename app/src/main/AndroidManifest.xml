@@ -23,8 +23,16 @@
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${ADMOB_APP_ID}" />
 
+        <!--
+            singleTask: a second shared video, and the completion notification's
+            own intent, reach the existing activity through onNewIntent instead
+            of stacking a second copy of the app on top of the first. Both then
+            render the one CompressionJobState the process owns, which is what
+            the UI already assumed.
+        -->
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTask"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

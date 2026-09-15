@@ -33,11 +33,31 @@ import com.vidsize.compressor.ui.screens.HomeScreen
  * below stay stateless and previewable.
  */
 @Composable
-fun VidsizeRoot(initialVideo: Uri?) {
+fun VidsizeRoot(
+    initialVideo: Uri?,
+    onVideoConsumed: () -> Unit = {},
+) {
     val context = LocalContext.current
     val history = rememberHistoryController()
 
     var selectedVideo by rememberSaveable { mutableStateOf(initialVideo?.toString()) }
+
+    // A SECOND share arriving while the app is already open.
+    //
+    // With launchMode="singleTask" that intent reaches onNewIntent rather than
+    // creating a new activity, so the only thing left to do is notice the new
+    // value here and switch to it. Without this the app would keep showing the
+    // first video and the share the user just performed would appear to have
+    // done nothing.
+    //
+    // Keyed on the incoming value, so re-composition for any other reason does
+    // not drag the user back to a video they already navigated away from; the
+    // activity clears its state through onVideoConsumed once it is taken.
+    LaunchedEffect(initialVideo) {
+        val incoming = initialVideo?.toString() ?: return@LaunchedEffect
+        if (incoming != selectedVideo) selectedVideo = incoming
+        onVideoConsumed()
+    }
 
     val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
         if (uri != null) selectedVideo = uri.toString()
@@ -95,11 +115,9 @@ private fun openHistoryEntry(context: Context, entry: CompressionHistoryEntry) {
 private fun shareHistoryEntry(context: Context, entry: CompressionHistoryEntry) {
     if (entry.outputUri.isBlank()) return
     context.suppressAppOpenOnReturn()
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "video/mp4"
-        putExtra(Intent.EXTRA_STREAM, Uri.parse(entry.outputUri))
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
+    // Same builder as the result screen, so a share started from a Recent row
+    // gets the same named, thumbnailed preview rather than a bare row id.
+    val intent = buildVideoShareIntent(context, Uri.parse(entry.outputUri))
     runCatching {
         context.startActivity(
             Intent.createChooser(intent, context.getString(R.string.share_chooser)),

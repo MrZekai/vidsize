@@ -5,10 +5,11 @@
     <string name="hero_eyebrow">VİDEO SIKIŞTIRICI</string>
     <string name="hero_headline">Videonu küçült.</string>
     <string name="hero_body">İhtiyacın olan kaliteyi koruyarak dosya boyutunu düşür.</string>
+    <string name="hero_share_hint">İpucu: Galeri’den bir videoyu paylaşıp Vidsize’a gönderebilirsin — uygulamayı açmana gerek yok.</string>
     <string name="cta_select_video">VİDEO SEÇ</string>
     <string name="trust_on_device">Cihazda</string>
     <string name="trust_fast">Hızlı</string>
-    <string name="trust_no_watermark">Filigransız</string>
+    <string name="trust_no_watermark">Üyelik yok</string>
     <string name="section_recent">Son işlemler</string>
     <string name="recent_empty_title">Henüz video yok</string>
     <string name="recent_empty_body">Sıkıştırdığın videolar burada görünecek.</string>
@@ -74,7 +75,7 @@
     <string name="settings_privacy_title">Gizlilik</string>
     <string name="settings_privacy_body">Videoların bu cihazda sıkıştırılır. Hiçbir şey sunucuya yüklenmez.</string>
     <string name="settings_ads_title">Reklamlar</string>
-    <string name="settings_ads_body">Vidsize ücretsizdir ve reklamlarla desteklenir.</string>
+    <string name="settings_ads_body">Vidsize ücretsizdir ve reklamlarla desteklenir: bir banner, sonuç ekranında bir reklam, uygulama açılışında ve sıkıştırma sonrasında birer reklam. Ücretsiz çıktılarda küçük bir Vidsize filigranı olur; kısa bir reklam videosu izleyerek videoyu filigransız olarak yeniden ürettirebilirsin.</string>
     <string name="settings_legal_section">YASAL</string>
     <string name="settings_privacy_policy">Gizlilik Politikası</string>
     <string name="settings_terms">Kullanım Koşulları</string>
@@ -88,11 +89,15 @@
     <string name="notification_channel_name">Sıkıştırma ilerlemesi</string>
     <string name="notification_channel_description">Video sıkıştırılırken ilerlemeyi gösterir.</string>
     <string name="notification_title">Videon sıkıştırılıyor</string>
+    <string name="notification_timeout_title">Sıkıştırma durdu</string>
+    <string name="notification_timeout_body">Android işi bitmeden durdurdu. Uzun videolar sistemin arka plan çalışma sınırına takılabilir — daha kısa bir video ya da daha küçük bir sıkıştırma seviyesi dene.</string>
+    <string name="error_timeout_title">Sıkıştırma durdu</string>
+    <string name="error_timeout_body">Android işi bitmeden durdurdu. Uzun videolar sistemin arka plan çalışma sınırına takılabilir — daha kısa bir video ya da daha küçük bir sıkıştırma seviyesi dene.</string>
     <string name="result_default_name">Sıkıştırılmış video</string>
     <string name="notification_done_title">Video hazır</string>
     <string name="notification_done_body">Sıkıştırılmış videon Movies/Vidsize klasörüne kaydedildi.</string>
     <string name="ad_badge">Reklam</string>
-    <string name="result_show_in_gallery">Galeride Göster</string>
+    <string name="result_show_in_gallery">Galeriyi Aç</string>
     <string name="preset_not_viable">Gerçek kazanç yok</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -105,4 +110,32 @@
     <string name="cta_pick_another">Başka bir video seç</string>
     <string name="preset_not_viable_hint">Bu video bu düzey için zaten yeterince küçük.</string>
     <string name="result_recent_hint">Bu videoyu ana ekrandaki Son bölümünden dilediğin zaman yeniden açabilirsin.</string>
+    <string name="watermark_offer_title">Vidsize filigranını kaldır</string>
+    <string name="watermark_offer_body">Kısa bir reklam videosu izle, video filigransız olarak yeniden üretilsin. İlk üretim kadar sürer.</string>
+    <string name="watermark_offer_action">Kısa bir reklam videosu izle</string>
+    <string name="watermark_free_unavailable">Reklam yüklenemedi. Videon filigranlı üretiliyor — sonuç ekranından tekrar deneyebilirsin.</string>
+    <string name="watermark_free_card_title">Vidsize filigranı olmadan kaydet</string>
+    <string name="watermark_free_card_body">Ücretsiz videolarda köşede küçük bir Vidsize filigranı olur.</string>
+    <string name="watermark_free_card_badge">1 KISA REKLAM</string>
+    <string name="watermark_free_card_action">Filigransız üret</string>
+    <string name="watermark_free_card_waiting">Reklam hazırlanıyor…</string>
+    <string name="cta_blocked_already_efficient">Bu video zaten iyi sıkıştırılmış. Daha küçük veya En küçük seçeneğini dene.</string>
+    <string name="mode_level">Seviye</string>
+    <string name="mode_size">Hedef boyut</string>
+    <string name="section_size">Hedef boyut</string>
+    <string name="size_custom">Özel</string>
+    <string name="size_custom_label">Boyut</string>
+    <string name="size_pending_title">Video okunuyor</string>
+    <string name="size_pending_body">Boyut planı, video okunduktan sonra görünür.</string>
+    <string name="size_not_smaller_title">Zaten bunun altında</string>
+    <string name="size_not_smaller_body">Bu video %1$s. Daha küçük bir hedef seç.</string>
+    <string name="size_too_small_title">Bu video için fazla küçük</string>
+    <string name="size_too_small_body">Bu video, hiçbir kodlayıcının üretebileceği kalitede bu boyuta sığmayacak kadar uzun. Daha büyük bir hedef seç.</string>
+    <string name="size_plan_title">Yaklaşık %1$s</string>
+    <string name="size_plan_body">Çıktı %1$d×%2$d. Vidsize hedefin altına inmek için en fazla üç kez yeniden kodlar.</string>
+    <string name="cta_blocked_target_missing">Bir hedef boyut gir</string>
+    <string name="cta_blocked_target_not_smaller">Videon zaten bundan küçük</string>
+    <string name="cta_blocked_target_too_small">Bu boyut bu video için ulaşılabilir değil</string>
+    <string name="processing_pass">%2$d geçişten %1$d. geçiş — hedefe yaklaşıyor</string>
+    <string name="result_target_missed">%1$s altına inilemedi. Vidsize\'ın yapabildiği en küçük boyut bu.</string>
 </resources>

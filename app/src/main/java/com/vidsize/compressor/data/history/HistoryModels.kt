@@ -53,5 +53,25 @@ interface HistoryRepository {
      * "Storage saved" total keeps counting it on every launch.
      */
     fun remove(id: Long)
+
+    /**
+     * Removes every row pointing at an output file, by URI.
+     *
+     * Added in v0.9.9. The watermark-free re-export deletes the marked file it
+     * replaces, and before this there was no way to take its row with it: the
+     * service knows the URI it is deleting, never the row id that was generated
+     * when the row was written.
+     *
+     * The result was one bug with three faces - a row that opened nothing, a
+     * "Space saved" total inflated by every removal, and two rows a user could
+     * not tell apart. Deleting by the thing both sides actually share closes all
+     * three.
+     *
+     * Removes ALL matches rather than the first. Duplicate rows for one URI
+     * should not exist, but if an earlier build wrote any, this is the call that
+     * cleans them up rather than leaving one behind each time.
+     */
+    fun removeByOutputUri(outputUri: String)
+
     fun clear()
 }

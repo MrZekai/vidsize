@@ -46,7 +46,7 @@ import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
 import com.vidsize.compressor.ui.components.HairLine
-import com.vidsize.compressor.ui.components.HomeBannerAd
+import com.vidsize.compressor.ui.components.NativeAdCard
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SavingsChart
@@ -105,6 +105,19 @@ fun HomeScreen(
 
             TrustRow()
 
+            // The rewarded offer.
+            //
+            // Placed here, below the trust row, for two reasons. It is above the
+            // fold on a 360dp phone, so the highest-eCPM unit in the app is
+            // actually discoverable rather than buried in Settings. And the
+            // trust row sits between it and the Select Video button, so a thumb
+            // travelling to the primary action never crosses a control that
+            // opens a full-screen ad.
+            //
+            // The composable renders nothing at all when there is no offer to
+            // make - ads off, consent refused, or no creative loaded - so no
+            // spacing is reserved for an absent card.
+
             Spacer(Modifier.height(Space.xxl))
 
             SectionHeader(
@@ -132,6 +145,46 @@ fun HomeScreen(
 
             StorageSavedPanel(summary = summary)
 
+            // The in-content native ad, at the very end of the scroll.
+            //
+            // ## Why here and not higher
+            //
+            // Home's entire job is "tap Select Video", and a user in a hurry
+            // never reaches this. Everything above it is the product; this sits
+            // after the last piece of real content, so a user who arrives here
+            // scrolled deliberately. It is also as far from the Select Video
+            // button as the screen allows - the opposite end of the scroll -
+            // which matters because a native creative carries its own tappable
+            // call to action.
+            //
+            // ## Why it does not replace the anchored banner
+            //
+            // Native eCPM runs several times banner eCPM, which is an argument
+            // for swapping them and a bad one here. The anchored banner is the
+            // only ad that reaches a user who never scrolls, and it refreshes on
+            // a 60-second cycle; this one is a single impression that requires
+            // the user to travel to it. They earn from different behaviour, so
+            // they are not substitutes. The whole scroll separates them, and
+            // neither is adjacent to a Vidsize control.
+            //
+            // reserveSpace = false: nothing sits below this, so no-fill cannot
+            // displace anything, and holding 340dp open on a page that may never
+            // fill it would add a screen of dead scroll for nothing.
+            if (AdSlots.requestable) {
+                Spacer(Modifier.height(Space.xl))
+                HairLine()
+                Spacer(Modifier.height(Space.sm))
+                Eyebrow(
+                    text = stringResource(R.string.ad_label),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(Space.xs))
+                NativeAdCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    reserveSpace = false,
+                )
+            }
+
             Spacer(Modifier.height(Space.xl))
         }
 
@@ -148,10 +201,15 @@ fun HomeScreen(
         // The divider exists to separate the creative from the content above it.
         // With ads off there is no creative, so a dangling rule at the bottom of
         // the screen would be a decoration with no meaning.
-        if (AdSlots.enabled) {
-            HairLine()
-            HomeBannerAd()
-        }
+        // v0.9.1: the anchored banner is gone from Home.
+        //
+        // Home now carries the rewarded offer and an in-content native at the
+        // end of the scroll. A third ad surface on the app's front door - a
+        // screen whose entire job is "tap Select Video" and where the median
+        // visit is a few seconds - was density without a matching return. The
+        // banner survives where it actually earns: the compression screen, and
+        // above all the progress panel, which is the longest-dwell surface in
+        // the app and refreshes on a 60-second cycle for the whole job.
     }
 
     if (showSettings) {
@@ -279,6 +337,25 @@ private fun HeroPanel(onSelectVideo: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = R.drawable.ic_video_file,
             trailingIcon = R.drawable.ic_chevron_right,
+        )
+
+        // The share-sheet entry point, said out loud.
+        //
+        // The manifest has declared an ACTION_SEND filter for video/* since
+        // v0.8.x: a user can share a video into Vidsize straight from Gallery
+        // and never open the app at all. Nothing in the UI has ever mentioned
+        // it, so effectively nobody knows.
+        //
+        // For a tool people reach for occasionally, that path is the whole
+        // retention story - it removes the step where the user has to remember
+        // this app exists. One caption is the cheapest feature in the product.
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            text = stringResource(R.string.hero_share_hint),
+            style = VidsizeType.caption,
+            color = VidsizeColor.Muted,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -454,7 +531,12 @@ private fun RecentRow(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = entry.displayName,
+                // Was entry.displayName. Every generated name shares a prefix
+                // long enough that the ellipsis cut before the part that made
+                // it unique, so same-day rows were indistinguishable. See
+                // Fmt.dateTime.
+                text = Fmt.dateTime(entry.completedAtMillis)
+                    .ifBlank { entry.displayName },
                 style = VidsizeType.cardTitle,
                 color = VidsizeColor.Ink,
                 maxLines = 1,

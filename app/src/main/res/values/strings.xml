@@ -12,10 +12,11 @@
     <string name="hero_eyebrow">VIDEO COMPRESSOR</string>
     <string name="hero_headline">Make your video smaller.</string>
     <string name="hero_body">Reduce file size while keeping the quality you need.</string>
+    <string name="hero_share_hint">Tip: share a video into Vidsize from Gallery — no need to open the app first.</string>
     <string name="cta_select_video">SELECT VIDEO</string>
     <string name="trust_on_device">On-device</string>
     <string name="trust_fast">Fast</string>
-    <string name="trust_no_watermark">No watermark</string>
+    <string name="trust_no_watermark">No sign-up</string>
 
     <!-- Activity -->
     <string name="section_recent">Recent</string>
@@ -99,7 +100,7 @@
     <string name="settings_privacy_title">Privacy</string>
     <string name="settings_privacy_body">Your videos are compressed on this device. Nothing is uploaded to a server.</string>
     <string name="settings_ads_title">Ads</string>
-    <string name="settings_ads_body">Vidsize is free and supported by ads.</string>
+    <string name="settings_ads_body">Vidsize is free and supported by ads: a banner, an ad on the result screen, one when the app opens and one after a compression. Free exports carry a small Vidsize mark; watch a short ad video to have the video made again without it.</string>
     <string name="settings_legal_section">LEGAL</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_terms">Terms of Use</string>
@@ -110,6 +111,10 @@
     <string name="notification_channel_name">Compression progress</string>
     <string name="notification_channel_description">Shows progress while a video is being compressed.</string>
     <string name="notification_title">Compressing your video</string>
+    <string name="notification_timeout_title">Compression stopped</string>
+    <string name="notification_timeout_body">Android stopped the job before it finished. Long videos can hit the system\'s daily limit for background work — try a shorter video or a smaller compression level.</string>
+    <string name="error_timeout_title">Compression stopped</string>
+    <string name="error_timeout_body">Android stopped the job before it finished. Long videos can hit the system\'s daily limit for background work — try a shorter video or a smaller compression level.</string>
     <string name="notification_done_title">Video ready</string>
     <string name="notification_done_body">Your compressed video was saved to Movies/Vidsize.</string>
     <string name="result_default_name">Compressed video</string>
@@ -122,7 +127,7 @@
         <item quantity="other">%1$d videos</item>
     </plurals>
     <string name="ad_badge">Ad</string>
-    <string name="result_show_in_gallery">Show in Gallery</string>
+    <string name="result_show_in_gallery">Open Gallery</string>
     <string name="preset_not_viable">No real saving</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -135,4 +140,32 @@
     <string name="cta_pick_another">Pick another video</string>
     <string name="preset_not_viable_hint">This video is already small enough for this level.</string>
     <string name="result_recent_hint">You can reopen this video any time from Recent on the home screen.</string>
+    <string name="watermark_offer_title">Remove the Vidsize mark</string>
+    <string name="watermark_offer_body">Watch a short ad video and this video is made again without the mark. Takes about as long as the first pass.</string>
+    <string name="watermark_offer_action">Watch a short ad video</string>
+    <string name="watermark_free_unavailable">The ad could not be loaded. Your video is being made with the mark — you can try again from the result screen.</string>
+    <string name="watermark_free_card_title">Save without the Vidsize mark</string>
+    <string name="watermark_free_card_body">Free videos carry a small Vidsize mark in the corner.</string>
+    <string name="watermark_free_card_badge">1 SHORT AD</string>
+    <string name="watermark_free_card_action">Make it without the mark</string>
+    <string name="watermark_free_card_waiting">Preparing the ad…</string>
+    <string name="cta_blocked_already_efficient">This video is already well compressed. Try Smaller or Smallest.</string>
+    <string name="mode_level">Level</string>
+    <string name="mode_size">Target size</string>
+    <string name="section_size">Target size</string>
+    <string name="size_custom">Custom</string>
+    <string name="size_custom_label">Size</string>
+    <string name="size_pending_title">Reading your video</string>
+    <string name="size_pending_body">The size plan appears once the video has been read.</string>
+    <string name="size_not_smaller_title">Already under that</string>
+    <string name="size_not_smaller_body">This video is %1$s. Pick a smaller target.</string>
+    <string name="size_too_small_title">Too small for this video</string>
+    <string name="size_too_small_body">This video is too long to fit that size at a quality any encoder will produce. Pick a larger target.</string>
+    <string name="size_plan_title">About %1$s</string>
+    <string name="size_plan_body">Output %1$d×%2$d. Vidsize re-encodes up to three times to land under your target.</string>
+    <string name="cta_blocked_target_missing">Enter a target size</string>
+    <string name="cta_blocked_target_not_smaller">Your video is already smaller than that</string>
+    <string name="cta_blocked_target_too_small">That size is not reachable for this video</string>
+    <string name="processing_pass">Pass %1$d of %2$d — closing in on your target</string>
+    <string name="result_target_missed">Couldn\'t get under %1$s. This is the smallest Vidsize could make it.</string>
 </resources>
