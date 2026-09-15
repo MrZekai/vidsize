@@ -70,6 +70,56 @@ object VideoProbe {
         }
     }
 
+    /** The shape of a frame, as displayed. */
+    data class Geometry(val width: Int, val height: Int)
+
+    /**
+     * Reads back the displayed frame size of a file this app just wrote.
+     *
+     * ## Why this is separate from [probe]
+     *
+     * [probe] answers "what should I do with this video?" and needs the byte
+     * count, the codec, the frame rate and a ContentResolver to get them. This
+     * answers one question - "what shape did the encoder actually produce?" -
+     * about a local file, so it takes a path and reads three fields. Routing it
+     * through [probe] would mean a ContentResolver round trip and a
+     * MediaExtractor open per attempt, for two numbers.
+     *
+     * Rotation is applied here for the same reason it is applied in [probe], and
+     * it is the whole point in this case: the QA NEW-01 output was coded
+     * 1088x1080 and would have looked correct-ish on its coded dimensions. It
+     * was only wrong once its -90 degree display matrix was taken into account.
+     *
+     * Returns null when the file cannot be read. The caller must treat that as a
+     * failed attempt, not as a pass: a file that will not open is not a file to
+     * put in someone's gallery.
+     */
+    fun probeGeometry(path: String): Geometry? = runCatching {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(path)
+            val rawWidth = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                ?.toIntOrNull() ?: return@runCatching null
+            val rawHeight = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                ?.toIntOrNull() ?: return@runCatching null
+            val rotation = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                ?.toIntOrNull()
+                ?.let { ((it % 360) + 360) % 360 }
+                ?: 0
+            if (rawWidth <= 0 || rawHeight <= 0) return@runCatching null
+            if (rotation == 90 || rotation == 270) {
+                Geometry(rawHeight, rawWidth)
+            } else {
+                Geometry(rawWidth, rawHeight)
+            }
+        } finally {
+            retriever.release()
+        }
+    }.getOrNull()
+
     /**
      * Frames per second, from the container's own frame count.
      *

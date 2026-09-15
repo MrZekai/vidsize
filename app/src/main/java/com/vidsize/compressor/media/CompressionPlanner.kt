@@ -486,17 +486,58 @@ object CompressionPlanner {
      *
      * Returns null when no useful correction exists.
      */
-    fun correctedForTarget(plan: CompressionPlan, actualBytes: Long): CompressionPlan? {
+    fun correctedForTarget(
+        info: VideoInfo,
+        plan: CompressionPlan,
+        actualBytes: Long,
+        allowResolutionDrop: Boolean = false,
+    ): CompressionPlan? {
         val target = plan.targetBytes ?: return null
         if (actualBytes <= 0L || actualBytes <= target) return null
 
         val factor = (target.toDouble() / actualBytes.toDouble()) * TARGET_HEADROOM
         val corrected = (plan.videoBitrate * factor).toInt()
+
+        val frameRate = info.frameRate
+            .takeIf { it > 0.0 }
+            ?.coerceIn(MIN_FRAME_RATE, MAX_FRAME_RATE)
+            ?: DEFAULT_FRAME_RATE
+
+        // The frame the corrected budget can actually carry.
+        //
+        // Bitrate alone runs out of room. On a long clip with a small ceiling the
+        // second correction can land below what any hardware encoder accepts, and
+        // before this the job simply gave up and reported the target as missed -
+        // which is the app failing at the one thing that mode exists to do.
+        //
+        // Fewer pixels need fewer bits, so the honest move is to hand back a
+        // smaller, clean frame rather than refuse. The same ladder and the same
+        // bits-per-pixel floor that chose the first frame choose this one, so a
+        // dropped resolution is never a surprise shape - only a smaller one, and
+        // the screen already says which.
+        val shortEdge = if (allowResolutionDrop) {
+            chooseShortEdgeForBudget(
+                sourceShortEdge = min(info.width, info.height),
+                sourceWidth = info.width,
+                sourceHeight = info.height,
+                frameRate = frameRate,
+                videoBudget = corrected,
+            )
+        } else {
+            min(plan.targetWidth, plan.targetHeight)
+        }
+        val (width, height) = frameFor(info, shortEdge)
+        val frameChanged = width != plan.targetWidth || height != plan.targetHeight
+
         if (corrected < MIN_ENCODABLE_VIDEO_BITRATE) return null
-        // A correction that barely moves is a wasted encode.
-        if (corrected >= (plan.videoBitrate * 0.98).toInt()) return null
+        // A correction that barely moves is a wasted encode - unless the frame
+        // is changing too, in which case the encode produces a genuinely
+        // different file even at a similar bitrate.
+        if (!frameChanged && corrected >= (plan.videoBitrate * 0.98).toInt()) return null
 
         return plan.copy(
+            targetWidth = width,
+            targetHeight = height,
             videoBitrate = corrected,
             estimatedOutputBytes = (plan.estimatedOutputBytes * factor).toLong().coerceAtLeast(1L),
         )

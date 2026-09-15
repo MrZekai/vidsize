@@ -161,6 +161,11 @@ object CompressionEngine {
                     plan = plan,
                     hasAudio = info.hasAudio,
                     watermark = watermark,
+                    // Display dimensions: VideoProbe has already applied any
+                    // rotation metadata, and the shape check is only meaningful
+                    // against what the viewer sees.
+                    sourceWidth = info.width,
+                    sourceHeight = info.height,
                     onProgress = onProgress?.let { report ->
                         { fraction -> report(fraction * ENCODE_PROGRESS_SHARE) }
                     },
@@ -182,7 +187,19 @@ object CompressionEngine {
                 // Every pass re-encodes from the ORIGINAL. Chaining passes would
                 // compound generation loss, so the second attempt is a different
                 // encode of the same source, never a re-encode of the first.
-                plan = CompressionPlanner.correctedForTarget(plan, actual) ?: break
+                //
+                // The correction that feeds the LAST pass may also drop the
+                // frame size. Bitrate alone bottoms out at what the hardware
+                // will accept, and a job that stops there reports the target as
+                // missed - the one outcome this mode exists to avoid. Given a
+                // last chance, it spends it on a smaller, clean frame instead of
+                // giving up.
+                plan = CompressionPlanner.correctedForTarget(
+                    info = info,
+                    plan = plan,
+                    actualBytes = actual,
+                    allowResolutionDrop = pass == passCeiling - 1,
+                ) ?: break
             }
 
             // Not `require(output != null && ...)`. That leans on the compiler
@@ -277,6 +294,8 @@ object CompressionEngine {
         plan: CompressionPlan,
         hasAudio: Boolean,
         watermark: Boolean,
+        sourceWidth: Int,
+        sourceHeight: Int,
         onProgress: ((Float) -> Unit)?,
     ): ExportResult {
         val attempts = buildAttempts(plan)
@@ -284,7 +303,7 @@ object CompressionEngine {
 
         attempts.forEachIndexed { index, attempt ->
             try {
-                return runExport(
+                val export = runExport(
                     context = context,
                     input = input,
                     output = output,
@@ -297,6 +316,21 @@ object CompressionEngine {
                     watermark = watermark,
                     onProgress = onProgress,
                 )
+
+                // QA NEW-01. The export "succeeded" and the file was wrong.
+                //
+                // Media3 reshapes a request the encoder will not take, under its
+                // own fallback, and reports success for whatever came out. On
+                // the QA device a 1080x1920 portrait became a 1080x1088 squash
+                // and the app put it in the user's gallery behind a green tick.
+                //
+                // So the result is measured rather than assumed, and a wrong
+                // shape is treated as this rung failing - which is exactly what
+                // it is. The catch below deletes the file and moves to the next
+                // configuration.
+                verifyGeometry(output, sourceWidth, sourceHeight)
+
+                return export
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (throwable: Throwable) {
@@ -317,6 +351,40 @@ object CompressionEngine {
             attempted = attempts.joinToString(", ") { "${it.label} ${it.width}x${it.height}" },
             cause = lastFailure,
         )
+    }
+
+    /**
+     * Throws unless the file at [output] has the same shape as the source.
+     *
+     * Separated from the ladder so the decision is one testable predicate
+     * ([OutputVerification.aspectMatches]) and the I/O is one call. The
+     * exceptions it throws are ordinary attempt failures: the caller deletes the
+     * file and tries the next encoder configuration.
+     */
+    private fun verifyGeometry(output: File, sourceWidth: Int, sourceHeight: Int) {
+        // Nothing to compare against. Probing the source is what normally
+        // supplies these, and a source with no readable size never reaches here,
+        // but a caller is not made to prove that: an unknown source shape means
+        // the check abstains rather than rejecting a file it cannot judge.
+        if (sourceWidth <= 0 || sourceHeight <= 0) return
+
+        val geometry = VideoProbe.probeGeometry(output.absolutePath)
+            ?: throw OutputUnreadableException()
+
+        if (!OutputVerification.aspectMatches(
+                sourceWidth = sourceWidth,
+                sourceHeight = sourceHeight,
+                outputWidth = geometry.width,
+                outputHeight = geometry.height,
+            )
+        ) {
+            throw OutputGeometryException(
+                sourceWidth = sourceWidth,
+                sourceHeight = sourceHeight,
+                outputWidth = geometry.width,
+                outputHeight = geometry.height,
+            )
+        }
     }
 
     private fun buildAttempts(plan: CompressionPlan): List<Attempt> {

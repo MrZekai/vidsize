@@ -81,8 +81,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 27' app/build.gradle.kts
-          grep -q 'versionName = "0.9.9"' app/build.gradle.kts
+          grep -q 'versionCode = 28' app/build.gradle.kts
+          grep -q 'versionName = "0.9.10"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -1056,6 +1056,67 @@ jobs:
           done
 
           echo 'ok: v0.9.9 gates'
+
+      - name: v0.9.10 output verification (QA NEW-01)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/gate_helpers.sh
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+          TEST=app/src/test/java/com/vidsize/compressor/media
+
+          # --- the check exists and is a pure, testable predicate ------------
+          test -f $MEDIA/OutputVerification.kt
+          grep -q 'fun aspectMatches' $MEDIA/OutputVerification.kt
+          grep -q 'class OutputGeometryException' $MEDIA/OutputVerification.kt
+          grep -q 'class OutputUnreadableException' $MEDIA/OutputVerification.kt
+          grep -q 'fun probeGeometry' $MEDIA/VideoProbe.kt
+
+          # --- it is actually WIRED INTO the encode path ---------------------
+          # The whole defect was that nothing looked at the file after it was
+          # written. A verification function nobody calls would reproduce that
+          # exactly, so the call site is asserted, not just the definition.
+          grep -q 'verifyGeometry(output, sourceWidth, sourceHeight)' \
+            $MEDIA/CompressionEngine.kt
+          grep -q 'private fun verifyGeometry' $MEDIA/CompressionEngine.kt
+
+          # ...and it runs INSIDE the attempt ladder, before the export is
+          # returned. Outside the try, a mismatch would abort the whole job
+          # instead of falling through to the next encoder configuration - which
+          # is the difference between "your device gets a 720p file" and "your
+          # device gets an error".
+          awk '/attempts.forEachIndexed/,/^        throw EncoderUnsupportedException/' \
+            $MEDIA/CompressionEngine.kt > /tmp/ladder.txt
+          grep -q 'verifyGeometry' /tmp/ladder.txt
+          grep -q 'val export = runExport(' /tmp/ladder.txt
+
+          # The source dimensions must be the DISPLAYED ones. Comparing coded
+          # dimensions would have called the NEW-01 output correct.
+          grep -q 'sourceWidth = info.width' $MEDIA/CompressionEngine.kt
+          grep -q 'sourceHeight = info.height' $MEDIA/CompressionEngine.kt
+
+          # --- the tolerance must stay a tolerance ---------------------------
+          # Widened far enough, this gate passes while the defect returns. The
+          # NEW-01 drift was 0.76; anything at or above 0.10 would admit a
+          # visibly reshaped picture.
+          TOL="$(grep -o 'ASPECT_TOLERANCE = [0-9.]*' $MEDIA/OutputVerification.kt \
+            | head -1 | awk '{print $3}')"
+          awk -v t="$TOL" 'BEGIN { exit !(t > 0 && t < 0.10) }' || {
+            echo "GATE FAILED: ASPECT_TOLERANCE is $TOL - outside (0, 0.10)." >&2
+            echo "At 0.10 a 10% reshaped frame would pass verification." >&2
+            exit 1; }
+
+          # --- the QA case must be pinned by a test --------------------------
+          test -f $TEST/OutputVerificationTest.kt
+          grep -q '1080, 1920, 1080, 1088' $TEST/OutputVerificationTest.kt
+
+          # --- size targets: the last correction may drop the frame ----------
+          grep -q 'allowResolutionDrop' $MEDIA/CompressionPlanner.kt
+          grep -q 'allowResolutionDrop = pass == passCeiling - 1' $MEDIA/CompressionEngine.kt
+          grep -q 'theLastCorrectionDropsTheFrame' $TEST/CompressionPlannerTest.kt
+          grep -q 'theLastCorrectionKeepsTheFrame' $TEST/CompressionPlannerTest.kt
+
+          echo 'ok: v0.9.10 output verification gates'
 
       - name: Gate helpers must actually fail
         shell: bash

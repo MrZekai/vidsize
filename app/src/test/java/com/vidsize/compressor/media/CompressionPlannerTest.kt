@@ -4,6 +4,7 @@ import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.VideoInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -507,6 +508,123 @@ class CompressionPlannerTest {
                 )
             }
         }
+    }
+
+    // ========================================================================
+    // Size targets: the correction that feeds the last pass
+    // ========================================================================
+
+    /**
+     * The field measurement this exists for.
+     *
+     * A 720x1280 / 60 s / 52.6 MB clip aimed at 25 MB is planned at the full
+     * 720x1280. The device's encoder then overshot the requested bitrate by
+     * 2.15x and returned 40.8 MB - measured on a real device, not assumed.
+     *
+     * Correcting the bitrate alone leaves 1.47 Mbps spread over 720x1280, which
+     * is 0.053 bits per pixel: below the floor the planner uses to decide a
+     * frame is worth its size. The same budget over 480x852 is 0.12 bpp, which
+     * looks fine and hits the target. So the last chance spends itself on a
+     * smaller, clean frame instead of a large, mushy one that also misses.
+     */
+    @Test
+    fun theLastCorrectionDropsTheFrameWhenTheBudgetNoLongerCarriesIt() {
+        val info = Case("field 720x1280 52.6MB/60s", 720, 1280, 60_000, 52_600_000L).info()
+        val plan = CompressionPlanner.planForTarget(info, 25_000_000L)
+        assertTrue("25 MB must be reachable for this source", plan.viable)
+        assertEquals(720, plan.targetWidth)
+        assertEquals(1280, plan.targetHeight)
+
+        val actual = 40_800_000L
+
+        val held = CompressionPlanner.correctedForTarget(
+            info = info,
+            plan = plan,
+            actualBytes = actual,
+            allowResolutionDrop = false,
+        )
+        assertEquals(
+            "an ordinary correction must not silently change the frame",
+            720,
+            held!!.targetWidth,
+        )
+        assertTrue("it must still lower the bitrate", held.videoBitrate < plan.videoBitrate)
+
+        val dropped = CompressionPlanner.correctedForTarget(
+            info = info,
+            plan = plan,
+            actualBytes = actual,
+            allowResolutionDrop = true,
+        )
+        assertTrue(
+            "the last chance must buy a smaller frame rather than give up",
+            dropped!!.targetWidth < plan.targetWidth,
+        )
+
+        // A smaller frame is fine. A different SHAPE is the NEW-01 defect, and
+        // the output check would reject it after the encode - so the planner
+        // must not produce one in the first place.
+        assertTrue(
+            "the dropped frame must keep the source's shape",
+            OutputVerification.aspectMatches(
+                sourceWidth = info.width,
+                sourceHeight = info.height,
+                outputWidth = dropped.targetWidth,
+                outputHeight = dropped.targetHeight,
+            ),
+        )
+    }
+
+    /**
+     * The mirror case: when the corrected budget still carries the frame, the
+     * last chance changes nothing. A resolution drop is a cost, and it is only
+     * paid when it buys something.
+     */
+    @Test
+    fun theLastCorrectionKeepsTheFrameWhenTheBudgetStillCarriesIt() {
+        val info = Case("field 720x1280 52.6MB/60s", 720, 1280, 60_000, 52_600_000L).info()
+        val plan = CompressionPlanner.planForTarget(info, 16_000_000L)
+        assertTrue(plan.viable)
+
+        val dropped = CompressionPlanner.correctedForTarget(
+            info = info,
+            plan = plan,
+            actualBytes = 25_700_000L,
+            allowResolutionDrop = true,
+        )
+        assertEquals(plan.targetWidth, dropped!!.targetWidth)
+        assertEquals(plan.targetHeight, dropped.targetHeight)
+        assertTrue(dropped.videoBitrate < plan.videoBitrate)
+    }
+
+    /** A pass that already met the target has nothing to correct. */
+    @Test
+    fun aPassThatMetTheTargetIsNotCorrected() {
+        val info = Case("field 720x1280 52.6MB/60s", 720, 1280, 60_000, 52_600_000L).info()
+        val plan = CompressionPlanner.planForTarget(info, 25_000_000L)
+        assertNull(
+            CompressionPlanner.correctedForTarget(
+                info = info,
+                plan = plan,
+                actualBytes = 24_000_000L,
+                allowResolutionDrop = true,
+            ),
+        )
+    }
+
+    /** A preset plan has no target, so there is nothing to correct towards. */
+    @Test
+    fun aPresetPlanIsNeverCorrected() {
+        val info = Case("field 720x1280 52.6MB/60s", 720, 1280, 60_000, 52_600_000L).info()
+        val plan = CompressionPlanner.plan(info, CompressionPreset.BALANCED)
+        assertNull(
+            CompressionPlanner.correctedForTarget(
+                info = info,
+                plan = plan,
+                actualBytes = 99_000_000L,
+                allowResolutionDrop = true,
+            ),
+        )
     }
 
     @Test
