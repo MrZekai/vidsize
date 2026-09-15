@@ -185,8 +185,16 @@ object CompressionEngine {
                 plan = CompressionPlanner.correctedForTarget(plan, actual) ?: break
             }
 
-            val output = best
-            require(output != null && bestBytes > 0) { "Compression produced no output." }
+            // Not `require(output != null && ...)`. That leans on the compiler
+            // smart-casting through a contract on a compound condition to turn
+            // File? into File for the publish() call below - which it may well
+            // do, but "may well" is not a thing to ship in the one place that
+            // decides whether the user's file exists. An explicit elvis makes
+            // the type non-null by construction.
+            val output = best ?: throw IllegalStateException(
+                "Compression produced no output file.",
+            )
+            require(bestBytes > 0L) { "Compression produced an empty output file." }
 
             // Do not publish a "successful" file that consumes the same or more
             // storage than the original. The user keeps the better original.

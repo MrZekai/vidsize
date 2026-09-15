@@ -973,6 +973,28 @@ jobs:
           grep -q 'VIABLE_RATIO = 0.85' $MEDIA/CompressionPlanner.kt
           forbid 'VIABLE_RATIO = 0.92' $MEDIA/CompressionPlanner.kt
 
+          # The unit tests encode expectations that depend on this constant, and
+          # run 34910448683 died because it moved and they did not: a test still
+          # asserting "Balanced is viable here" met a Balanced that was now
+          # correctly refused. Nothing in the source gates caught it, because
+          # nothing in the source was wrong.
+          #
+          # The test suite now mirrors the number. This asserts the mirror
+          # matches, so the next person to move the floor is told which file to
+          # update instead of finding out from a red test six minutes later.
+          TEST=app/src/test/java/com/vidsize/compressor/media/CompressionPlannerTest.kt
+          PROD_RATIO="$(grep -o 'VIABLE_RATIO = [0-9.]*' $MEDIA/CompressionPlanner.kt \
+            | head -1 | awk '{print $3}')"
+          TEST_RATIO="$(grep -o 'VIABLE_RATIO_UNDER_TEST = [0-9.]*' $TEST \
+            | head -1 | awk '{print $3}')"
+          if [ "$PROD_RATIO" != "$TEST_RATIO" ]; then
+            echo "GATE FAILED: VIABLE_RATIO is $PROD_RATIO in the planner but" >&2
+            echo "$TEST_RATIO in CompressionPlannerTest. The unit tests will" >&2
+            echo "fail six minutes from now. Update both." >&2
+            exit 1
+          fi
+          echo "ok: viability floor mirrored in the tests ($PROD_RATIO)"
+
           # --- P1: recent rows must be distinguishable ------------------------
           # entry.displayName ellipsised before the seconds that made it unique.
           grep -q 'Fmt.dateTime(entry.completedAtMillis)' $UI/screens/HomeScreen.kt

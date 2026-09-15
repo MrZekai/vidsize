@@ -10,6 +10,22 @@ import org.junit.Test
 
 class CompressionPlannerTest {
 
+    /**
+     * The production VIABLE_RATIO, mirrored here on purpose.
+     *
+     * CompressionPlanner keeps it private, and it should stay private - it is an
+     * internal calibration, not an API. But a test suite that cannot name the
+     * number it is testing can only ever check hand-picked examples, and this
+     * constant has moved twice now, breaking a different example each time.
+     *
+     * A CI gate asserts this literal matches the planner's, so the two cannot
+     * drift apart silently: changing one without the other fails the build with
+     * a message saying so, instead of failing a test with a stale expectation.
+     */
+    private companion object {
+        const val VIABLE_RATIO_UNDER_TEST = 0.85
+    }
+
     private val sample = VideoInfo(
         durationMs = 60_000,
         width = 1920,
@@ -120,6 +136,25 @@ class CompressionPlannerTest {
         }
     }
 
+    /**
+     * The viability floor, restated for VIABLE_RATIO = 0.85 (v0.9.9).
+     *
+     * ## Why the second assertion flipped
+     *
+     * This used to assert that Balanced WAS viable for this source. At the old
+     * 0.92 floor it was: Balanced predicts 15.7 MB against an 18 MB source, a
+     * 13% saving, and 13% cleared a bar set at 8%.
+     *
+     * v0.9.9 moved the bar to 15% deliberately. A 13% saving on an 18 MB file is
+     * 2.3 MB, bought with a minute of waiting, a warm phone and a re-encode the
+     * user cannot undo - the exact trade the new floor exists to refuse. So the
+     * expectation is not "Balanced broke", it is "Balanced is no longer offered
+     * for a source this tight", which is the intended behaviour.
+     *
+     * Smaller remains viable here (11.6 MB, a 36% saving) and the screen's
+     * selection effect moves to it, so the user is never left with a screen
+     * where nothing can run. That is what the third assertion pins.
+     */
     @Test
     fun aPresetThatCannotSaveAnythingIsMarkedUnviable() {
         // 480x854 at ~0.48 Mbps: Smallest lands below the encodable floor.
@@ -127,8 +162,38 @@ class CompressionPlannerTest {
         val x = CompressionPlanner.plan(clip, CompressionPreset.SMALLEST)
         assertFalse("Smallest should not be offered for this source", x.viable)
 
+        // Balanced saves ~13% here, under the 15% floor VIABLE_RATIO = 0.85 sets.
         val b = CompressionPlanner.plan(clip, CompressionPreset.BALANCED)
-        assertTrue("Balanced still saves meaningfully here", b.viable)
+        assertFalse("Balanced saves too little to be worth offering", b.viable)
+
+        // ...but the source is not hopeless, and something must still run.
+        val s = CompressionPlanner.plan(clip, CompressionPreset.SMALLER)
+        assertTrue("Smaller still saves meaningfully here", s.viable)
+    }
+
+    /**
+     * The floor is a floor: nothing offered may save less than it promises to.
+     *
+     * Written as the general rule rather than as one more example, because the
+     * constant it depends on has now moved twice and a rule survives that where
+     * a hand-picked case does not.
+     */
+    @Test
+    fun nothingViableSavesLessThanTheFloor() {
+        allCases.forEach { case ->
+            val info = case.info()
+            CompressionPreset.entries.forEach { preset ->
+                val plan = CompressionPlanner.plan(info, preset)
+                if (plan.viable && info.sourceBytes > 0L) {
+                    val share = plan.estimatedOutputBytes.toDouble() / info.sourceBytes.toDouble()
+                    assertTrue(
+                        "${case.label}/$preset: offered while saving only " +
+                            "${((1 - share) * 100).toInt()}%",
+                        share < VIABLE_RATIO_UNDER_TEST,
+                    )
+                }
+            }
+        }
     }
 
     @Test
