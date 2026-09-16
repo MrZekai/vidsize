@@ -2,6 +2,8 @@ package com.vidsize.compressor.media
 
 import android.media.MediaCodecInfo
 import android.media.MediaCodecList
+import android.os.Build
+import android.util.Log
 import kotlin.math.roundToInt
 
 /**
@@ -51,6 +53,11 @@ import kotlin.math.roundToInt
  */
 object DecoderSupport {
 
+    private const val DIAGNOSTIC_TAG = "VidsizeCodec"
+    private const val UHD_WIDTH = 3_840
+    private const val UHD_HEIGHT = 2_160
+    private const val UHD_FRAME_RATE = 30.0
+
     /**
      * Frame rate assumed when the probe could not read one. Used only to ask
      * `areSizeAndRateSupported`; a wrong guess here can only make the check
@@ -77,6 +84,76 @@ object DecoderSupport {
 
         /** True unless this device gave a definite No. */
         val allowsAttempt: Boolean get() = this != UNSUPPORTED
+    }
+
+    /** One decoder's own answer to the 4K questions used during field QA. */
+    data class DecoderDiagnostic(
+        val codecName: String,
+        val mime: String,
+        val supportedWidths: String,
+        val supportedHeights: String,
+        val supports4kLandscape: Boolean?,
+        val supports4kPortrait: Boolean?,
+        val supports4kLandscape30: Boolean?,
+        val hardwareAccelerated: Boolean?,
+    )
+
+    /**
+     * Full device decoder inventory for the hidden diagnostics screen.
+     *
+     * This deliberately uses [MediaCodecList.ALL_CODECS], not the
+     * [MediaCodecList.REGULAR_CODECS] list used by the conservative pre-check.
+     * Some vendors hide specialised, alias or software codecs from the regular
+     * list. Seeing both the ranges and each 4K answer on the affected phone is
+     * the measurement needed before changing the production blocking policy.
+     */
+    fun fourKDiagnostics(): List<DecoderDiagnostic> = runCatching {
+        buildList {
+            val list = MediaCodecList(MediaCodecList.ALL_CODECS)
+            for (info in list.codecInfos) {
+                if (info.isEncoder) continue
+                for (type in info.supportedTypes) {
+                    if (!type.startsWith("video/", ignoreCase = true)) continue
+                    val video = runCatching {
+                        info.getCapabilitiesForType(type).videoCapabilities
+                    }.getOrNull() ?: continue
+
+                    val row = DecoderDiagnostic(
+                        codecName = info.name,
+                        mime = type,
+                        supportedWidths = runCatching {
+                            video.supportedWidths.toString()
+                        }.getOrDefault("unknown"),
+                        supportedHeights = runCatching {
+                            video.supportedHeights.toString()
+                        }.getOrDefault("unknown"),
+                        supports4kLandscape = runCatching {
+                            video.isSizeSupported(UHD_WIDTH, UHD_HEIGHT)
+                        }.getOrNull(),
+                        supports4kPortrait = runCatching {
+                            video.isSizeSupported(UHD_HEIGHT, UHD_WIDTH)
+                        }.getOrNull(),
+                        supports4kLandscape30 = runCatching {
+                            video.areSizeAndRateSupported(
+                                UHD_WIDTH,
+                                UHD_HEIGHT,
+                                UHD_FRAME_RATE,
+                            )
+                        }.getOrNull(),
+                        hardwareAccelerated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            runCatching { info.isHardwareAccelerated }.getOrNull()
+                        } else {
+                            null
+                        },
+                    )
+                    add(row)
+                    Log.i(DIAGNOSTIC_TAG, row.logLine())
+                }
+            }
+        }.sortedWith(compareBy(DecoderDiagnostic::mime, DecoderDiagnostic::codecName))
+    }.getOrElse { throwable ->
+        Log.w(DIAGNOSTIC_TAG, "4K decoder inventory failed", throwable)
+        emptyList()
     }
 
     /**
@@ -155,4 +232,9 @@ object DecoderSupport {
             video.isSizeSupported(width, height) || video.isSizeSupported(height, width)
         }.getOrDefault(false)
     }
+
+    private fun DecoderDiagnostic.logLine(): String =
+        "$codecName $mime W=$supportedWidths H=$supportedHeights " +
+            "4K_land=$supports4kLandscape 4K_port=$supports4kPortrait " +
+            "4K@30=$supports4kLandscape30 hw=$hardwareAccelerated"
 }

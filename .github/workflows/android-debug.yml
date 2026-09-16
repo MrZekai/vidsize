@@ -1332,6 +1332,49 @@ jobs:
 
           echo 'ok: v0.9.12 decoder and player gates'
 
+      - name: SAF video selection and 4K decoder diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_video_selection.py
+
+          DECODER=app/src/main/java/com/vidsize/compressor/media/DecoderSupport.kt
+          DIAGNOSTICS=app/src/main/java/com/vidsize/compressor/ui/screens/AdDiagnosticsSheet.kt
+
+          # The field device cannot expose useful logcat. The hidden screen
+          # therefore carries the complete ALL_CODECS measurement itself.
+          grep -q 'fun fourKDiagnostics' "$DECODER"
+          grep -q 'MediaCodecList(MediaCodecList.ALL_CODECS)' "$DECODER"
+          grep -q 'isSizeSupported(UHD_WIDTH, UHD_HEIGHT)' "$DECODER"
+          grep -q 'areSizeAndRateSupported' "$DECODER"
+          grep -q 'info.isHardwareAccelerated' "$DECODER"
+          grep -q 'DecoderSupport.fourKDiagnostics()' "$DIAGNOSTICS"
+          grep -q '4K decoder measurement' "$DIAGNOSTICS"
+
+          echo 'ok: SAF selection and on-device 4K decoder measurement'
+
+      - name: SAF selection gate must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=app/src/main/java/com/vidsize/compressor/ui/VidsizeRoot.kt
+          BACKUP="$(mktemp)"
+          cp "$ROOT" "$BACKUP"
+          restore_picker() { cp "$BACKUP" "$ROOT"; rm -f "$BACKUP"; }
+          trap restore_picker EXIT
+
+          # GetContent can browse files but cannot persist the URI permission.
+          # Accepting it would recreate a delayed foreground-service failure.
+          sed -i 's/ActivityResultContracts.OpenDocument()/ActivityResultContracts.GetContent()/' "$ROOT"
+          if python3 tools/check_video_selection.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: SAF gate accepted GetContent.' >&2
+            exit 1
+          fi
+
+          cp "$BACKUP" "$ROOT"
+          python3 tools/check_video_selection.py
+          echo 'ok: SAF selection gate rejects a non-persistable picker'
+
       - name: Gate helpers must actually fail
         shell: bash
         run: |

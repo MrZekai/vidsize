@@ -35,6 +35,7 @@ import com.vidsize.compressor.VidsizeApplication
 import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.AdGate
 import com.vidsize.compressor.ads.AdPacing
+import com.vidsize.compressor.media.DecoderSupport
 import com.vidsize.compressor.media.LastFailure
 import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.SecondaryButton
@@ -89,6 +90,10 @@ fun AdDiagnosticsSheet(onDismiss: () -> Unit) {
     val snapshot = remember(tick) {
         AdDiagnostics.snapshot(application.appOpenAdPolicy, application.appOpenAdManager)
     }
+    // Codec inventory is device-static for this session and MediaCodecList can
+    // be relatively expensive on vendor builds. Measure once when the hidden
+    // sheet opens; do not repeat it on the one-second ad-pacing refresh.
+    val decoderDiagnostics = remember { DecoderSupport.fourKDiagnostics() }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -137,6 +142,28 @@ fun AdDiagnosticsSheet(onDismiss: () -> Unit) {
                         snapshot.sampleUnitLeaked.yesNo(),
                         alarming = snapshot.sampleUnitLeaked && !snapshot.usingTestUnits,
                     )
+
+                    Section("4K decoder measurement — ALL_CODECS")
+                    Line("Video decoder entries", decoderDiagnostics.size.toString())
+                    Line(
+                        "3840x2160 advertised",
+                        decoderDiagnostics.any { it.supports4kLandscape == true }.yesNo(),
+                    )
+                    Line(
+                        "3840x2160 @ 30 advertised",
+                        decoderDiagnostics.any { it.supports4kLandscape30 == true }.yesNo(),
+                    )
+                    if (decoderDiagnostics.isEmpty()) {
+                        Text(
+                            text = "No video decoder capability could be read.",
+                            style = VidsizeType.supporting,
+                            color = VidsizeColor.Danger,
+                        )
+                    } else {
+                        decoderDiagnostics.forEach { decoder ->
+                            DecoderCapability(decoder)
+                        }
+                    }
 
                     Section("Consent")
                     Line("UMP resolved", snapshot.consentResolved.yesNo())
@@ -297,4 +324,46 @@ private fun Line(label: String, value: String, alarming: Boolean = false) {
     }
 }
 
+@Composable
+private fun DecoderCapability(decoder: DecoderSupport.DecoderDiagnostic) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Space.xs),
+    ) {
+        Text(
+            text = decoder.mime + " · " + decoder.hardwareAccelerated.hardwareLabel(),
+            style = VidsizeType.eyebrow,
+            color = VidsizeColor.Faint,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = decoder.codecName,
+            style = VidsizeType.supporting.copy(fontFamily = FontFamily.Monospace),
+            color = VidsizeColor.Ink,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = "W=${decoder.supportedWidths} H=${decoder.supportedHeights}\n" +
+                "4K land=${decoder.supports4kLandscape.yesNoUnknown()} " +
+                "port=${decoder.supports4kPortrait.yesNoUnknown()} " +
+                "@30=${decoder.supports4kLandscape30.yesNoUnknown()}",
+            style = VidsizeType.micro.copy(fontFamily = FontFamily.Monospace),
+            color = VidsizeColor.Muted,
+        )
+    }
+}
+
 private fun Boolean.yesNo(): String = if (this) "yes" else "no"
+
+private fun Boolean?.yesNoUnknown(): String = when (this) {
+    true -> "yes"
+    false -> "no"
+    null -> "unknown"
+}
+
+private fun Boolean?.hardwareLabel(): String = when (this) {
+    true -> "hardware"
+    false -> "software"
+    null -> "hardware unknown"
+}

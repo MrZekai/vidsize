@@ -4,8 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,15 +59,32 @@ fun VidsizeRoot(
         onVideoConsumed()
     }
 
-    val picker = rememberLauncherForActivityResult(PickVisualMedia()) { uri ->
-        if (uri != null) selectedVideo = uri.toString()
+    // ACTION_OPEN_DOCUMENT is intentional here. Photo Picker only exposes its
+    // visual-media collection and can omit videos downloaded by a browser into
+    // Download/. SAF shows every document provider (including Downloads) and
+    // does not need a broad storage permission.
+    val fileBrowser = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            // Compression continues in a foreground service and the selected
+            // URI also survives rotation/process recreation. Keep the read
+            // grant instead of relying on the activity's temporary grant.
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            selectedVideo = uri.toString()
+        }
     }
 
     val launchVideoPicker: () -> Unit = {
         (context.applicationContext as? VidsizeApplication)
             ?.appOpenAdManager
             ?.suppressNextForeground()
-        picker.launch(PickVisualMediaRequest(PickVisualMedia.VideoOnly))
+        fileBrowser.launch(arrayOf("video/*"))
     }
 
     val current = selectedVideo
