@@ -138,23 +138,26 @@ class CompressionPlannerTest {
     }
 
     /**
-     * The viability floor, restated for VIABLE_RATIO = 0.85 (v0.9.9).
+     * The viability floor, and the honest history of this one assertion.
      *
-     * ## Why the second assertion flipped
+     * ## It flipped once, wrongly, and is flipped back here
      *
-     * This used to assert that Balanced WAS viable for this source. At the old
-     * 0.92 floor it was: Balanced predicts 15.7 MB against an 18 MB source, a
-     * 13% saving, and 13% cleared a bar set at 8%.
+     * v0.9.9 raised the floor from 0.92 to 0.85 and this test was edited to say
+     * Balanced was no longer viable for this source. The edit was faithful to
+     * the code and wrong about the world: the estimate Balanced was being judged
+     * on carried `ENCODER_VARIANCE = 1.22`, a 22% inflation that existed only
+     * because the encoder was ignoring the bitrate it was asked for. Tightening
+     * a decision rule on top of a measurement known to be broken is how Balanced
+     * came to be refused on three of four real videos in the field.
      *
-     * v0.9.9 moved the bar to 15% deliberately. A 13% saving on an 18 MB file is
-     * 2.3 MB, bought with a minute of waiting, a warm phone and a re-encode the
-     * user cannot undo - the exact trade the new floor exists to refuse. So the
-     * expectation is not "Balanced broke", it is "Balanced is no longer offered
-     * for a source this tight", which is the intended behaviour.
+     * v0.9.11 fixed the measurement instead: the encoder is now pinned to CBR,
+     * so it delivers roughly the bitrate it is given and the variance drops to
+     * 1.03. Balanced's estimate for this clip falls to 13.2 MB - a 26% saving on
+     * an 18 MB source - which clears the 15% floor comfortably and honestly.
      *
-     * Smaller remains viable here (11.6 MB, a 36% saving) and the screen's
-     * selection effect moves to it, so the user is never left with a screen
-     * where nothing can run. That is what the third assertion pins.
+     * So all three presets are pinned here for what they are: Smallest still
+     * cannot run (its bitrate lands below the encodable floor, which is a
+     * hardware limit, not a policy), and the other two can.
      */
     @Test
     fun aPresetThatCannotSaveAnythingIsMarkedUnviable() {
@@ -163,11 +166,10 @@ class CompressionPlannerTest {
         val x = CompressionPlanner.plan(clip, CompressionPreset.SMALLEST)
         assertFalse("Smallest should not be offered for this source", x.viable)
 
-        // Balanced saves ~13% here, under the 15% floor VIABLE_RATIO = 0.85 sets.
+        // Balanced saves ~26% under the CBR-calibrated estimate: clearly worth it.
         val b = CompressionPlanner.plan(clip, CompressionPreset.BALANCED)
-        assertFalse("Balanced saves too little to be worth offering", b.viable)
+        assertTrue("Balanced saves enough here to be worth offering", b.viable)
 
-        // ...but the source is not hopeless, and something must still run.
         val s = CompressionPlanner.plan(clip, CompressionPreset.SMALLER)
         assertTrue("Smaller still saves meaningfully here", s.viable)
     }

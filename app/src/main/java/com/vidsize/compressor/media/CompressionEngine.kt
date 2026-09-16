@@ -2,6 +2,7 @@ package com.vidsize.compressor.media
 
 import android.content.ContentValues
 import android.content.Context
+import android.media.MediaCodecInfo
 import android.net.Uri
 import android.os.Environment
 import android.os.Handler
@@ -109,6 +110,28 @@ object CompressionEngine {
     private const val MAX_TARGET_PASSES = 3
 
     /**
+     * How many times a PRESET job may encode.
+     *
+     * Two, not three. A preset's promise is the estimate on the screen, and with
+     * CBR the first pass normally lands on it - this is the net under the
+     * tightrope, not the tightrope. One correction catches a device whose
+     * encoder ignores the bitrate mode; a second would double the wait again for
+     * a case that should not exist.
+     */
+    private const val MAX_PRESET_PASSES = 2
+
+    /**
+     * How far a preset's output may exceed its estimate before a correction pass
+     * is worth the user's time.
+     *
+     * A 15% miss is a rounding difference nobody notices next to a multi-minute
+     * encode. Beyond it the number on the screen was a lie, and re-encoding is
+     * cheaper than shipping a lie. The field misses this exists for were +50%
+     * and +65%.
+     */
+    private const val PRESET_OVERSHOOT_TOLERANCE = 1.15
+
+    /**
      * @param targetBytes when non-null, the job aims at this output size instead
      *        of at [preset]'s quality level, and may encode up to
      *        [MAX_TARGET_PASSES] times to reach it.
@@ -141,7 +164,17 @@ object CompressionEngine {
         if (!storage.hasRoom) throw OutOfSpaceException()
 
         val started = System.currentTimeMillis()
-        val passCeiling = if (targetBytes != null) MAX_TARGET_PASSES else 1
+        val passCeiling = if (targetBytes != null) MAX_TARGET_PASSES else MAX_PRESET_PASSES
+
+        // What this job is correcting towards. A size target is the user's own
+        // number; a preset is the estimate the screen showed them - which is a
+        // promise the app made and should therefore have to keep.
+        val goalBytes = targetBytes ?: plan.estimatedOutputBytes
+        val acceptableBytes = if (targetBytes != null) {
+            goalBytes
+        } else {
+            (goalBytes * PRESET_OVERSHOOT_TOLERANCE).toLong()
+        }
 
         // The best file produced so far, and its size. Each pass writes its own
         // temp file rather than overwriting: a correction that overshoots
@@ -181,8 +214,8 @@ object CompressionEngine {
                     candidate.delete()
                 }
 
-                // Preset mode, or the ceiling was met: nothing left to correct.
-                if (targetBytes == null || bestBytes <= targetBytes) break
+                // Close enough: nothing left to correct.
+                if (bestBytes <= acceptableBytes) break
 
                 // Every pass re-encodes from the ORIGINAL. Chaining passes would
                 // compound generation loss, so the second attempt is a different
@@ -194,12 +227,17 @@ object CompressionEngine {
                 // missed - the one outcome this mode exists to avoid. Given a
                 // last chance, it spends it on a smaller, clean frame instead of
                 // giving up.
+                //
+                // A preset corrects towards its own estimate, so the same
+                // machinery serves both modes. Its frame size is never dropped:
+                // the user chose a quality level, and silently handing them
+                // fewer pixels would be answering a question they did not ask.
                 plan = CompressionPlanner.correctedForTarget(
                     info = info,
-                    plan = plan,
+                    plan = if (targetBytes != null) plan else plan.copy(targetBytes = goalBytes),
                     actualBytes = actual,
-                    allowResolutionDrop = pass == passCeiling - 1,
-                ) ?: break
+                    allowResolutionDrop = targetBytes != null && pass == passCeiling - 1,
+                )?.copy(targetBytes = targetBytes) ?: break
             }
 
             // Not `require(output != null && ...)`. That leans on the compiler
@@ -444,6 +482,29 @@ object CompressionEngine {
         if (useRequestedSettings) {
             val videoSettings = VideoEncoderSettings.Builder()
                 .setBitrate(videoBitrate)
+                // CONSTANT bitrate, not the VBR default.
+                //
+                // This is the single line behind every size number the app has
+                // ever got wrong. Media3's default is BITRATE_MODE_VBR, and a
+                // hardware VBR encoder treats a requested bitrate as a
+                // suggestion: on the field device it returned 2.24 Mbps when
+                // asked for 1.04, and 2.71 Mbps when asked for 1.45 - 1.9x to
+                // 2.2x over, every time.
+                //
+                // The planner could not model that. It carried a 1.22 overshoot
+                // constant, which was both far too small to cover VBR and large
+                // enough, applied to every estimate, to make Balanced look like
+                // it saved nothing - so the app disabled its own default preset
+                // on ordinary phone video while the jobs it did run missed their
+                // predicted size by half.
+                //
+                // CBR makes the encoder spend the bitrate it was given. The
+                // estimate becomes a number the file actually lands on, which is
+                // what lets ENCODER_VARIANCE drop to 1.03 and what puts Balanced
+                // back on the screen. The cost is real and accepted: CBR spends
+                // bits on easy scenes that VBR would have saved. A predictable
+                // file is worth more here than a slightly smaller one.
+                .setBitrateMode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
                 .setiFrameIntervalSeconds(2f)
                 .build()
             encoderFactoryBuilder.setRequestedVideoEncoderSettings(videoSettings)

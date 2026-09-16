@@ -52,9 +52,10 @@ import kotlin.math.roundToInt
  *
  * Two separate factors instead of one vague 1.10 "headroom":
  *  - [CONTAINER_OVERHEAD] - MP4 moov atom and sample tables.
- *  - [ENCODER_VARIANCE]   - hardware VBR overshoot. Calibrate this from device
- *                           measurements; 1.08 is a starting point, not a
- *                           measured constant.
+ *  - [ENCODER_VARIANCE]   - the residual the encoder still spends above the
+ *                           bitrate it is asked for. Small since v0.9.11,
+ *                           because the encoder is pinned to CBR rather than
+ *                           left in the platform's VBR default.
  *
  * Clips shorter than [SHORT_CLIP_SECONDS] use [SHORT_CLIP_VARIANCE] instead:
  * with one or two keyframes the rate control never converges and the container
@@ -71,35 +72,52 @@ object CompressionPlanner {
     private const val CONTAINER_OVERHEAD = 1.02
 
     /**
-     * Hardware VBR overshoot.
+     * How far the encoder's real output may sit above the bitrate it was asked
+     * for.
      *
-     * ## v0.8.8 recalibration - QA v0.8.7 BUG-09
+     * ## Why this used to be 1.22, and why it is no longer
      *
-     * 1.08 was documented as "a starting point, not a measured constant", and
-     * the QA pass measured it. Both runs overshot in the same direction:
+     * Through v0.9.10 the encoder ran in the platform default rate-control
+     * mode, which on every device measured is VBR. VBR treats the requested
+     * bitrate as an average to aim at over the whole clip and is free to spend
+     * far more than that wherever the picture is busy. Measured on real footage:
      *
-     *  - 1920x1080: estimated ~15.7 MB, produced 17.4 MB (+10.8%)
-     *  - 1280x720:  estimated ~4.8 MB,  produced 5.6 MB  (+16.7%)
+     *  - asked 1.04 Mbps -> produced 2.24 Mbps (2.15x)
+     *  - asked 1.45 Mbps -> produced 2.71 Mbps (1.87x)
      *
-     * A one-directional error is a calibration error, not noise: at 1.08 the
-     * estimate was systematically optimistic, which is the worse direction for
-     * a storage tool because the user plans around it. Multiplying the old
-     * factor through the measured overshoot gives 1.08 x 1.108 = 1.197 and
-     * 1.08 x 1.167 = 1.260; 1.22 sits between them, which leaves the 1080p case
-     * marginally conservative and the 720p case marginally optimistic instead of
-     * both being optimistic.
+     * Every recalibration of this constant - 1.08, then 1.22 - was an attempt to
+     * predict that overshoot from outside instead of stopping it. It could not
+     * work: the overshoot depends on the content, not on a factor. And it did
+     * real damage, because the inflated estimate is also what [VIABLE_RATIO]
+     * judges, so Balanced was refused on ordinary videos that it could in fact
+     * have compressed well.
      *
-     * This is still a *device* characteristic measured on one device. It is
-     * deliberately a single named constant so the next QA pass can move it
-     * again, and [CompressionPlan.estimatedOutputBytes] is still presented as
-     * "≈" with an "estimates only" note rather than as a promise.
+     * v0.9.11 fixes the cause instead of the symptom: [CompressionEngine] pins
+     * the encoder to `BITRATE_MODE_CBR`, so the requested bitrate is a ceiling
+     * the encoder holds to rather than an average it drifts around. What is left
+     * for this constant to cover is the genuine residual - rate-control settling
+     * over the first GOP, and B-frame bookkeeping - which is small and in one
+     * direction. 1.03 is that residual.
+     *
+     * If a future QA pass measures a systematic overshoot again, the question to
+     * ask first is whether CBR is actually in force on that device, not whether
+     * this number should go up. [CompressionEngine]'s measure-and-correct pass
+     * is the safety net that catches a device where it is not.
      */
-    private const val ENCODER_VARIANCE = 1.22
+    private const val ENCODER_VARIANCE = 1.03
 
     private const val SHORT_CLIP_SECONDS = 4.0
 
-    /** Short clips overshoot more, so this moves with [ENCODER_VARIANCE]. */
-    private const val SHORT_CLIP_VARIANCE = 1.52
+    /**
+     * Clips under [SHORT_CLIP_SECONDS] get a wider allowance.
+     *
+     * Rate control needs a few hundred frames to converge on its target, so on a
+     * two-second clip the settling period IS the clip and CBR cannot help as
+     * much. Container overhead is also a much larger share of a tiny file. This
+     * moves with [ENCODER_VARIANCE] and was scaled down with it in v0.9.11
+     * (1.52 -> 1.25), keeping the same ratio between the two.
+     */
+    private const val SHORT_CLIP_VARIANCE = 1.25
 
     /**
      * A preset must beat this share of the source to be worth running.
@@ -118,6 +136,22 @@ object CompressionPlanner {
      * result screen nobody is happy with. Sources that fall below the bar are
      * usually already-efficient ones, and [ALREADY_EFFICIENT_BPP] catches the
      * subset of those that would also have failed outright.
+     *
+     * ## What this bar is applied to, and the mistake that matters
+     *
+     * This ratio is judged against [CompressionPlan.estimatedOutputBytes], so it
+     * is only ever as good as that estimate. In v0.9.9 the bar was raised while
+     * the estimate still carried a 22% [ENCODER_VARIANCE] inflation - a number
+     * that existed precisely because the encoder was not honouring the bitrate
+     * it was given. The two compounded: Balanced was declared "no real saving"
+     * on three of four ordinary phone videos in the field, on the strength of a
+     * prediction that was 22% too pessimistic by construction.
+     *
+     * The rule itself was never wrong. Raising a threshold on top of a
+     * measurement known to be broken was. The fix was to repair the measurement
+     * (CBR, see [ENCODER_VARIANCE]), after which 0.85 behaves as intended. The
+     * standing rule for this file: this constant may only be tightened when the
+     * estimate feeding it has been validated against measured output first.
      */
     private const val VIABLE_RATIO = 0.85
 

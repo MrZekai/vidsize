@@ -81,8 +81,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 28' app/build.gradle.kts
-          grep -q 'versionName = "0.9.10"' app/build.gradle.kts
+          grep -q 'versionCode = 29' app/build.gradle.kts
+          grep -q 'versionName = "0.9.11"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -866,9 +866,17 @@ jobs:
           has "$RESULT" 'ARRIVAL_GUARD_MS'
           has "$RESULT" 'enabled = interactive'
 
-          # BUG-09 - the estimate factor is recalibrated and named, not a
-          # magic literal buried in an expression.
-          has "$PLANNER" 'ENCODER_VARIANCE = 1.22'
+          # BUG-09 - the estimate factor is a named constant, not a magic
+          # literal buried in an expression.
+          #
+          # This gate pinned the literal 1.22 from v0.8.8 to v0.9.10. That was a
+          # mistake of the same family as the bug it guarded: it froze a
+          # calibration that was only ever a guess at how far VBR would overshoot,
+          # and it would have blocked the v0.9.11 fix that removed the need for
+          # it. What BUG-09 actually asked for is that the factor be named and
+          # reviewable - so that is what is pinned here, and the v0.9.11 step
+          # below range-checks the value itself.
+          has "$PLANNER" 'ENCODER_VARIANCE ='
 
           # UX - the save location is stated in-app, and a disabled level says
           # why it is disabled.
@@ -1112,11 +1120,88 @@ jobs:
 
           # --- size targets: the last correction may drop the frame ----------
           grep -q 'allowResolutionDrop' $MEDIA/CompressionPlanner.kt
-          grep -q 'allowResolutionDrop = pass == passCeiling - 1' $MEDIA/CompressionEngine.kt
+          grep -q 'allowResolutionDrop = targetBytes != null && pass == passCeiling - 1' \
+            $MEDIA/CompressionEngine.kt
           grep -q 'theLastCorrectionDropsTheFrame' $TEST/CompressionPlannerTest.kt
           grep -q 'theLastCorrectionKeepsTheFrame' $TEST/CompressionPlannerTest.kt
 
           echo 'ok: v0.9.10 output verification gates'
+
+      - name: v0.9.11 the encoder must honour the bitrate it is given
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/gate_helpers.sh
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+          TEST=app/src/test/java/com/vidsize/compressor/media
+
+          # --- WHY THIS STEP EXISTS ------------------------------------------
+          # Field report, v0.9.10: "Dengeli" was refused on three of four real
+          # videos, and the one that ran took 18.8 MB down to 17.6 MB - 7% -
+          # while the screen had estimated 11.7 MB.
+          #
+          # One cause, two symptoms. The encoder ran in the platform's default
+          # VBR mode, which treats the requested bitrate as an average and
+          # overshot it by 1.87x and 2.15x on measured clips. The planner
+          # compensated by inflating its estimate 22% (ENCODER_VARIANCE = 1.22),
+          # and VIABLE_RATIO then judged that inflated number, so ordinary
+          # sources were declared "no real saving".
+          #
+          # Each of the three gates below pins one half of the fix. Any of them
+          # silently reverting brings the field failure straight back.
+
+          # 1. CBR is requested, on the encoder settings the export actually uses.
+          grep -q 'setBitrateMode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)' \
+            $MEDIA/CompressionEngine.kt
+          grep -q 'import android.media.MediaCodecInfo' $MEDIA/CompressionEngine.kt
+
+          # 2. ENCODER_VARIANCE stays in the band CBR justifies. Above 1.10 it is
+          #    modelling an overshoot instead of a residual, which is the v0.9.9
+          #    mistake: a prediction so pessimistic the viability floor refuses
+          #    videos the app could compress well. Below 1.0 it would predict
+          #    output smaller than the bitrate asked for, which is not physical.
+          VAR="$(grep -o 'ENCODER_VARIANCE = [0-9.]*' $MEDIA/CompressionPlanner.kt \
+            | head -1 | awk '{print $3}')"
+          awk -v v="$VAR" 'BEGIN { exit !(v >= 1.0 && v <= 1.10) }' || {
+            echo "GATE FAILED: ENCODER_VARIANCE is $VAR - outside [1.0, 1.10]." >&2
+            echo "With CBR in force the residual is a few percent. A larger" >&2
+            echo "number means the estimate is padding for an overshoot that" >&2
+            echo "should have been fixed at the encoder, and VIABLE_RATIO will" >&2
+            echo "refuse presets on ordinary videos again (v0.9.10 field bug)." >&2
+            exit 1; }
+          echo "ok: ENCODER_VARIANCE = $VAR"
+
+          # 3. Presets get the measure-and-correct pass too, not just size
+          #    targets. Before v0.9.11 a preset job encoded once and shipped
+          #    whatever came out; that is how a 11.7 MB estimate became a 17.6 MB
+          #    file with no second attempt.
+          grep -q 'MAX_PRESET_PASSES' $MEDIA/CompressionEngine.kt
+          grep -q 'PRESET_OVERSHOOT_TOLERANCE' $MEDIA/CompressionEngine.kt
+          grep -q 'val passCeiling = if (targetBytes != null) MAX_TARGET_PASSES else MAX_PRESET_PASSES' \
+            $MEDIA/CompressionEngine.kt
+          grep -q 'val goalBytes = targetBytes ?: plan.estimatedOutputBytes' \
+            $MEDIA/CompressionEngine.kt
+          grep -q 'if (bestBytes <= acceptableBytes) break' $MEDIA/CompressionEngine.kt
+
+          # ...and a preset correction must never shrink the frame. The user
+          # picked a quality level; silently dropping 1080p to 480p to hit an
+          # internal estimate is not a correction, it is a different job.
+          grep -q 'allowResolutionDrop = targetBytes != null && pass == passCeiling - 1' \
+            $MEDIA/CompressionEngine.kt
+
+          # 4. The test that this fix flips back must be flipped back. v0.9.9
+          #    edited it to assert Balanced was NOT viable for the 480x854/18 MB
+          #    clip - faithful to the code, wrong about the world, and the exact
+          #    behaviour the field report complained about.
+          BLOCK="$(awk '/fun aPresetThatCannotSaveAnythingIsMarkedUnviable/,/^    }/' \
+            $TEST/CompressionPlannerTest.kt)"
+          echo "$BLOCK" | grep -q 'assertTrue("Balanced saves enough here' || {
+            echo "GATE FAILED: aPresetThatCannotSaveAnythingIsMarkedUnviable no" >&2
+            echo "longer expects Balanced to be viable. With CBR and" >&2
+            echo "ENCODER_VARIANCE = $VAR it saves ~26% on that clip, well over" >&2
+            echo "the 15% floor. Asserting otherwise re-pins the field bug." >&2
+            exit 1; }
+          echo 'ok: v0.9.11 encoder honesty gates'
 
       - name: Gate helpers must actually fail
         shell: bash
