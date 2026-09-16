@@ -160,6 +160,16 @@ object CompressionEngine {
         // still reach here.
         if (!plan.viable) throw NoCompressionSavingsException()
 
+        // The same principle, for the failure the 4K field report exposed. When
+        // the probe already established that no decoder on this device will
+        // open the source, there is nothing to attempt: the ladder varies the
+        // output frame, and the decoder's problem is the input frame. Refusing
+        // here costs the user a dialog; not refusing cost them several minutes
+        // and three identical failures.
+        if (!info.deviceCanDecode) {
+            throw SourceUndecodableException(width = info.width, height = info.height)
+        }
+
         val storage = StorageGuard.check(context, plan.estimatedOutputBytes, info.sourceBytes)
         if (!storage.hasRoom) throw OutOfSpaceException()
 
@@ -373,10 +383,33 @@ object CompressionEngine {
                 throw cancellation
             } catch (throwable: Throwable) {
                 if (throwable.looksLikeOutOfSpace()) throw throwable
-                lastFailure = throwable
+
                 // A partial file from the failed attempt must not be handed to
                 // the next one or, worse, published.
                 runCatching { output.delete() }
+
+                // Stop the ladder dead when the DECODER is what failed.
+                //
+                // Every rung below this one differs only in the output frame,
+                // and the decoder's problem is the input frame - it reads the
+                // source at 3840x2160 whether this app is writing 1920x1088 or
+                // 1280x720. The field report is exactly this: three rungs, three
+                // identical `type=VideoDecoder` failures, several minutes gone,
+                // and then a dialog telling the user their ENCODER could not
+                // manage it "even at a lower resolution".
+                //
+                // The probe normally catches this before any encode starts.
+                // This is the second line of defence, for the device that
+                // advertises a capability it does not have.
+                if (DecoderFailure.isDecoderSide(throwable)) {
+                    throw SourceUndecodableException(
+                        width = sourceWidth,
+                        height = sourceHeight,
+                        cause = throwable,
+                    )
+                }
+
+                lastFailure = throwable
                 if (index < attempts.lastIndex) {
                     onProgress?.invoke(0f)
                 }

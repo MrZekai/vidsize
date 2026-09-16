@@ -137,4 +137,8 @@
     <string name="cta_blocked_target_too_small">Ukuran itu tidak bisa dicapai untuk video ini</string>
     <string name="processing_pass">Proses %1$d dari %2$d — mendekati targetmu</string>
     <string name="result_target_missed">Tidak bisa turun di bawah %1$s. Ini ukuran terkecil yang bisa dibuat Vidsize.</string>
+    <string name="notice_undecodable_title">Video ini tidak dapat diproses</string>
+    <string name="notice_undecodable_body">Perangkatmu tidak dapat mendekode video %1$d × %2$d. Ini batas perangkat keras ponsel, bukan berkasnya — rekaman dengan resolusi lebih rendah akan terkompresi seperti biasa.</string>
+    <string name="error_source_undecodable">Dekoder video perangkatmu tidak dapat membuka video ini, jadi tidak ada yang bisa dikompresi. Tingkat lain tidak akan membantu; video beresolusi lebih rendah akan berhasil.</string>
+    <string name="player_error">Video ini tidak dapat diputar. Berkasnya mungkin rusak atau masih sedang ditulis.</string>
 </resources>

@@ -251,6 +251,22 @@ fun CompressionScreen(
     val currentInfo = info
     val blockedByStorage = storage != null && !storage.hasRoom
 
+    /**
+     * The video is readable, but this device's decoder cannot open it.
+     *
+     * The 4K field failure went the whole way through this screen before it was
+     * found out: three levels drawn, three estimates shown, a live COMPRESS
+     * button, and then minutes of encoding that could never have worked. The
+     * probe knows the answer before any of that is drawn, so the screen acts on
+     * it here - exactly like QA BUG-04, where an unreadable file still got a
+     * full set of levels and a tick on Balanced.
+     */
+    val undecodable = currentInfo != null && !currentInfo.deviceCanDecode
+
+    // Anything that blocks the whole video rather than one level. Keeps the CTA
+    // and the level list from having to restate the same two conditions.
+    val blockedEntirely = probeFailed || undecodable
+
     // Never leave the selection parked on a level that cannot run while another
     // one can. v0.8.7 defaulted to Balanced and stayed there, so a source whose
     // Balanced plan was not viable presented a disabled button with no hint that
@@ -500,6 +516,22 @@ fun CompressionScreen(
                         title = stringResource(R.string.error_unreadable_title),
                         body = stringResource(R.string.error_invalid_video),
                     )
+                } else if (undecodable && currentInfo != null) {
+                    // Named, not vague. "This device cannot open 3840x2160
+                    // video" tells the user something true about their phone
+                    // that they can act on; the old dialog told them their
+                    // encoder had failed at a lower resolution, which was false
+                    // twice over and suggested a retry that could not work.
+                    Spacer(Modifier.height(Space.md))
+                    NoticeCard(
+                        tone = NoticeTone.Blocking,
+                        title = stringResource(R.string.notice_undecodable_title),
+                        body = stringResource(
+                            R.string.notice_undecodable_body,
+                            currentInfo.width,
+                            currentInfo.height,
+                        ),
+                    )
                 } else if (currentInfo != null && !anyViable) {
                     Spacer(Modifier.height(Space.md))
                     NoticeCard(
@@ -538,7 +570,7 @@ fun CompressionScreen(
                 // offer. v0.8.7 still drew all three rows, still highlighted
                 // Balanced with a selection tick, and still showed three "—"
                 // estimates, which read as "this will work" (QA BUG-04).
-                if (!probeFailed) {
+                if (!blockedEntirely) {
                     Spacer(Modifier.height(Space.xl))
 
                     // Which question is being asked. One selector, two bodies -
@@ -636,9 +668,9 @@ fun CompressionScreen(
 
             CompressionActionBar(
                 text = stringResource(
-                    if (probeFailed) R.string.cta_select_video else R.string.cta_compress,
+                    if (blockedEntirely) R.string.cta_select_video else R.string.cta_compress,
                 ),
-                enabled = if (probeFailed) {
+                enabled = if (blockedEntirely) {
                     !processing
                 } else {
                     info != null &&
@@ -649,7 +681,7 @@ fun CompressionScreen(
                 // A button that cannot run must say so on itself rather than
                 // relying on a notice the user may never scroll to.
                 hint = when {
-                    probeFailed -> null
+                    blockedEntirely -> null
                     info == null -> null
                     processing -> null
                     // Size-target refusals come first and are specific. "Pick a
@@ -671,7 +703,7 @@ fun CompressionScreen(
                     else -> null
                 },
                 onClick = {
-                    if (probeFailed) onSelectAnother() else startCompression()
+                    if (blockedEntirely) onSelectAnother() else startCompression()
                 },
             )
         }
@@ -741,6 +773,7 @@ private fun FailureDialog(
         CompressionJobState.FailureReason.INVALID_VIDEO -> R.string.error_invalid_video
         CompressionJobState.FailureReason.NO_SAVINGS -> R.string.error_no_savings
         CompressionJobState.FailureReason.ENCODER_UNSUPPORTED -> R.string.error_encoder_unsupported
+        CompressionJobState.FailureReason.SOURCE_UNDECODABLE -> R.string.error_source_undecodable
         CompressionJobState.FailureReason.TIMEOUT -> R.string.error_timeout_body
         CompressionJobState.FailureReason.GENERIC -> R.string.error_generic
     }
@@ -752,6 +785,7 @@ private fun FailureDialog(
     // hit the same wall.
     val offerAnotherVideo = failure.reason == CompressionJobState.FailureReason.INVALID_VIDEO ||
         failure.reason == CompressionJobState.FailureReason.ENCODER_UNSUPPORTED ||
+        failure.reason == CompressionJobState.FailureReason.SOURCE_UNDECODABLE ||
         failure.reason == CompressionJobState.FailureReason.NO_SAVINGS ||
         failure.reason == CompressionJobState.FailureReason.TIMEOUT
 

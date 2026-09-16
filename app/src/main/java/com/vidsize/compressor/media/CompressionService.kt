@@ -141,6 +141,11 @@ class CompressionService : Service() {
                             CompressionJobState.FailureReason.NO_SAVINGS
                         throwable is OutOfSpaceException ->
                             CompressionJobState.FailureReason.OUT_OF_SPACE
+                        // Before EncoderUnsupportedException: a decoder failure
+                        // caught inside the ladder is rethrown as this, and it
+                        // is the more specific of the two.
+                        throwable is SourceUndecodableException ->
+                            CompressionJobState.FailureReason.SOURCE_UNDECODABLE
                         throwable is EncoderUnsupportedException ->
                             CompressionJobState.FailureReason.ENCODER_UNSUPPORTED
                         throwable.looksLikeOutOfSpace() ->

@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import com.vidsize.compressor.R
+import com.vidsize.compressor.PlayerActivity
 import com.vidsize.compressor.VidsizeApplication
 import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.data.history.CompressionHistoryEntry
@@ -102,14 +103,25 @@ fun VidsizeRoot(
     }
 }
 
+/**
+ * Opens a Recent row in Vidsize's own player.
+ *
+ * This used to build an implicit `ACTION_VIEW`, which handed the file to
+ * whichever player the device had and took the user out of the app. Two things
+ * changed with it:
+ *
+ *  - `suppressAppOpenOnReturn()` is gone. It existed only to stop an app-open
+ *    ad firing when the user came BACK from the external player. There is no
+ *    longer a return to suppress, and calling it would arm a suppression that
+ *    nothing ever clears.
+ *  - `runCatching` no longer hides a real failure. An implicit intent could
+ *    find no handler at all - on a device with no video player, tapping a
+ *    Recent row did nothing and said nothing. An explicit intent to a component
+ *    declared in this app's own manifest cannot go unresolved.
+ */
 private fun openHistoryEntry(context: Context, entry: CompressionHistoryEntry) {
     if (entry.outputUri.isBlank()) return
-    context.suppressAppOpenOnReturn()
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(Uri.parse(entry.outputUri), "video/mp4")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    runCatching { context.startActivity(intent) }
+    context.startActivity(PlayerActivity.intent(context, Uri.parse(entry.outputUri)))
 }
 
 private fun shareHistoryEntry(context: Context, entry: CompressionHistoryEntry) {

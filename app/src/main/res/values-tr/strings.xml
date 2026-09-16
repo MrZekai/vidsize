@@ -138,4 +138,8 @@
     <string name="cta_blocked_target_too_small">Bu boyut bu video için ulaşılabilir değil</string>
     <string name="processing_pass">%2$d geçişten %1$d. geçiş — hedefe yaklaşıyor</string>
     <string name="result_target_missed">%1$s altına inilemedi. Vidsize\'ın yapabildiği en küçük boyut bu.</string>
+    <string name="notice_undecodable_title">Bu video işlenemiyor</string>
+    <string name="notice_undecodable_body">Cihazın %1$d × %2$d video çözemiyor. Bu, dosyanın değil telefonun donanım sınırı — daha düşük çözünürlükte bir kayıt normal şekilde sıkışır.</string>
+    <string name="error_source_undecodable">Cihazının video çözücüsü bu videoyu açamadı, bu yüzden sıkıştırılacak bir şey olmadı. Bunu farklı bir seviye çözmez; daha düşük çözünürlüklü bir video çalışır.</string>
+    <string name="player_error">Bu video oynatılamadı. Dosya bozuk olabilir ya da hâlâ yazılıyor olabilir.</string>
 </resources>

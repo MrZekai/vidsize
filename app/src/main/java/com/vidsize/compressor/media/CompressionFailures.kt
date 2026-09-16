@@ -37,3 +37,36 @@ class EncoderUnsupportedException(
 ) : IllegalStateException(
     "Encoder refused ${width}x$height. Tried: $attempted"
 )
+
+/**
+ * This device cannot READ the source video.
+ *
+ * ## The 4K field failure this exists for
+ *
+ * A 3840x2160 source failed on a real device and the app reported it as
+ * [EncoderUnsupportedException]: "Encoder refused 1920x1080. Tried: faithful
+ * 1920x1088, 720p-default 1280x720". Every word of that was misleading. The
+ * cause chained onto it was `CodecInfo{type=VideoDecoder}` - the decoder never
+ * opened the file, and no encoder ever got a frame to refuse.
+ *
+ * The distinction is not pedantry, it changes what the app should do:
+ *
+ *  - An encoder that refuses a frame can be offered a smaller one. That is what
+ *    the fallback ladder is for, and it works.
+ *  - A decoder that cannot read the source cannot be helped by anything the
+ *    ladder varies. The source is decoded at its own resolution regardless of
+ *    the output size, so every rung fails the same way. The old behaviour spent
+ *    minutes proving that three times over.
+ *
+ * So this is thrown immediately - before the ladder when [VideoProbe] already
+ * knows the answer, and from inside it the moment a decoder-side failure is
+ * recognised. It carries the source geometry so the message can name what the
+ * device could not open.
+ */
+class SourceUndecodableException(
+    val width: Int,
+    val height: Int,
+    override val cause: Throwable? = null,
+) : IllegalStateException(
+    "Device cannot decode a ${width}x$height source."
+)

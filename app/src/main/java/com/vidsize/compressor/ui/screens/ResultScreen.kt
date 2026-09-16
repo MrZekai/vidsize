@@ -39,6 +39,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.vidsize.compressor.PlayerActivity
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.AdDiagnostics
@@ -570,22 +571,32 @@ private fun showInGallery(context: Context) {
     }
 }
 
+/**
+ * Plays the finished file in Vidsize's own player.
+ *
+ * ## What changed, and what deliberately did not
+ *
+ * This used to build an implicit `ACTION_VIEW` and hand the file to whatever
+ * player the device had. The user left the app to look at the thing the app had
+ * just made for them, and on a device with no registered video player the
+ * `runCatching` swallowed the failure and the button did nothing at all.
+ *
+ * The ad decision below is unchanged and still deliberate. The QA finding it
+ * came from is about the moment the user finishes watching: having just seen
+ * the watermark with their own eyes, that is the highest-intent moment for the
+ * rewarded offer, and meeting it with a full-screen interstitial buries the
+ * offer they came back for. That reasoning does not depend on whether the
+ * player is this app's or another's - only on what the user has just watched -
+ * so an unwatermarked result still arms the deferred interstitial and a
+ * watermarked one still does not.
+ *
+ * `deferInterstitialOnReturn` arms a check that fires when this screen is next
+ * resumed, and closing PlayerActivity resumes it, so the trade still works
+ * exactly as it did.
+ */
 private fun openVideo(context: Context, uri: Uri, watermarked: Boolean) {
-    // QA finding: coming back from the player is the single highest-intent
-    // moment for the rewarded ad - the user has just seen the mark with their
-    // own eyes. Arming the deferred interstitial here meant that return was met
-    // by a full-screen ad, and the offer they came back for was behind it.
-    //
-    // A rewarded impression is worth more than an interstitial one, so trading
-    // the interstitial away here is not a concession: it is the better half of
-    // the trade. And nothing is lost permanently - the interstitial re-arms on
-    // the next exit from this screen.
     if (!watermarked) context.deferInterstitialOnReturn()
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "video/mp4")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    runCatching { context.startActivity(intent) }
+    context.startActivity(PlayerActivity.intent(context, uri))
 }
 
 @Composable

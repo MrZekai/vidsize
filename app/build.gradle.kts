@@ -154,8 +154,8 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 29
-        versionName = "0.9.11"
+        versionCode = 30
+        versionName = "0.9.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -356,6 +356,11 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.12.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
+    // Supplies androidx.lifecycle.compose.LocalLifecycleOwner. The old
+    // androidx.compose.ui.platform.LocalLifecycleOwner was removed from
+    // compose-ui after 1.7, and this module is on 1.11.4 - the player screen
+    // needs a lifecycle owner to stop playback when the app goes to background.
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
     implementation("androidx.compose.ui:ui:1.11.4")
     implementation("androidx.compose.ui:ui-tooling-preview:1.11.4")
     implementation("androidx.compose.foundation:foundation:1.11.4")
@@ -364,6 +369,20 @@ dependencies {
     implementation("androidx.media3:media3-transformer:1.11.0")
     implementation("androidx.media3:media3-effect:1.11.0")
     implementation("androidx.media3:media3-common:1.11.0")
+
+    // Playback, for Vidsize's own player screen.
+    //
+    // Same 1.11.0 as the Transformer stack above, deliberately: Media3's modules
+    // share internal classes and are only supported in matching versions. A
+    // mismatched exoplayer/transformer pair is one of the few ways to get a
+    // NoSuchMethodError at runtime out of a build that compiled cleanly.
+    //
+    // media3-ui gives PlayerView - the classic View-based control surface. The
+    // newer Compose artifact would be a smaller dependency, but PlayerView has
+    // years of device-specific handling for surface teardown, aspect ratio and
+    // accessibility that would otherwise have to be reimplemented here.
+    implementation("androidx.media3:media3-exoplayer:1.11.0")
+    implementation("androidx.media3:media3-ui:1.11.0")
     implementation("com.google.android.gms:play-services-ads:25.4.0")
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")
     // Play In-App Review. Rating volume is the biggest Play ranking lever after

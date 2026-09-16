@@ -26,6 +26,30 @@ data class VideoInfo(
      * ceiling for these sources instead.
      */
     val usesEfficientCodec: Boolean = false,
+    /**
+     * The video track's mime type, or null when it could not be read.
+     *
+     * This is the TRACK mime from `MediaExtractor`, never the container's:
+     * `video/mp4` says nothing about whether the stream inside is AVC, HEVC or
+     * AV1, and the decoder question can only be asked about the codec.
+     */
+    val sourceMime: String? = null,
+    /**
+     * False only when this device's decoders gave a definite "cannot read this".
+     *
+     * ## Why a video can be unprocessable before anything is encoded
+     *
+     * A 4K source failed in the field with a decoder error, after the app had
+     * offered three compression levels and then spent minutes retrying three
+     * different OUTPUT sizes. No output size can help: the decoder has to read
+     * the source at its full resolution whatever the destination is.
+     *
+     * So the question is asked once, up front, and the answer travels with the
+     * video. Defaults to true - an unknown answer means the job is allowed to
+     * run, because refusing a video the device could actually have handled is a
+     * worse failure than the one this field exists to catch.
+     */
+    val deviceCanDecode: Boolean = true,
 ) {
     val durationSeconds: Double get() = durationMs / 1000.0
 }

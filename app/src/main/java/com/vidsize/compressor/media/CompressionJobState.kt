@@ -24,6 +24,22 @@ object CompressionJobState {
         ENCODER_UNSUPPORTED,
 
         /**
+         * The device's video DECODER could not open the source at all.
+         *
+         * Separate from [ENCODER_UNSUPPORTED] because it is a different fact
+         * about the device and carries different advice. An encoder that
+         * refuses a frame can be offered a smaller one; a decoder that cannot
+         * read the source cannot be helped by any output setting, so the honest
+         * message names the resolution and says a smaller-resolution source is
+         * what would work.
+         *
+         * The 4K field failure was reported as ENCODER_UNSUPPORTED and told the
+         * user their encoder had failed "even at a lower resolution", which was
+         * untrue in both halves.
+         */
+        SOURCE_UNDECODABLE,
+
+        /**
          * Android stopped the foreground service before the job finished.
          *
          * From API 35 a mediaProcessing foreground service may run for at most

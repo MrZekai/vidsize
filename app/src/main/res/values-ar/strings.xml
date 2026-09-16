@@ -142,4 +142,8 @@
     <string name="cta_blocked_target_too_small">هذا الحجم غير قابل للتحقيق لهذا الفيديو</string>
     <string name="processing_pass">المحاولة %1$d من %2$d — نقترب من هدفك</string>
     <string name="result_target_missed">تعذّر النزول تحت %1$s. هذا أصغر حجم استطاع Vidsize إنتاجه.</string>
+    <string name="notice_undecodable_title">لا يمكن معالجة هذا الفيديو</string>
+    <string name="notice_undecodable_body">جهازك لا يستطيع فك ترميز فيديو بدقة %1$d × %2$d. هذا حدّ في عتاد الهاتف وليس في الملف — تسجيل بدقة أقل سيُضغط بشكل طبيعي.</string>
+    <string name="error_source_undecodable">لم يتمكن مفكك ترميز الفيديو في جهازك من فتح هذا الفيديو، لذا لم يكن هناك ما يُضغط. اختيار مستوى آخر لن يساعد؛ فيديو بدقة أقل سينجح.</string>
+    <string name="player_error">تعذّر تشغيل هذا الفيديو. قد يكون الملف تالفًا أو لا يزال قيد الكتابة.</string>
 </resources>

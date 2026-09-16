@@ -139,4 +139,8 @@
     <string name="cta_blocked_target_too_small">Esse tamanho não é alcançável para este vídeo</string>
     <string name="processing_pass">Passagem %1$d de %2$d — chegando perto do alvo</string>
     <string name="result_target_missed">Não deu para ficar abaixo de %1$s. Este é o menor tamanho que o Vidsize conseguiu.</string>
+    <string name="notice_undecodable_title">Este vídeo não pode ser processado</string>
+    <string name="notice_undecodable_body">Seu dispositivo não consegue decodificar vídeo de %1$d × %2$d. Isso é um limite do hardware do aparelho, não do arquivo — uma gravação em resolução menor será comprimida normalmente.</string>
+    <string name="error_source_undecodable">O decodificador de vídeo do seu dispositivo não conseguiu abrir este vídeo, então não havia nada para comprimir. Outro nível não resolve; um vídeo de resolução menor vai funcionar.</string>
+    <string name="player_error">Não foi possível reproduzir este vídeo. O arquivo pode estar danificado ou ainda estar sendo gravado.</string>
 </resources>

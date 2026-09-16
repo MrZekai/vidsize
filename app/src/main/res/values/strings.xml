@@ -168,4 +168,8 @@
     <string name="cta_blocked_target_too_small">That size is not reachable for this video</string>
     <string name="processing_pass">Pass %1$d of %2$d — closing in on your target</string>
     <string name="result_target_missed">Couldn\'t get under %1$s. This is the smallest Vidsize could make it.</string>
+    <string name="notice_undecodable_title">This video can\'t be processed</string>
+    <string name="notice_undecodable_body">Your device can\'t decode %1$d × %2$d video. That is a limit of the phone\'s hardware, not of the file — a recording at a lower resolution will compress normally.</string>
+    <string name="error_source_undecodable">Your device\'s video decoder could not open this video, so there was nothing to compress. This is not something a different level would fix; a lower-resolution video will work.</string>
+    <string name="player_error">This video could not be played. The file may be damaged or still being written.</string>
 </resources>

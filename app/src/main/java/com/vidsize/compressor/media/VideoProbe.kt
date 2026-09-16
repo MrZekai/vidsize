@@ -55,6 +55,14 @@ object VideoProbe {
                 ?.use { it.statSize }
                 ?: -1L
 
+            val frameRate = readFrameRate(retriever, duration)
+
+            // One MediaExtractor pass answers both codec questions. It used to
+            // be opened solely to classify the codec as efficient or not; the
+            // decoder check needs the same track, so asking twice would be two
+            // opens of the same file for four fields.
+            val track = readVideoTrack(context, uri)
+
             VideoInfo(
                 durationMs = duration,
                 width = width,
@@ -62,8 +70,19 @@ object VideoProbe {
                 sourceBytes = bytes,
                 sourceBitrate = bitrate,
                 hasAudio = hasAudio,
-                frameRate = readFrameRate(retriever, duration),
-                usesEfficientCodec = usesEfficientCodec(context, uri),
+                frameRate = frameRate,
+                usesEfficientCodec = track?.isEfficientCodec == true,
+                sourceMime = track?.mime,
+                // Coded dimensions, not display ones: the decoder is configured
+                // with the frame as it is stored, and rotation is applied after
+                // decoding. Falling back to rawWidth/rawHeight keeps the check
+                // meaningful when the extractor could not report a size.
+                deviceCanDecode = DecoderSupport.canDecode(
+                    mime = track?.mime,
+                    width = track?.width?.takeIf { it > 0 } ?: rawWidth,
+                    height = track?.height?.takeIf { it > 0 } ?: rawHeight,
+                    frameRate = frameRate,
+                ).allowsAttempt,
             )
         } finally {
             retriever.release()
@@ -143,31 +162,56 @@ object VideoProbe {
     }
 
     /**
-     * True when the source codec is materially more efficient than the H.264
-     * Vidsize produces.
+     * The source's video track, as the stream itself describes it.
      *
      * `MediaMetadataRetriever` only exposes the *container* mime type, so the
-     * video track has to be read with `MediaExtractor`. Every failure mode -
-     * unreadable URI, DRM, an exotic container - degrades to false, which simply
-     * means the output is budgeted as if the source were already H.264.
+     * track has to be read with `MediaExtractor`. Every failure mode -
+     * unreadable URI, DRM, an exotic container - degrades to null, and each
+     * caller has its own safe reading of null: the codec is budgeted as H.264,
+     * and the decoder question goes unanswered rather than answered "no".
      */
-    private fun usesEfficientCodec(context: Context, uri: Uri): Boolean = runCatching {
+    private data class VideoTrack(
+        val mime: String,
+        val width: Int,
+        val height: Int,
+    ) {
+        /**
+         * True when the codec is materially more efficient than the H.264
+         * Vidsize produces. A 100 MB HEVC file carries more picture than a
+         * 100 MB H.264 one, so the planner raises its quality ceiling.
+         */
+        val isEfficientCodec: Boolean
+            get() = mime == MediaFormat.MIMETYPE_VIDEO_HEVC ||
+                mime == MediaFormat.MIMETYPE_VIDEO_VP9 ||
+                mime == MediaFormat.MIMETYPE_VIDEO_AV1
+    }
+
+    private fun readVideoTrack(context: Context, uri: Uri): VideoTrack? = runCatching {
         val extractor = MediaExtractor()
         try {
             extractor.setDataSource(context, uri, null)
             for (index in 0 until extractor.trackCount) {
-                val mime = extractor.getTrackFormat(index)
-                    .getString(MediaFormat.KEY_MIME)
-                    .orEmpty()
-                if (mime.startsWith("video/")) {
-                    return@runCatching mime == MediaFormat.MIMETYPE_VIDEO_HEVC ||
-                        mime == MediaFormat.MIMETYPE_VIDEO_VP9 ||
-                        mime == MediaFormat.MIMETYPE_VIDEO_AV1
-                }
+                val format = extractor.getTrackFormat(index)
+                val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
+                if (!mime.startsWith("video/")) continue
+                return@runCatching VideoTrack(
+                    mime = mime,
+                    width = readInt(format, MediaFormat.KEY_WIDTH),
+                    height = readInt(format, MediaFormat.KEY_HEIGHT),
+                )
             }
-            false
+            null
         } finally {
             extractor.release()
         }
-    }.getOrDefault(false)
+    }.getOrNull()
+
+    /**
+     * `MediaFormat.getInteger` throws when the key is absent, and a track
+     * without a declared width is a real thing on malformed files. Zero means
+     * "not reported", which every caller here already handles.
+     */
+    private fun readInt(format: MediaFormat, key: String): Int =
+        runCatching { if (format.containsKey(key)) format.getInteger(key) else 0 }
+            .getOrDefault(0)
 }

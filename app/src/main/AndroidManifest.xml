@@ -30,6 +30,22 @@
             render the one CompressionJobState the process owns, which is what
             the UI already assumed.
         -->
+        <!--
+          Vidsize's own player. exported="false": it is reachable only through
+          PlayerActivity.intent() from inside this app, never by an implicit
+          ACTION_VIEW from another app - which is the handover it exists to
+          replace.
+
+          configChanges keeps a rotation from destroying the activity and
+          restarting the video from zero, which is what a user rotating to
+          watch landscape would otherwise get.
+        -->
+        <activity
+            android:name=".PlayerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Vidsize.Player"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+
         <activity
             android:name=".MainActivity"
             android:launchMode="singleTask"
