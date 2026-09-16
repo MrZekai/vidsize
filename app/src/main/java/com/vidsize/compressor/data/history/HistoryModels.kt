@@ -57,10 +57,9 @@ interface HistoryRepository {
     /**
      * Removes every row pointing at an output file, by URI.
      *
-     * Added in v0.9.9. The watermark-free re-export deletes the marked file it
-     * replaces, and before this there was no way to take its row with it: the
-     * service knows the URI it is deleting, never the row id that was generated
-     * when the row was written.
+     * Added in v0.9.9 for replacement/repair jobs. The v0.9.13 reward flow no
+     * longer performs a result-screen replacement, but keeping this repository
+     * primitive ensures any service-side file replacement removes its row too.
      *
      * The result was one bug with three faces - a row that opened nothing, a
      * "Space saved" total inflated by every removal, and two rows a user could

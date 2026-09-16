@@ -31,7 +31,7 @@ import android.content.SharedPreferences
  * is the same protection expressed somewhere it can be retuned without a
  * release.
  *
- * Condition 3 survives only as the shared 60-second rule in [AdPacing], applied
+ * Condition 3 survives only as the shared three-minute rule in [AdPacing], applied
  * identically to every full-screen format instead of privately to this one.
  *
  * Condition 4 was never a pacing rule and stays in [AppOpenAdManager] where it
@@ -56,11 +56,11 @@ class AppOpenAdPolicy(context: Context) {
      * finished, is coming back for their video. A full-screen ad in front of the
      * result is the placement this whole model exists to prevent.
      */
-    fun shouldShow(nowMillis: Long = System.currentTimeMillis()): Boolean =
+    fun shouldShow(nowMillis: Long = AdPacing.now()): Boolean =
         AdGate.allows(loaded = true, requireIdleJob = true, nowMillis = nowMillis)
 
     /** Kept as the manager's callback name; the clock itself is shared now. */
-    fun markFullScreenShown(nowMillis: Long = System.currentTimeMillis()) {
+    fun markFullScreenShown(nowMillis: Long = AdPacing.now()) {
         AdPacing.markFullScreenShown(nowMillis)
     }
 

@@ -41,7 +41,7 @@ Both screens use the same three-part frame:
 1. **App bar** — `Vidsize` wordmark, `Video Compressor` subtitle, settings icon.
 2. **Hero card** — tinted panel: `VIDEO COMPRESSOR` pill, "Make your video
    smaller.", supporting line, Canvas illustration, full-width `SELECT VIDEO`.
-3. **Trust row** — On-device / Fast / No watermark, three equal pills.
+3. **Trust row** — On-device / Fast / No sign-up, three equal pills.
 4. **Recent** — up to three compressed videos with before → after and a −N% chip;
    an empty state row before the first compression.
 5. **Storage saved** — total saved, video count, and an 8-bar `SavingsChart`.

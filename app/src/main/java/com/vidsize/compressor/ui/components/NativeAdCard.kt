@@ -90,10 +90,9 @@ fun NativeAdCard(
     // popup over SHARE VIDEO, and nothing tappable laid out where the progress
     // dialog's Cancel button was a moment earlier.
     //
-    // v0.9.0: AdSlots.requestable also carries the rewarded ad-free window, so a
-    // user inside their ten quiet minutes gets a result screen with no ad
-    // section at all rather than one that merely skipped the full-screen
-    // formats.
+    // AdSlots.requestable carries the one shared permission decision, so a
+    // consent refusal produces a result screen with no ad section at all rather
+    // than an empty labelled slot.
     val adsAllowed = AdSlots.requestable
     if (!adsAllowed) return
     var nativeAd by remember { mutableStateOf<NativeAd?>(null) }

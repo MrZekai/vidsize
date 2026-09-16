@@ -10,7 +10,7 @@ import android.content.SharedPreferences
  *
  * Ad logic is a stack of conditions that decline silently, and every decline
  * looks identical from the outside: no ad appeared. Ads switched off at build
- * time, consent refused, an ad-free window open, the 60-second rule not yet
+ * time, consent refused, the shared full-screen interval not yet
  * satisfied, a compression still running, no fill from the network - six
  * different causes, six different fixes, one observable symptom.
  *
@@ -71,7 +71,10 @@ object AdDiagnostics {
     )
 
     fun snapshot(policy: AppOpenAdPolicy, appOpen: AppOpenAdManager): Snapshot {
-        val now = System.currentTimeMillis()
+        // Pacing timestamps are elapsed-realtime values. Comparing one with a
+        // wall-clock timestamp produced billion-second diagnostics and made the
+        // interval appear satisfied immediately after every ad.
+        val now = AdPacing.now()
         val since = AdPacing.millisSinceLastFullScreen(now)
 
         val units = listOfNotNull(

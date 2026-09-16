@@ -154,8 +154,8 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 30
-        versionName = "0.9.12"
+        versionCode = 31
+        versionName = "0.9.13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -531,23 +531,29 @@ val verifyAdUnitCoverage = tasks.register("verifyAdUnitCoverage") {
  * number could drift from the constant enforcing it - an ad-free window shorter
  * than the app claims is an AdMob policy problem, not a typo.
  *
- * v0.9.4 replaced that reward with a mark-free export, which has no duration and
- * therefore no number to drift. The failure mode moved: the risk now is a locale
- * that never got the new copy, or one that still describes a period without ads.
- * So the gate checks presence in all eight languages, and refuses any format
- * specifier - there is nothing left to interpolate, and a stray one would crash
- * at runtime rather than merely mislead.
+ * v0.9.13 presents the exchange before compression: marked output now, or one
+ * short rewarded ad for one mark-free export. Every piece of that disclosure
+ * must exist in all eight languages, and none needs a runtime format argument.
  */
 val verifyRewardCopyParity = tasks.register("verifyRewardCopyParity") {
     group = "verification"
-    description = "Fail if any locale is missing the watermark offer copy, or interpolates into it."
+    description = "Fail if any locale is missing the output-choice copy, or interpolates into it."
     val resDir = file("src/main/res")
     doLast {
         val offenders = mutableListOf<String>()
         val required = listOf(
-            "watermark_offer_title",
-            "watermark_offer_body",
-            "watermark_offer_action",
+            "watermark_choice_title",
+            "watermark_choice_body",
+            "watermark_with_mark_title",
+            "watermark_with_mark_body",
+            "watermark_with_mark_badge",
+            "watermark_free_card_title",
+            "watermark_free_card_body",
+            "watermark_free_card_badge",
+            "watermark_free_unavailable",
+            "watermark_reward_not_earned",
+            "watermark_reward_granted_title",
+            "watermark_reward_granted_body",
         )
         resDir.listFiles()
             ?.filter { it.isDirectory && it.name.startsWith("values") }

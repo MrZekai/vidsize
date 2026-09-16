@@ -75,7 +75,7 @@
     <string name="settings_privacy_title">Privasi</string>
     <string name="settings_privacy_body">Videomu dikompres di perangkat ini. Tidak ada yang diunggah ke server.</string>
     <string name="settings_ads_title">Iklan</string>
-    <string name="settings_ads_body">Vidsize gratis dan didukung iklan: satu banner, satu iklan di layar hasil, satu saat aplikasi dibuka, dan satu setelah kompresi. Hasil gratis membawa tanda kecil Vidsize; tonton video iklan singkat agar video dibuat ulang tanpa tanda itu.</string>
+    <string name="settings_ads_body">Vidsize gratis dan didukung iklan. Sebelum kompresi, pilih tanda kecil Vidsize atau tonton satu iklan berhadiah singkat untuk satu hasil tanpa tanda. Banner, iklan hasil, iklan saat aplikasi dibuka, dan iklan layar penuh sesekali juga dapat muncul.</string>
     <string name="settings_legal_section">HUKUM</string>
     <string name="settings_privacy_policy">Kebijakan Privasi</string>
     <string name="settings_terms">Ketentuan Penggunaan</string>
@@ -96,7 +96,7 @@
     <string name="notification_done_title">Video siap</string>
     <string name="notification_done_body">Video terkompresimu disimpan di Movies/Vidsize.</string>
     <string name="ad_badge">Iklan</string>
-    <string name="result_show_in_gallery">Buka Galeri</string>
+    <string name="result_show_in_gallery">Tampilkan di Galeri</string>
     <string name="preset_not_viable">Tidak ada penghematan</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -109,15 +109,19 @@
     <string name="cta_pick_another">Pilih video lain</string>
     <string name="preset_not_viable_hint">Video ini sudah cukup kecil untuk tingkat ini.</string>
     <string name="result_recent_hint">Kamu bisa membuka video ini lagi kapan saja dari Terbaru di layar utama.</string>
-    <string name="watermark_offer_title">Hapus tanda Vidsize</string>
-    <string name="watermark_offer_body">Tonton video iklan singkat, lalu video dibuat ulang tanpa tanda. Lamanya kira-kira sama dengan proses pertama.</string>
-    <string name="watermark_offer_action">Tonton video iklan singkat</string>
-    <string name="watermark_free_unavailable">Iklan tidak dapat dimuat. Videomu dibuat dengan tanda — kamu bisa mencoba lagi dari layar hasil.</string>
+    <string name="watermark_choice_title">Pilih hasilmu</string>
+    <string name="watermark_choice_body">Bagaimana Vidsize membuat video ini?</string>
+    <string name="watermark_with_mark_title">Dengan tanda Vidsize</string>
+    <string name="watermark_with_mark_body">Mulai sekarang dengan tanda kecil Vidsize di sudut.</string>
+    <string name="watermark_with_mark_badge">MULAI SEKARANG</string>
+    <string name="watermark_free_unavailable">Iklan tidak dapat dimuat. Kompresi belum dimulai; lanjutkan dengan tanda atau coba lagi.</string>
     <string name="watermark_free_card_title">Simpan tanpa tanda Vidsize</string>
-    <string name="watermark_free_card_body">Video gratis membawa tanda Vidsize kecil di sudut.</string>
+    <string name="watermark_free_card_body">Tonton satu iklan berhadiah singkat. Kompresi tanpa tanda dimulai setelah hadiah dikonfirmasi.</string>
     <string name="watermark_free_card_badge">1 IKLAN SINGKAT</string>
-    <string name="watermark_free_card_action">Buat tanpa tanda</string>
     <string name="watermark_free_card_waiting">Menyiapkan iklan…</string>
+    <string name="watermark_reward_not_earned">Hadiah tidak diperoleh. Kompresi belum dimulai.</string>
+    <string name="watermark_reward_granted_title">Hadiah diperoleh</string>
+    <string name="watermark_reward_granted_body">Kompresi tanpa tanda sedang dimulai.</string>
     <string name="cta_blocked_already_efficient">Video ini sudah terkompresi dengan baik. Coba Lebih kecil atau Terkecil.</string>
     <string name="mode_level">Tingkat</string>
     <string name="mode_size">Ukuran target</string>

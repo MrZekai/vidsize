@@ -32,7 +32,7 @@ fun Context.suppressAppOpenOnReturn() {
  * Exists as one function rather than two calls because the two must always
  * travel together. Suppressing without deferring gives away the impression;
  * deferring without suppressing lets the app-open ad land first, which then
- * blocks the interstitial for sixty seconds and reads to a tester as "the
+ * blocks the interstitial for three minutes and reads to a tester as "the
  * deferred ad does not work". Making it a single call is what stops a future
  * hand from reintroducing that asymmetry at a new exit point.
  *
@@ -41,9 +41,9 @@ fun Context.suppressAppOpenOnReturn() {
  * the media picker on the way in - where no work has been completed and an ad
  * would interrupt a task rather than punctuate one.
  */
-fun Context.deferInterstitialOnReturn() {
+fun Context.deferInterstitialOnReturn(outputToken: String) {
     suppressAppOpenOnReturn()
-    InterstitialAds.markPending(this)
+    InterstitialAds.markPending(this, outputToken)
 }
 
 /** Unwraps the Activity a Compose tree is hosted in, for full-screen ads. */

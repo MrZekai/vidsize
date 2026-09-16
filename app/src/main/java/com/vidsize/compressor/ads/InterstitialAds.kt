@@ -23,24 +23,28 @@ import java.util.Calendar
  *
  * When a Vidsize compression finishes, the result screen offers Share, Show in
  * Gallery, Open Video and Compress Another. The obvious wiring is: "Compress
- * another" shows an ad, and the three actions that leave the app cancel it,
+ * another" shows an ad, and the external actions cancel it,
  * because an ad would interrupt the user on their way to the file.
  *
  * That wiring earns almost nothing. Practically everyone who just produced a
  * smaller video wants to *do something with it* - that is why they compressed
- * it. So the three cancelling paths are the common ones, the ad path is the rare
+ * it. So the cancelling paths are the common ones, the ad path is the rare
  * one, and most of the format's revenue disappears into a design that looks
  * considerate on paper.
  *
  * The correct move is not to cancel but to **defer**:
  *
  *  - "Compress another" - a plain transition back to Home - shows the ad now.
- *  - Share / Show in Gallery / Open Video - the user is leaving for content they
+ *  - Share / Show in Gallery - the user is leaving for content they
  *    asked for - [markPending]; the ad appears when they come back, not between
  *    them and their video.
+ *  - Open Video stays inside Vidsize and deliberately remains ad-free.
  *
- * Both halves respect the same 60-second promise in [AdPacing], so a deferred
+ * Both halves respect the same three-minute promise in [AdPacing], so a deferred
  * ad that lands right after an app-open ad is skipped rather than stacked.
+ * A finished output can also pay for at most one interstitial. Sharing, then
+ * opening the same file in Gallery, must not turn one compression into two
+ * full-screen impressions.
  *
  * ## Preloading is free here, unlike in most apps
  *
@@ -82,6 +86,12 @@ object InterstitialAds {
     var pending: Boolean by mutableStateOf(false)
         private set
 
+    /** Output identity carried across an external Share/Gallery round trip. */
+    private var pendingOutputToken: String? = null
+
+    /** Process-local placement guard: one interstitial per finished output. */
+    private var lastShownOutputToken: String? = null
+
     var shownThisSession: Int by mutableIntStateOf(0)
         private set
 
@@ -104,7 +114,7 @@ object InterstitialAds {
      */
     fun preload(context: Context) {
         if (!AdSlots.requestable) {
-            // An ad-free window or a consent refusal should not leave a stale
+            // A consent refusal should not leave a stale
             // creative sitting in memory waiting for the window to lapse.
             discard()
             return
@@ -137,21 +147,28 @@ object InterstitialAds {
      * Mark that an ad is owed on the user's return.
      *
      * Always paired with [Context.suppressAppOpenOnReturn] at the call site -
-     * the same five places already suppressed the app-open ad, because they are
-     * the same five places where the user is deliberately stepping out. Without
+     * the same external exits already suppress the app-open ad, because they are
+     * where the user is deliberately stepping out. Without
      * that pairing the user would meet an app-open ad on the way back in and the
-     * interstitial would then be refused by the 60-second rule, which reads to a
+     * interstitial would then be refused by the shared interval, which reads to a
      * tester as "the deferred ad is broken".
      */
-    fun markPending(context: Context) {
+    fun markPending(context: Context, outputToken: String) {
         if (!AdSlots.requestable) return
+        if (outputToken == lastShownOutputToken) {
+            pending = false
+            pendingOutputToken = null
+            return
+        }
         pending = true
+        pendingOutputToken = outputToken
         context.suppressAppOpenOnReturn()
         preload(context)
     }
 
     fun clearPending() {
         pending = false
+        pendingOutputToken = null
     }
 
     /**
@@ -159,14 +176,15 @@ object InterstitialAds {
      *
      * @return true if a creative was actually presented.
      */
-    fun showNow(activity: Activity): Boolean {
+    fun showNow(activity: Activity, outputToken: String): Boolean {
+        if (outputToken == lastShownOutputToken) return false
         val verdict = AdGate.evaluate(loaded = ad != null)
         lastVerdict = verdict
         if (verdict != AdGate.Verdict.ALLOWED) {
             preload(activity)
             return false
         }
-        return present(activity)
+        return present(activity, outputToken)
     }
 
     /**
@@ -182,6 +200,9 @@ object InterstitialAds {
     fun showPendingIfAny(activity: Activity): Boolean {
         if (!pending) return false
         pending = false
+        val outputToken = pendingOutputToken
+        pendingOutputToken = null
+        if (outputToken == null || outputToken == lastShownOutputToken) return false
 
         val verdict = AdGate.evaluate(loaded = ad != null)
         lastVerdict = verdict
@@ -189,17 +210,18 @@ object InterstitialAds {
             preload(activity)
             return false
         }
-        return present(activity)
+        return present(activity, outputToken)
     }
 
-    private fun present(activity: Activity): Boolean {
+    private fun present(activity: Activity, outputToken: String): Boolean {
         val creative = ad ?: return false
 
         creative.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdShowedFullScreenContent() {
                 // Marked here, not at the decision, so an ad that failed to
-                // present never consumes the next minute of eligibility.
+                // present never consumes the next pacing window.
                 AdPacing.markFullScreenShown()
+                lastShownOutputToken = outputToken
                 shownThisSession += 1
                 recordShownToday()
             }

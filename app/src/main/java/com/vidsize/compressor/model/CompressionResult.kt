@@ -5,14 +5,13 @@ import android.net.Uri
 /**
  * @param sourceUri the video this output was made from.
  *
- *        Kept because the watermark-free re-export has to start from the
- *        ORIGINAL, never from the marked output: re-encoding an encode
- *        compounds the loss, and the mark is burned into the pixels, so a
- *        second pass over the output could not remove it anyway.
+ *        Kept as provenance for the completed job and for any future retry or
+ *        history repair. The v0.9.13 reward flow chooses the output before the
+ *        first encode and never uses this field for a result-screen re-encode.
  *
  * @param watermarked whether this file carries the Vidsize mark. This is what
- *        the result screen reads to decide whether to offer the rewarded
- *        removal, so it is a property of the FILE, not of the app's state.
+ *        completion flow reads to decide whether an earned mark-free grant was
+ *        delivered, so it is a property of the FILE, not of the app's state.
  */
 data class CompressionResult(
     val outputUri: Uri,

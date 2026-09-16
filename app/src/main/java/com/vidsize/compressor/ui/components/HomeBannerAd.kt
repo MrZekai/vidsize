@@ -101,10 +101,9 @@ private fun FixedBannerAd(
     // v0.9.0: this used to spell the condition out itself - `AdSlots.enabled`,
     // then two separate ConsentManager checks - while the App Open manager and
     // the native loader went through AdSlots.requestable. That divergence is
-    // precisely what would have let a rewarded "ten minutes with no ads" window
-    // silence the full-screen formats and leave this banner running, making the
-    // app's own copy false. The ad-free window is now inside `requestable`, so
-    // the promise is kept here for free.
+    // precisely what used to let one format disagree with the others about
+    // whether ads were permitted. Every automatic ad surface now reads
+    // `requestable`, so consent and build configuration stay consistent.
     if (!inspecting && !AdSlots.requestable) return
 
     // No fill and no id are the same thing to the layout: emit nothing rather

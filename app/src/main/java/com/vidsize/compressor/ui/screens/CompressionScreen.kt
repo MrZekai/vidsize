@@ -73,13 +73,16 @@ import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HairLine
 import androidx.compose.runtime.rememberCoroutineScope
 import com.vidsize.compressor.ads.AdDiagnostics
+import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.RewardedAds
 import com.vidsize.compressor.ads.WatermarkOffer
 import com.vidsize.compressor.ads.findHostActivity
-import com.vidsize.compressor.ui.components.WatermarkFreeCard
 import com.vidsize.compressor.ui.components.IconAction
+import com.vidsize.compressor.ui.components.OutputChoiceDialog
 import com.vidsize.compressor.ui.components.PrimaryButton
+import com.vidsize.compressor.ui.components.RewardGrantedDialog
+import com.vidsize.compressor.ui.components.RewardedChoiceMessage
 import com.vidsize.compressor.ui.components.SectionHeader
 import com.vidsize.compressor.ui.components.TintedPill
 import com.vidsize.compressor.ui.format.Fmt
@@ -111,12 +114,11 @@ import kotlinx.coroutines.withContext
  * "compression didn't finish" error.
  */
 /**
- * How long the mark-free row waits for a rewarded ad that is not yet in hand.
+ * How long the mark-free choice waits for a rewarded ad that is not yet in hand.
  *
  * Long enough for a normal fill on a normal connection, short enough that the
- * user does not read it as a hang. Past it the app says so and starts the free
- * export - the result screen still carries the offer, so nothing is lost but
- * one encode.
+ * user does not read it as a hang. Past it the chooser stays open and tells the
+ * truth: no export starts until the user chooses the marked route or retries.
  */
 private const val REWARDED_WAIT_MILLIS = 5_000L
 
@@ -177,7 +179,11 @@ fun CompressionScreen(
     var pendingTarget by remember(videoUri) { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
     var awaitingRewarded by remember(videoUri) { mutableStateOf(false) }
-    var rewardedUnavailable by remember(videoUri) { mutableStateOf(false) }
+    var showOutputChoice by remember(videoUri) { mutableStateOf(false) }
+    var rewardedMessage by remember(videoUri) {
+        mutableStateOf<RewardedChoiceMessage?>(null)
+    }
+    var rewardConfirmed by remember(videoUri) { mutableStateOf(false) }
 
     // Which question the user is answering: "how much quality am I giving up?"
     // or "what size does this have to be under?".
@@ -298,9 +304,12 @@ fun CompressionScreen(
     // waiting on this request.
     LaunchedEffect(videoUri) {
         InterstitialAds.preload(context)
+        RewardedAds.preload(context)
     }
 
     fun startCompression(watermark: Boolean = true) {
+        showOutputChoice = false
+        rewardedMessage = null
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
@@ -330,21 +339,23 @@ fun CompressionScreen(
      * The mark-free path: one rewarded ad, then ONE encode with no mark.
      *
      * The ad may not be in hand at the moment of the tap. Rather than refusing
-     * or hiding the option - both of which make it look broken - the row waits,
-     * briefly and visibly, and then tells the truth and gets on with the job the
-     * user actually came for. A marked file plus an honest sentence is a better
-     * outcome than a dead control.
+     * or hiding the option - both of which make it look broken - the chooser
+     * waits briefly and visibly. If no creative arrives, no export is silently
+     * substituted: the chooser says so and lets the user retry or explicitly
+     * choose the marked route.
      */
     fun startWithoutWatermark() {
         // A grant already in hand is one the user paid for and did not receive -
         // a previous mark-free export that failed. Charging them a second ad for
         // the same reward would be taking payment twice.
         if (WatermarkOffer.granted) {
-            startCompression(watermark = false)
+            showOutputChoice = false
+            rewardedMessage = null
+            rewardConfirmed = true
             return
         }
         val activity = context.findHostActivity() ?: run {
-            startCompression(watermark = true)
+            rewardedMessage = RewardedChoiceMessage.UNAVAILABLE
             return
         }
         awaitingRewarded = true
@@ -356,18 +367,40 @@ fun CompressionScreen(
             } == true
             awaitingRewarded = false
             if (!ready) {
-                // Not an error and not silent: the user asked for something the
-                // network could not supply, and the result screen still carries
-                // the offer, so say so and start the free export.
-                rewardedUnavailable = true
-                startCompression(watermark = true)
+                rewardedMessage = RewardedChoiceMessage.UNAVAILABLE
                 return@launch
             }
-            // RewardedAds grants from the SDK's own reward callback; this
-            // starts the export the grant paid for. The grant is NOT consumed
-            // here - see the completion effect below.
-            RewardedAds.show(activity) { startCompression(watermark = false) }
+            // The SDK grants while the creative is playing, but the app does
+            // not change screens underneath it. RewardedAds calls this only
+            // after the earned creative has closed.
+            val shown = RewardedAds.show(
+                activity = activity,
+                onRewardGranted = {
+                    awaitingRewarded = false
+                    showOutputChoice = false
+                    rewardedMessage = null
+                    rewardConfirmed = true
+                },
+                onClosedWithoutReward = {
+                    awaitingRewarded = false
+                    rewardedMessage = RewardedChoiceMessage.NOT_EARNED
+                },
+            )
+            if (!shown) {
+                awaitingRewarded = false
+                rewardedMessage = RewardedChoiceMessage.UNAVAILABLE
+            }
         }
+    }
+
+    // Make the exchange visible: reward confirmation appears after the ad is
+    // dismissed, then the single clean encode begins. Starting behind the ad
+    // made it impossible for the user to know whether their reward was earned.
+    LaunchedEffect(rewardConfirmed) {
+        if (!rewardConfirmed) return@LaunchedEffect
+        delay(900L)
+        rewardConfirmed = false
+        startCompression(watermark = false)
     }
 
     // The grant is spent HERE, by the export that actually delivered.
@@ -408,7 +441,9 @@ fun CompressionScreen(
             // non-idle, so the reverse order would be declined every time.
             onBack = {
                 CompressionJobState.reset()
-                context.findHostActivity()?.let(InterstitialAds::showNow)
+                context.findHostActivity()?.let { activity ->
+                    InterstitialAds.showNow(activity, finished.outputUri.toString())
+                }
             },
             // The system back gesture: same navigation, no ad. Answering a
             // platform gesture with a full-screen ad is the one placement in
@@ -425,7 +460,9 @@ fun CompressionScreen(
                 // on every single attempt - the kind of bug that looks like no
                 // fill and takes a week to find.
                 CompressionJobState.reset()
-                context.findHostActivity()?.let(InterstitialAds::showNow)
+                context.findHostActivity()?.let { activity ->
+                    InterstitialAds.showNow(activity, finished.outputUri.toString())
+                }
                 onBack()
             },
         )
@@ -468,17 +505,17 @@ fun CompressionScreen(
             // screen, and it had run out of room:
             //
             // Measured on a 393x873dp device, the fixed chrome - banner 50dp,
-            // divider and spacing 9dp, mark-free card ~160dp, action bar ~73dp -
+            // divider and spacing 9dp, old mark-free card ~160dp, action bar ~73dp -
             // left a ~366dp window for ~510dp of content. The third compression
             // level was never on screen, and the second one's estimate was cut
             // in half. The user could not see what they were choosing between.
             //
-            // Two things paid that back: the mark-free card moved into the
-            // scrolling column below, and this banner went. A banner shown while
+            // The old card is now an on-demand output chooser after the CTA,
+            // and this banner is gone. A banner shown while
             // someone is comparing three options is also the banner most likely
             // to be hit by accident on a scroll, and the app still carries four
-            // other placements - home banner, result native, interstitial and
-            // app-open - so the inventory lost here is the least valuable of
+            // other placements - Home/Result native, rewarded, interstitial and
+            // optional app-open - so the inventory lost here is the least valuable of
             // them. Space on this screen is worth more than one impression.
 
             Column(
@@ -614,41 +651,6 @@ fun CompressionScreen(
                         color = VidsizeColor.Faint,
                     )
 
-                    // The mark-free card, INSIDE the scroll now.
-                    //
-                    // v0.9.7 pinned it above the action bar, and the card is
-                    // ~160dp: on a 393x873dp device that left ~366dp for ~510dp
-                    // of content, so the third compression level was never on
-                    // screen. The choice the user came here to make was hidden
-                    // by the offer attached to it.
-                    //
-                    // The card was right to be a card - as a caption line under
-                    // the button it read as a disclaimer - and it is unchanged.
-                    // What moved is where it is anchored. Scrolled to the
-                    // bottom, which is where a user is when they are about to
-                    // tap COMPRESS, it still sits directly above the action bar
-                    // and reads exactly as it did. Scrolled to the top, it is
-                    // out of the way of the levels.
-                    WatermarkFreeCard(
-                        enabled = info != null &&
-                            !processing &&
-                            selectedPlan?.viable == true &&
-                            storage?.hasRoom != false,
-                        waiting = awaitingRewarded,
-                        onChoose = { startWithoutWatermark() },
-                        modifier = Modifier.padding(top = Space.lg),
-                    )
-                    if (rewardedUnavailable) {
-                        Text(
-                            text = stringResource(R.string.watermark_free_unavailable),
-                            style = VidsizeType.caption,
-                            color = VidsizeColor.Muted,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = Space.xxs),
-                        )
-                    }
                 }
 
                 Spacer(Modifier.height(Space.xl))
@@ -691,9 +693,38 @@ fun CompressionScreen(
                     else -> null
                 },
                 onClick = {
-                    if (blockedEntirely) onSelectAnother() else startCompression()
+                    if (blockedEntirely) {
+                        onSelectAnother()
+                    } else {
+                        rewardedMessage = if (
+                            !WatermarkOffer.granted && !AdSlots.rewardedRequestable
+                        ) {
+                            RewardedChoiceMessage.UNAVAILABLE
+                        } else {
+                            null
+                        }
+                        showOutputChoice = true
+                    }
                 },
             )
+        }
+
+        if (showOutputChoice && !processing) {
+            OutputChoiceDialog(
+                waitingForAd = awaitingRewarded,
+                markFreeEnabled = WatermarkOffer.granted || AdSlots.rewardedRequestable,
+                message = rewardedMessage,
+                onWithMark = { startCompression(watermark = true) },
+                onWithoutMark = { startWithoutWatermark() },
+                onDismiss = {
+                    showOutputChoice = false
+                    rewardedMessage = null
+                },
+            )
+        }
+
+        if (rewardConfirmed && !processing) {
+            RewardGrantedDialog()
         }
 
         // ONE call site. Two branches of an if/else put this composable in two

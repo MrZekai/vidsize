@@ -75,7 +75,7 @@
     <string name="settings_privacy_title">الخصوصية</string>
     <string name="settings_privacy_body">تُضغط مقاطعك على هذا الجهاز. لا يُرفع أي شيء إلى أي خادم.</string>
     <string name="settings_ads_title">الإعلانات</string>
-    <string name="settings_ads_body">تطبيق Vidsize مجاني ومدعوم بالإعلانات: لافتة، وإعلان في شاشة النتيجة، وإعلان عند فتح التطبيق، وآخر بعد الضغط. تحمل الملفات المجانية علامة Vidsize صغيرة؛ شاهد فيديو إعلانيًا قصيرًا لإعادة إنشاء الفيديو بدونها.</string>
+    <string name="settings_ads_body">تطبيق Vidsize مجاني ومدعوم بالإعلانات. قبل الضغط، اختر علامة Vidsize صغيرة أو شاهد إعلان مكافأة قصيرًا للحصول على نسخة واحدة بلا علامة. قد تظهر أيضًا لافتات وإعلانات في النتيجة وعند فتح التطبيق وإعلانات انتقالية متباعدة.</string>
     <string name="settings_legal_section">قانوني</string>
     <string name="settings_privacy_policy">سياسة الخصوصية</string>
     <string name="settings_terms">شروط الاستخدام</string>
@@ -101,7 +101,7 @@
     <string name="notification_done_title">الفيديو جاهز</string>
     <string name="notification_done_body">تم حفظ الفيديو المضغوط في Movies/Vidsize.</string>
     <string name="ad_badge">إعلان</string>
-    <string name="result_show_in_gallery">فتح المعرض</string>
+    <string name="result_show_in_gallery">إظهار في المعرض</string>
     <string name="preset_not_viable">لا يوجد توفير فعلي</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -114,15 +114,19 @@
     <string name="cta_pick_another">اختيار فيديو آخر</string>
     <string name="preset_not_viable_hint">هذا الفيديو صغير بما يكفي لهذا المستوى بالفعل.</string>
     <string name="result_recent_hint">يمكنك إعادة فتح هذا الفيديو في أي وقت من قسم "الأخيرة" في الشاشة الرئيسية.</string>
-    <string name="watermark_offer_title">إزالة علامة Vidsize</string>
-    <string name="watermark_offer_body">شاهد فيديو إعلانيًا قصيرًا وسيُنشأ الفيديو من جديد بدون العلامة. يستغرق وقتًا مماثلًا للمرة الأولى.</string>
-    <string name="watermark_offer_action">مشاهدة فيديو إعلاني قصير</string>
-    <string name="watermark_free_unavailable">تعذّر تحميل الإعلان. يجري إنشاء الفيديو مع العلامة — يمكنك المحاولة مجددًا من شاشة النتيجة.</string>
+    <string name="watermark_choice_title">اختر نسختك</string>
+    <string name="watermark_choice_body">كيف تريد أن ينشئ Vidsize هذا الفيديو؟</string>
+    <string name="watermark_with_mark_title">مع علامة Vidsize</string>
+    <string name="watermark_with_mark_body">ابدأ الآن مع علامة Vidsize صغيرة في الزاوية.</string>
+    <string name="watermark_with_mark_badge">ابدأ الآن</string>
+    <string name="watermark_free_unavailable">تعذّر تحميل الإعلان. لم يبدأ الضغط؛ تابع مع العلامة أو حاول مجددًا.</string>
     <string name="watermark_free_card_title">الحفظ بدون علامة Vidsize</string>
-    <string name="watermark_free_card_body">تحمل الفيديوهات المجانية علامة Vidsize صغيرة في الزاوية.</string>
+    <string name="watermark_free_card_body">شاهد إعلان مكافأة قصيرًا. يبدأ الضغط بلا علامة بعد تأكيد المكافأة.</string>
     <string name="watermark_free_card_badge">إعلان قصير واحد</string>
-    <string name="watermark_free_card_action">إنشاء بدون العلامة</string>
     <string name="watermark_free_card_waiting">جارٍ تحضير الإعلان…</string>
+    <string name="watermark_reward_not_earned">لم تحصل على المكافأة. لم يبدأ الضغط.</string>
+    <string name="watermark_reward_granted_title">تم الحصول على المكافأة</string>
+    <string name="watermark_reward_granted_body">يبدأ الآن الضغط بلا علامة.</string>
     <string name="cta_blocked_already_efficient">هذا الفيديو مضغوط جيدًا بالفعل. جرّب أصغر أو الأصغر.</string>
     <string name="mode_level">المستوى</string>
     <string name="mode_size">الحجم المستهدف</string>

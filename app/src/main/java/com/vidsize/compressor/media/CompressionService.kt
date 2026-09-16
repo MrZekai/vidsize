@@ -80,8 +80,8 @@ class CompressionService : Service() {
         // Marked unless the caller says otherwise: a missing extra must never
         // silently produce a free unmarked export.
         val watermark = intent?.getBooleanExtra(EXTRA_WATERMARK, true) ?: true
-        // Set only by the watermark-free re-export, and only ever to the file
-        // that re-export replaces.
+        // Optional service-level replacement hook. The v0.9.13 UI does not use
+        // it for rewarded output: that route chooses mark-free before encoding.
         val replacing = intent?.getStringExtra(EXTRA_REPLACE_URI)?.let(Uri::parse)
         // Zero means "no target": an absent extra and an explicitly useless
         // target land in the same place rather than reaching the planner, which
@@ -226,16 +226,7 @@ class CompressionService : Service() {
     // -- notification ---------------------------------------------------------
 
     /**
-     * Removes the file the watermark-free export just superseded.
-     *
-     * Vidsize created this row, so it owns it and the delete needs no extra
-     * permission. Failure is swallowed on purpose: the user now has the file
-     * they asked for, and an undeleted predecessor is a tidiness problem, not a
-     * reason to report the successful export as failed. The Home list prunes
-     * rows whose files are gone on its next refresh either way.
-     */
-    /**
-     * Removes the file a re-export replaces, AND its history row.
+     * Removes the file an explicit replacement job supersedes, AND its row.
      *
      * ## The bug this signature fixes
      *
@@ -415,9 +406,9 @@ class CompressionService : Service() {
          *        export. The default is the paying-nothing case, so a caller
          *        that forgets the argument produces a marked file rather than
          *        giving the reward away.
-         * @param replacing the previous, marked output to delete once the new
-         *        one is published. Passing it is what makes the re-export a
-         *        REPLACEMENT rather than a second copy in the user's gallery.
+         * @param replacing an older app-owned output to delete only after the
+         *        new one is published. The current rewarded UI never passes it;
+         *        mark-free output is selected before the first encode.
          */
         fun start(
             context: Context,

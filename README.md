@@ -11,9 +11,10 @@ The V1 flow is:
 1. Select a video.
 2. Choose a compression profile: **Balanced / Smaller / Smallest**.
 3. Preview an estimated output size.
-4. Compress locally on the device.
-5. Show a positive success/result screen with the real before/after size.
-6. Share, open, or compress another video.
+4. Choose marked output now, or one rewarded ad for one mark-free output.
+5. Compress locally on the device.
+6. Show a positive success/result screen with the real before/after size.
+7. Share, show the exact output in Gallery, open it in-app, or compress another video.
 
 The final output size is determined by the source video, its duration, resolution, bitrate, codec support and the selected quality profile.
 
@@ -21,15 +22,16 @@ The final output size is determined by the source video, its duration, resolutio
 
 - Free app
 - AdMob is a primary revenue pillar
-- Home: banner/adaptive banner
-- Result: 300×250 Medium Rectangle (MREC) ad below the successful compression result
-- App Open ad: required, with conservative first-session/cooldown rules
+- Home and Result: labelled native ads after core content
+- Interstitial: only after a finished job, with a shared three-minute full-screen interval
+- Rewarded: optional, one short ad for one mark-free export
+- App Open: optional unit, never in front of active work or an unseen result
 - No Pro tier in V1
 - No subscription
 - No account
 - No backend
 - No paid API
-- No watermark
+- Small Vidsize mark on the ordinary route; rewarded mark-free option before compression
 
 The 300×250 MREC is an AdMob banner size. Depending on inventory, its creative can be image or video; Vidsize does not assume every MREC impression will be a video creative.
 

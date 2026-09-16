@@ -6,7 +6,7 @@ import android.os.SystemClock
 
 /**
  * The one and only pacing rule that lives in Vidsize's code: two full-screen ads
- * never arrive within sixty seconds of each other.
+ * never arrive within three minutes of each other.
  *
  * ## What this replaces
  *
@@ -20,7 +20,7 @@ import android.os.SystemClock
  * Three of those four are gone. The rule for keeping one is simple:
  *
  *  - A condition that is a PROMISE to the user stays in code. Since v0.9.4
- *    there is exactly one: this 60-second gap, which says two full-screen ads
+ *    there is exactly one: this three-minute gap, which says two full-screen ads
  *    never arrive together. The other promise moved out of the ad path
  *    entirely - a rewarded ad now buys a mark-free export ([WatermarkOffer]),
  *    which is a property of the file rather than a rule about ad frequency.
@@ -45,7 +45,7 @@ import android.os.SystemClock
 object AdPacing {
 
     /** The promise: no two full-screen ads inside this window. */
-    const val FULL_SCREEN_GAP_MILLIS: Long = 60L * 1000L
+    const val FULL_SCREEN_GAP_MILLIS: Long = FullScreenPacingPolicy.GAP_MILLIS
 
     internal const val FILE_NAME = "vidsize_ads"
 
@@ -61,7 +61,7 @@ object AdPacing {
      * Called from `onAdShowedFullScreenContent` for every full-screen format.
      *
      * Deliberately not called at request time or at "we decided to show" time:
-     * an ad that failed to present must not consume the next minute of
+     * an ad that failed to present must not consume the next pacing window of
      * eligibility.
      */
     /** Monotonic, user-proof, and the only clock this file reads. */
@@ -74,22 +74,15 @@ object AdPacing {
     fun lastFullScreenMillis(): Long = prefs?.getLong(KEY_LAST_FULL_SCREEN, 0L) ?: 0L
 
     fun millisSinceLastFullScreen(nowMillis: Long = now()): Long {
-        val last = lastFullScreenMillis()
-        if (last <= 0L) return Long.MAX_VALUE
-        // A stored value ahead of the current uptime is from a previous boot.
-        // Treat it as "nothing shown this boot" rather than as a future event.
-        if (last > nowMillis) return Long.MAX_VALUE
-        return nowMillis - last
+        return FullScreenPacingPolicy.elapsed(lastFullScreenMillis(), nowMillis)
     }
 
     fun canShowFullScreen(nowMillis: Long = now()): Boolean =
-        millisSinceLastFullScreen(nowMillis) >= FULL_SCREEN_GAP_MILLIS
+        FullScreenPacingPolicy.canShow(lastFullScreenMillis(), nowMillis)
 
     /** Seconds still to wait, for the diagnostics screen's verdict line. */
     fun secondsUntilAllowed(nowMillis: Long = now()): Long {
-        val elapsed = millisSinceLastFullScreen(nowMillis)
-        if (elapsed >= FULL_SCREEN_GAP_MILLIS) return 0L
-        return (FULL_SCREEN_GAP_MILLIS - elapsed + 999L) / 1000L
+        return FullScreenPacingPolicy.secondsUntilAllowed(lastFullScreenMillis(), nowMillis)
     }
 
     private const val KEY_LAST_FULL_SCREEN = "last_full_screen"

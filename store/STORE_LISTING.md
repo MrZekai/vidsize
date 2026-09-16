@@ -24,7 +24,7 @@ until then, English screenshots are used for every locale, which is normal.
 
 **Title** `Vidsize: Video Compressor` *(25)*
 
-**Short** `Compress video on your phone. Keep the quality you need. No watermark.` *(70)*
+**Short** `Compress videos on your phone. Choose quality and mark-free output.` *(67)*
 
 **Full**
 
@@ -46,8 +46,11 @@ BUILT TO BE FAST AND PRIVATE
 • Keeps running when you switch apps, with a progress notification
 • Saved straight to your gallery in Movies/Vidsize
 
+OUTPUT CHOICE
+• Standard output includes a small Vidsize mark
+• Optional mark-free output after one short rewarded ad
+
 WHAT VIDSIZE DOES NOT DO
-• No watermark, on any level
 • No account, no sign-up
 • No subscription
 • No upload of your videos
@@ -63,7 +66,7 @@ A note on sizes: the figures shown before compression are estimates. The final s
 
 **Title** `Vidsize: Video Sıkıştırıcı` *(26)*
 
-**Short** `Videonu telefonda sıkıştır. İhtiyacın olan kaliteyi koru. Filigran yok.` *(69)*
+**Short** `Videonu telefonda sıkıştır. Kaliteyi ve filigransız çıktıyı seç.` *(64)*
 
 **Full**
 
@@ -85,8 +88,11 @@ HIZLI VE ÖZEL
 • Uygulamadan çıksan bile devam eder, bildirimle ilerlemeyi gösterir
 • Doğrudan galerine, Movies/Vidsize klasörüne kaydedilir
 
+ÇIKTI SEÇİMİ
+• Standart çıktıda küçük bir Vidsize filigranı bulunur
+• Kısa bir ödüllü reklamla filigransız çıktı seçeneği
+
 VIDSIZE'IN YAPMADIKLARI
-• Hiçbir seviyede filigran yok
 • Hesap yok, kayıt yok
 • Abonelik yok
 • Videolarını hiçbir yere yüklemez
@@ -102,7 +108,7 @@ Boyutlar hakkında: sıkıştırmadan önce gösterilen rakamlar tahmindir. Son 
 
 **Title** `Vidsize: Compresor Vídeo` *(24)*
 
-**Short** `Comprime vídeos en tu móvil. Mantén la calidad. Sin marca de agua.` *(65)*
+**Short** `Comprime vídeos en tu móvil. Elige calidad y salida sin marca.` *(62)*
 
 **Full**
 
@@ -124,8 +130,11 @@ RÁPIDO Y PRIVADO
 • Sigue funcionando aunque cambies de app, con notificación de progreso
 • Se guarda directamente en tu galería, en Movies/Vidsize
 
+ELECCIÓN DE SALIDA
+• La salida estándar incluye una pequeña marca de Vidsize
+• Salida sin marca opcional con un anuncio corto con recompensa
+
 LO QUE VIDSIZE NO HACE
-• Sin marca de agua, en ningún nivel
 • Sin cuenta ni registro
 • Sin suscripción
 • No sube tus vídeos
@@ -141,7 +150,7 @@ Sobre los tamaños: las cifras que ves antes de comprimir son estimaciones. El t
 
 **Title** `Vidsize: Compressor Vídeo` *(25)*
 
-**Short** `Comprima vídeos no celular. Mantenha a qualidade. Sem marca d'água.` *(66)*
+**Short** `Comprima vídeos no celular. Escolha qualidade e saída sem marca.` *(64)*
 
 **Full**
 
@@ -163,8 +172,11 @@ RÁPIDO E PRIVADO
 • Continua funcionando se você sair do app, com notificação de progresso
 • Salvo direto na sua galeria, em Movies/Vidsize
 
+ESCOLHA DA SAÍDA
+• A saída padrão inclui uma pequena marca do Vidsize
+• Saída sem marca opcional com um anúncio curto com recompensa
+
 O QUE O VIDSIZE NÃO FAZ
-• Sem marca d'água, em nenhum nível
 • Sem conta, sem cadastro
 • Sem assinatura
 • Não envia seus vídeos para lugar nenhum
@@ -180,7 +192,7 @@ Sobre os tamanhos: os números mostrados antes da compressão são estimativas. 
 
 **Title** `Vidsize: Kompresor Video` *(24)*
 
-**Short** `Kompres video di ponselmu. Kualitas tetap terjaga. Tanpa watermark.` *(66)*
+**Short** `Kompres video di ponselmu. Pilih kualitas dan hasil tanpa tanda.` *(64)*
 
 **Full**
 
@@ -202,8 +214,11 @@ CEPAT DAN PRIVAT
 • Tetap berjalan saat kamu pindah aplikasi, dengan notifikasi progres
 • Langsung tersimpan di galeri, di Movies/Vidsize
 
+PILIHAN HASIL
+• Hasil standar menyertakan tanda kecil Vidsize
+• Hasil tanpa tanda opsional dengan satu iklan berhadiah singkat
+
 YANG TIDAK DILAKUKAN VIDSIZE
-• Tanpa watermark, di semua tingkat
 • Tanpa akun, tanpa pendaftaran
 • Tanpa langganan
 • Tidak mengunggah videomu
@@ -219,7 +234,7 @@ Tentang ukuran: angka sebelum kompresi adalah perkiraan. Ukuran akhir tergantung
 
 **Title** `Vidsize: Video-Kompressor` *(25)*
 
-**Short** `Videos auf dem Handy verkleinern. Qualität bleibt. Ohne Wasserzeichen.` *(69)*
+**Short** `Videos verkleinern. Qualität und Ausgabe ohne Wasserzeichen wählen.` *(67)*
 
 **Full**
 
@@ -241,8 +256,11 @@ SCHNELL UND PRIVAT
 • Läuft weiter, wenn du die App verlässt
 • Wird direkt in deiner Galerie unter Movies/Vidsize gespeichert
 
+AUSGABE WÄHLEN
+• Die Standardausgabe enthält ein kleines Vidsize-Wasserzeichen
+• Optional ohne Wasserzeichen nach einer kurzen Belohnungsanzeige
+
 WAS VIDSIZE NICHT MACHT
-• Kein Wasserzeichen, auf keiner Stufe
 • Kein Konto, keine Registrierung
 • Kein Abo
 • Kein Upload deiner Videos
@@ -258,7 +276,7 @@ Zu den Größen: die Zahlen vor der Komprimierung sind Schätzungen. Die endgül
 
 **Title** `Vidsize: वीडियो कंप्रेसर` *(24)*
 
-**Short** `फ़ोन पर ही वीडियो कंप्रेस करें। क्वालिटी बनी रहे। वॉटरमार्क नहीं।` *(64)*
+**Short** `फ़ोन पर वीडियो कंप्रेस करें। क्वालिटी और बिना निशान आउटपुट चुनें।` *(65)*
 
 **Full**
 
@@ -280,8 +298,11 @@ Zu den Größen: die Zahlen vor der Komprimierung sind Schätzungen. Die endgül
 • ऐप से बाहर जाने पर भी चलता रहता है, नोटिफ़िकेशन में प्रगति दिखती है
 • सीधे आपकी गैलरी में Movies/Vidsize में सेव होता है
 
+आउटपुट चुनें
+• सामान्य आउटपुट में छोटा Vidsize निशान होता है
+• एक छोटे रिवॉर्ड विज्ञापन से बिना निशान वाला वैकल्पिक आउटपुट
+
 Vidsize क्या नहीं करता
-• किसी भी लेवल पर वॉटरमार्क नहीं
 • कोई अकाउंट नहीं, कोई साइन-अप नहीं
 • कोई सब्सक्रिप्शन नहीं
 • आपके वीडियो कहीं अपलोड नहीं होते
@@ -297,7 +318,7 @@ Vidsize मुफ़्त है और विज्ञापनों से �
 
 **Title** `Vidsize: ضاغط الفيديو` *(21)*
 
-**Short** `اضغط الفيديو على هاتفك. احتفظ بالجودة. بدون علامة مائية.` *(56)*
+**Short** `اضغط الفيديو على هاتفك. اختر الجودة ونسخة بلا علامة.` *(52)*
 
 **Full**
 
@@ -319,8 +340,11 @@ Vidsize मुफ़्त है और विज्ञापनों से �
 • يستمر عند مغادرتك التطبيق، مع إشعار يوضّح التقدّم
 • يُحفظ مباشرة في معرضك ضمن Movies/Vidsize
 
+اختيار النسخة
+• تتضمن النسخة القياسية علامة Vidsize صغيرة
+• نسخة اختيارية بلا علامة بعد إعلان مكافأة قصير واحد
+
 ما لا يفعله Vidsize
-• لا علامة مائية في أي مستوى
 • لا حساب ولا تسجيل
 • لا اشتراك
 • لا يرفع مقاطعك إلى أي مكان

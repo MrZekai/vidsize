@@ -112,13 +112,13 @@ class MainActivity : ComponentActivity() {
         // It is safe against loops: showPendingIfAny consumes the flag before it
         // shows, and the ad's own dismissal re-enters onResume with nothing
         // pending. It is safe against stacking: AdGate consults the same
-        // 60-second clock the app-open ad writes to, so a return that has just
+        // shared full-screen clock the app-open ad writes to, so a return that has just
         // been met by an app-open ad skips the interstitial rather than
         // following one full-screen ad with another.
         InterstitialAds.showPendingIfAny(this)
 
         // Rewarded is preloaded here rather than on the Home composable alone so
-        // the offer strip is ready on the first frame of a warm return, not one
+        // the output chooser is ready on the first frame of a warm return, not one
         // network round-trip later.
         RewardedAds.preload(this)
     }

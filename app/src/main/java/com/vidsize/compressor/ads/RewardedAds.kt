@@ -27,20 +27,21 @@ import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
  * ## The policy shape, which is not optional
  *
  * AdMob's rewarded policy is unusually specific, and three of its clauses decide
- * how this class and the strip that drives it are written:
+ * how this class and the chooser that drives it are written:
  *
  *  - **The user must start it.** Nothing here auto-plays. [show] is only ever
- *    reached from a tap on the strip.
- *  - **The action and the reward must both be stated beforehand.** The strip
- *    says "a short ad video" and "10 minutes with no ads" before the tap - not
- *    "watch a video", which does not disclose that it is an ad.
+ *    reached from a tap in the output chooser.
+ *  - **The action and the reward must both be stated beforehand.** The chooser
+ *    says "a short rewarded ad" and "one export without the Vidsize mark"
+ *    before the tap.
  *  - **No feature may depend on watching.** Nothing in Vidsize is gated behind
  *    this. Every compression level, the full quality range, history, sharing -
- *    all of it works identically whether or not the user ever touches the strip.
- *    The reward removes ads; it does not unlock the app.
+ *    all of it works identically whether or not the user ever chooses the ad.
+ *    The reward removes the Vidsize mark from one export; it does not unlock a
+ *    compression level or change output quality.
  *
- * The reward is also non-monetary and non-transferable, which the ten-minute
- * window satisfies by construction.
+ * The reward is also non-monetary and non-transferable: it is one in-process,
+ * single-use mark-free export.
  *
  * ## The offer is unconditional
  *
@@ -56,11 +57,11 @@ object RewardedAds {
     private var ad: RewardedAd? = null
     private var loading = false
 
-    /** True when a creative is in hand, so the strip can offer it honestly. */
+    /** True when a creative is in hand, so the chooser can offer it honestly. */
     var isLoaded: Boolean by mutableStateOf(false)
         private set
 
-    /** True while the ad is on screen, so the strip can show a busy state. */
+    /** True while the ad is on screen, so the chooser can show a busy state. */
     var isShowing: Boolean by mutableStateOf(false)
         private set
 
@@ -68,9 +69,8 @@ object RewardedAds {
      * Requests a creative if none is in hand.
      *
      * Called when Home appears and after every dismissal. Note that this uses
-     * [AdSlots.rewardedRequestable], not `requestable`: the rewarded unit is the
-     * one format that keeps loading *during* an ad-free window, so the strip can
-     * offer an extension the instant the window lapses.
+     * [AdSlots.rewardedRequestable], not `requestable`: it is the explicitly
+     * user-initiated format and remains requestable whenever ads are permitted.
      */
     fun preload(context: Context) {
         if (!AdSlots.rewardedRequestable) {
@@ -104,23 +104,30 @@ object RewardedAds {
 
     /**
      * Presents the ad. The grant is made only from the SDK's own reward
-     * callback - never optimistically, and never on dismissal.
+     * callback - never optimistically. The product callback waits for dismissal
+     * so confirmation and compression never appear behind the creative.
      *
      * A user who closes the ad early gets no grant and no penalty of any kind:
      * their file keeps the mark, the offer returns, and they may try again.
      */
-    fun show(activity: Activity, onRewardGranted: () -> Unit) {
+    fun show(
+        activity: Activity,
+        onRewardGranted: () -> Unit,
+        onClosedWithoutReward: () -> Unit = {},
+    ): Boolean {
         val creative = ad ?: run {
             preload(activity)
-            return
+            return false
         }
-        if (isShowing) return
+        if (isShowing) return false
 
+        var rewardEarned = false
+        var completionSent = false
         isShowing = true
         creative.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdShowedFullScreenContent() {
                 // A rewarded ad is still a full-screen ad. Marking the shared
-                // clock keeps the 60-second promise honest for the case where
+                // clock keeps the full-screen gap honest for the case where
                 // the user dismisses early and earns nothing - otherwise an
                 // interstitial could land immediately behind it.
                 AdPacing.markFullScreenShown()
@@ -131,6 +138,10 @@ object RewardedAds {
                 isLoaded = false
                 isShowing = false
                 preload(activity)
+                if (!completionSent) {
+                    completionSent = true
+                    if (rewardEarned) onRewardGranted() else onClosedWithoutReward()
+                }
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
@@ -138,13 +149,18 @@ object RewardedAds {
                 isLoaded = false
                 isShowing = false
                 preload(activity)
+                if (!completionSent) {
+                    completionSent = true
+                    onClosedWithoutReward()
+                }
             }
         }
 
         creative.show(activity) {
             // Earned. This is the only path that grants a mark-free export.
             WatermarkOffer.grant()
-            onRewardGranted()
+            rewardEarned = true
         }
+        return true
     }
 }

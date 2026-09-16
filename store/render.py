@@ -93,7 +93,7 @@ HOME = f"""
  <div class='trust'>
   <div style='background:{INDIGO_SOFT};color:{INDIGO}'>On-device</div>
   <div style='background:#E5F5F9;color:#0C93B4'>Fast</div>
-  <div style='background:{MINT_SOFT};color:{MINT}'>No watermark</div>
+  <div style='background:{MINT_SOFT};color:{MINT}'>No sign-up</div>
  </div>
  <div class='card' style='margin-top:26px'>
   <div class='eyebrow'>STORAGE SAVED</div>
@@ -175,7 +175,7 @@ SHOTS = [
     ("01-hero", "1.02 GB → <em>612 MB</em>", "Compress video on your phone. Keep the quality you need.", HOME),
     ("02-presets", "Three levels.<br>No settings to learn.", "See the estimated size before you start.", PRESETS),
     ("03-background", "Keeps going when<br>you <em>switch apps</em>", "Compression keeps running when you switch apps.", BACKGROUND),
-    ("04-result", "Saved straight to<br>your gallery", "No download step. No watermark. Ever.", RESULT),
+    ("04-result", "Saved straight to<br>your gallery", "Show the exact output. Share in one tap.", RESULT),
     ("05-history", "See every<br>gigabyte you saved", "Your history stays on your device.", HISTORY),
 ]
 

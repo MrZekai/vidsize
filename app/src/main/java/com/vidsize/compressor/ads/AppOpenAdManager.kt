@@ -23,7 +23,7 @@ import com.google.android.gms.ads.appopen.AppOpenAd.AppOpenAdLoadCallback
  * meet an ad, and reading it as though it did is a well-worn way to silence the
  * format for an entire afternoon while every other counter looks healthy. The
  * interval between two full-screen ads is [AdPacing.FULL_SCREEN_GAP_MILLIS] -
- * sixty seconds, shared with the interstitial - and the per-day ceiling is set
+ * three minutes, shared with the interstitial - and the per-day ceiling is set
  * in the AdMob panel, not here.
  */
 class AppOpenAdManager(

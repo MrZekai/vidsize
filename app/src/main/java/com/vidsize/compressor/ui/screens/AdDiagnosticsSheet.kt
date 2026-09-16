@@ -76,7 +76,8 @@ fun AdDiagnosticsSheet(onDismiss: () -> Unit) {
     // A one-second refresh, because half of what this screen reports is a clock:
     // seconds since the last full-screen ad, and seconds until pacing allows
     // the next. A static snapshot would make the
-    // 60-second rule impossible to watch cross its threshold, which is the one
+    // shared full-screen interval impossible to watch cross its threshold,
+    // which is the one
     // thing a tester most often needs to see happen.
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
@@ -185,8 +186,9 @@ fun AdDiagnosticsSheet(onDismiss: () -> Unit) {
                             "${snapshot.secondsSinceLastFullScreen}s"
                         },
                     )
-                    Line("Gap required", "${AdPacing.FULL_SCREEN_GAP_MILLIS / 1000}s")
-                    Line("60s rule satisfied", snapshot.pacingSatisfied.yesNo())
+                    val gapSeconds = AdPacing.FULL_SCREEN_GAP_MILLIS / 1000L
+                    Line("Gap required", "${gapSeconds}s")
+                    Line("${gapSeconds}s rule satisfied", snapshot.pacingSatisfied.yesNo())
                     if (!snapshot.pacingSatisfied) {
                         Line("Wait", "${snapshot.secondsUntilPacingAllows}s")
                     }
@@ -233,12 +235,13 @@ fun AdDiagnosticsSheet(onDismiss: () -> Unit) {
 /**
  * The conclusion, stated rather than implied.
  *
- * Every branch names the binding condition AND what to do about it. "60s rule
+ * Every branch names the binding condition AND what to do about it. "Pacing
  * not satisfied" alone still leaves a tester guessing whether to wait or to file
  * a bug; "wait N seconds and retry" does not.
  */
 @Composable
 private fun VerdictPanel(verdict: AdGate.Verdict) {
+    val gapSeconds = AdPacing.FULL_SCREEN_GAP_MILLIS / 1000L
     val (headline, detail, tone) = when (verdict) {
         AdGate.Verdict.ALLOWED -> Triple(
             "An interstitial CAN show right now.",
@@ -271,8 +274,8 @@ private fun VerdictPanel(verdict: AdGate.Verdict) {
             VidsizeColor.Indigo,
         )
         AdGate.Verdict.PACING -> Triple(
-            "Blocked: the 60-second rule.",
-            "A full-screen ad was shown less than 60 seconds ago. Wait for the " +
+            "Blocked: the full-screen ad interval.",
+            "A full-screen ad was shown less than $gapSeconds seconds ago. Wait for the " +
                 "counter above, then retry. This is the only pacing rule in code.",
             VidsizeColor.Indigo,
         )

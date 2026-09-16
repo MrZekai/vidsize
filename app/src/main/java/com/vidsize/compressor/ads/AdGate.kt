@@ -52,7 +52,7 @@ object AdGate {
         NO_CONSENT,
 
 
-        /** Less than 60 seconds since the last full-screen ad. */
+        /** Inside the shared full-screen ad interval. */
         PACING,
 
         /** A compression is running; nothing ever covers a job in progress. */
@@ -92,7 +92,7 @@ object AdGate {
     fun evaluate(
         loaded: Boolean,
         requireIdleJob: Boolean = false,
-        nowMillis: Long = System.currentTimeMillis(),
+        nowMillis: Long = AdPacing.now(),
     ): Verdict {
         val job = CompressionJobState.status
         return when {
@@ -109,7 +109,7 @@ object AdGate {
     fun allows(
         loaded: Boolean,
         requireIdleJob: Boolean = false,
-        nowMillis: Long = System.currentTimeMillis(),
+        nowMillis: Long = AdPacing.now(),
     ): Boolean = evaluate(loaded, requireIdleJob, nowMillis) == Verdict.ALLOWED
 
     /**
@@ -117,6 +117,6 @@ object AdGate {
      * possible if one were loaded?" Separates a pacing problem from a fill
      * problem, which are the two things a tester actually needs told apart.
      */
-    fun evaluateIgnoringFill(nowMillis: Long = System.currentTimeMillis()): Verdict =
+    fun evaluateIgnoringFill(nowMillis: Long = AdPacing.now()): Verdict =
         evaluate(loaded = true, requireIdleJob = false, nowMillis = nowMillis)
 }

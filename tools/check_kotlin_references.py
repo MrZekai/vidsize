@@ -5,8 +5,8 @@
 
 v0.9.4 failed CI on two compiler errors that were one mistake:
 
-    WatermarkStrip.kt:161 Unresolved reference 'VidsizeTheme'
-    WatermarkStrip.kt:162 @Composable invocations can only happen from the
+    OutputChoiceDialog.kt:161 Unresolved reference 'VidsizeTheme'
+    OutputChoiceDialog.kt:162 @Composable invocations can only happen from the
                           context of a @Composable function
 
 A new file used `VidsizeTheme` in its @Preview and did not import it. The second

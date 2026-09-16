@@ -75,7 +75,7 @@
     <string name="settings_privacy_title">Datenschutz</string>
     <string name="settings_privacy_body">Deine Videos werden auf diesem Gerät komprimiert. Es wird nichts auf einen Server hochgeladen.</string>
     <string name="settings_ads_title">Werbung</string>
-    <string name="settings_ads_body">Vidsize ist kostenlos und werbefinanziert: ein Banner, eine Anzeige auf dem Ergebnisbildschirm, eine beim App-Start und eine nach einer Komprimierung. Kostenlose Exporte tragen ein kleines Vidsize-Wasserzeichen; sieh ein kurzes Werbevideo an, um das Video ohne Wasserzeichen neu erstellen zu lassen.</string>
+    <string name="settings_ads_body">Vidsize ist kostenlos und werbefinanziert. Vor der Komprimierung kannst du ein kleines Vidsize-Wasserzeichen wählen oder für einen Export ohne Wasserzeichen eine kurze Belohnungsanzeige ansehen. Banner-, Ergebnis-, App-Start- und gelegentliche Vollbildanzeigen können ebenfalls erscheinen.</string>
     <string name="settings_legal_section">RECHTLICHES</string>
     <string name="settings_privacy_policy">Datenschutzerklärung</string>
     <string name="settings_terms">Nutzungsbedingungen</string>
@@ -97,7 +97,7 @@
     <string name="notification_done_title">Video fertig</string>
     <string name="notification_done_body">Dein komprimiertes Video wurde unter Movies/Vidsize gespeichert.</string>
     <string name="ad_badge">Anzeige</string>
-    <string name="result_show_in_gallery">Galerie öffnen</string>
+    <string name="result_show_in_gallery">In Galerie anzeigen</string>
     <string name="preset_not_viable">Keine echte Ersparnis</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -110,15 +110,19 @@
     <string name="cta_pick_another">Anderes Video wählen</string>
     <string name="preset_not_viable_hint">Dieses Video ist für diese Stufe schon klein genug.</string>
     <string name="result_recent_hint">Du kannst dieses Video jederzeit über „Kürzlich“ auf dem Startbildschirm wieder öffnen.</string>
-    <string name="watermark_offer_title">Vidsize-Wasserzeichen entfernen</string>
-    <string name="watermark_offer_body">Kurzes Werbevideo ansehen - das Video wird ohne Wasserzeichen neu erstellt. Dauert etwa so lange wie der erste Durchlauf.</string>
-    <string name="watermark_offer_action">Kurzes Werbevideo ansehen</string>
-    <string name="watermark_free_unavailable">Die Werbung konnte nicht geladen werden. Dein Video wird mit Wasserzeichen erstellt — du kannst es im Ergebnisbildschirm erneut versuchen.</string>
+    <string name="watermark_choice_title">Ausgabe wählen</string>
+    <string name="watermark_choice_body">Wie soll Vidsize dieses Video erstellen?</string>
+    <string name="watermark_with_mark_title">Mit Vidsize-Wasserzeichen</string>
+    <string name="watermark_with_mark_body">Jetzt mit einem kleinen Vidsize-Wasserzeichen in der Ecke starten.</string>
+    <string name="watermark_with_mark_badge">JETZT STARTEN</string>
+    <string name="watermark_free_unavailable">Die Werbung konnte nicht geladen werden. Die Komprimierung wurde nicht gestartet; fahre mit Wasserzeichen fort oder versuche es erneut.</string>
     <string name="watermark_free_card_title">Ohne Vidsize-Wasserzeichen speichern</string>
-    <string name="watermark_free_card_body">Kostenlose Videos tragen ein kleines Vidsize-Wasserzeichen in der Ecke.</string>
+    <string name="watermark_free_card_body">Sieh eine kurze Belohnungsanzeige an. Nach Bestätigung startet die Komprimierung ohne Wasserzeichen.</string>
     <string name="watermark_free_card_badge">1 KURZE WERBUNG</string>
-    <string name="watermark_free_card_action">Ohne Wasserzeichen erstellen</string>
     <string name="watermark_free_card_waiting">Werbung wird vorbereitet…</string>
+    <string name="watermark_reward_not_earned">Keine Belohnung erhalten. Die Komprimierung wurde nicht gestartet.</string>
+    <string name="watermark_reward_granted_title">Belohnung erhalten</string>
+    <string name="watermark_reward_granted_body">Die Komprimierung ohne Wasserzeichen startet jetzt.</string>
     <string name="cta_blocked_already_efficient">Dieses Video ist bereits gut komprimiert. Versuche Kleiner oder Am kleinsten.</string>
     <string name="mode_level">Stufe</string>
     <string name="mode_size">Zielgröße</string>

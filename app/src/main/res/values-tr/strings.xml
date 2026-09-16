@@ -75,7 +75,7 @@
     <string name="settings_privacy_title">Gizlilik</string>
     <string name="settings_privacy_body">Videoların bu cihazda sıkıştırılır. Hiçbir şey sunucuya yüklenmez.</string>
     <string name="settings_ads_title">Reklamlar</string>
-    <string name="settings_ads_body">Vidsize ücretsizdir ve reklamlarla desteklenir: bir banner, sonuç ekranında bir reklam, uygulama açılışında ve sıkıştırma sonrasında birer reklam. Ücretsiz çıktılarda küçük bir Vidsize filigranı olur; kısa bir reklam videosu izleyerek videoyu filigransız olarak yeniden ürettirebilirsin.</string>
+    <string name="settings_ads_body">Vidsize ücretsizdir ve reklamlarla desteklenir. Sıkıştırmadan önce küçük Vidsize filigranını seçebilir veya tek filigransız çıktı için kısa bir ödüllü reklam izleyebilirsin. Banner, sonuç ekranı, uygulama açılışı ve seyrek geçiş reklamları da gösterilebilir.</string>
     <string name="settings_legal_section">YASAL</string>
     <string name="settings_privacy_policy">Gizlilik Politikası</string>
     <string name="settings_terms">Kullanım Koşulları</string>
@@ -97,7 +97,7 @@
     <string name="notification_done_title">Video hazır</string>
     <string name="notification_done_body">Sıkıştırılmış videon Movies/Vidsize klasörüne kaydedildi.</string>
     <string name="ad_badge">Reklam</string>
-    <string name="result_show_in_gallery">Galeriyi Aç</string>
+    <string name="result_show_in_gallery">Galeride Göster</string>
     <string name="preset_not_viable">Gerçek kazanç yok</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -110,15 +110,19 @@
     <string name="cta_pick_another">Başka bir video seç</string>
     <string name="preset_not_viable_hint">Bu video bu düzey için zaten yeterince küçük.</string>
     <string name="result_recent_hint">Bu videoyu ana ekrandaki Son bölümünden dilediğin zaman yeniden açabilirsin.</string>
-    <string name="watermark_offer_title">Vidsize filigranını kaldır</string>
-    <string name="watermark_offer_body">Kısa bir reklam videosu izle, video filigransız olarak yeniden üretilsin. İlk üretim kadar sürer.</string>
-    <string name="watermark_offer_action">Kısa bir reklam videosu izle</string>
-    <string name="watermark_free_unavailable">Reklam yüklenemedi. Videon filigranlı üretiliyor — sonuç ekranından tekrar deneyebilirsin.</string>
+    <string name="watermark_choice_title">Çıktını seç</string>
+    <string name="watermark_choice_body">Vidsize bu videoyu nasıl oluştursun?</string>
+    <string name="watermark_with_mark_title">Vidsize filigranlı</string>
+    <string name="watermark_with_mark_body">Köşede küçük bir Vidsize filigranıyla hemen başla.</string>
+    <string name="watermark_with_mark_badge">HEMEN BAŞLA</string>
+    <string name="watermark_free_unavailable">Reklam yüklenemedi. Sıkıştırma başlamadı; filigranlı devam et veya tekrar dene.</string>
     <string name="watermark_free_card_title">Vidsize filigranı olmadan kaydet</string>
-    <string name="watermark_free_card_body">Ücretsiz videolarda köşede küçük bir Vidsize filigranı olur.</string>
+    <string name="watermark_free_card_body">Kısa bir ödüllü reklam izle. Ödül onaylanınca sıkıştırma filigransız başlar.</string>
     <string name="watermark_free_card_badge">1 KISA REKLAM</string>
-    <string name="watermark_free_card_action">Filigransız üret</string>
     <string name="watermark_free_card_waiting">Reklam hazırlanıyor…</string>
+    <string name="watermark_reward_not_earned">Ödül kazanılmadı. Sıkıştırma başlamadı.</string>
+    <string name="watermark_reward_granted_title">Ödül kazanıldı</string>
+    <string name="watermark_reward_granted_body">Filigransız sıkıştırman şimdi başlıyor.</string>
     <string name="cta_blocked_already_efficient">Bu video zaten iyi sıkıştırılmış. Daha küçük veya En küçük seçeneğini dene.</string>
     <string name="mode_level">Seviye</string>
     <string name="mode_size">Hedef boyut</string>

@@ -37,8 +37,8 @@ object WatermarkOffer {
     /**
      * True while an earned, unspent mark-free export is waiting to be taken.
      *
-     * Compose state so the result screen swaps from "watch an ad" to "removing
-     * the mark" on the same frame the reward lands, with no manual invalidation.
+     * Compose state so the output chooser can recognise an earned grant and
+     * proceed without charging the user a second ad after a failed export.
      */
     var granted: Boolean by mutableStateOf(false)
         private set
@@ -49,10 +49,11 @@ object WatermarkOffer {
     }
 
     /**
-     * Takes the grant if there is one.
+     * Acknowledges that the clean export was delivered and spends the grant.
      *
-     * Returns true exactly once per grant, so the caller can start the
-     * mark-free export knowing no second export can also claim it.
+     * It is intentionally called on successful completion, not when encoding
+     * starts. A decoder, encoder or storage failure leaves the paid-for grant in
+     * hand so the retry remains mark-free.
      */
     fun consume(): Boolean {
         if (!granted) return false

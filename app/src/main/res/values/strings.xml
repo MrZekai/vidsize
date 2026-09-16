@@ -100,7 +100,7 @@
     <string name="settings_privacy_title">Privacy</string>
     <string name="settings_privacy_body">Your videos are compressed on this device. Nothing is uploaded to a server.</string>
     <string name="settings_ads_title">Ads</string>
-    <string name="settings_ads_body">Vidsize is free and supported by ads: a banner, an ad on the result screen, one when the app opens and one after a compression. Free exports carry a small Vidsize mark; watch a short ad video to have the video made again without it.</string>
+    <string name="settings_ads_body">Vidsize is free and supported by ads. Before compression, choose a small Vidsize mark or watch one short rewarded ad for one mark-free export. Banner, result-screen, app-open and occasional interstitial ads may also appear.</string>
     <string name="settings_legal_section">LEGAL</string>
     <string name="settings_privacy_policy">Privacy Policy</string>
     <string name="settings_terms">Terms of Use</string>
@@ -127,7 +127,7 @@
         <item quantity="other">%1$d videos</item>
     </plurals>
     <string name="ad_badge">Ad</string>
-    <string name="result_show_in_gallery">Open Gallery</string>
+    <string name="result_show_in_gallery">Show in Gallery</string>
     <string name="preset_not_viable">No real saving</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -140,15 +140,19 @@
     <string name="cta_pick_another">Pick another video</string>
     <string name="preset_not_viable_hint">This video is already small enough for this level.</string>
     <string name="result_recent_hint">You can reopen this video any time from Recent on the home screen.</string>
-    <string name="watermark_offer_title">Remove the Vidsize mark</string>
-    <string name="watermark_offer_body">Watch a short ad video and this video is made again without the mark. Takes about as long as the first pass.</string>
-    <string name="watermark_offer_action">Watch a short ad video</string>
-    <string name="watermark_free_unavailable">The ad could not be loaded. Your video is being made with the mark — you can try again from the result screen.</string>
+    <string name="watermark_choice_title">Choose your output</string>
+    <string name="watermark_choice_body">How should Vidsize create this video?</string>
+    <string name="watermark_with_mark_title">With Vidsize mark</string>
+    <string name="watermark_with_mark_body">Start now with a small Vidsize mark in the corner.</string>
+    <string name="watermark_with_mark_badge">START NOW</string>
+    <string name="watermark_free_unavailable">The ad could not be loaded. Compression did not start; continue with the mark or try again.</string>
     <string name="watermark_free_card_title">Save without the Vidsize mark</string>
-    <string name="watermark_free_card_body">Free videos carry a small Vidsize mark in the corner.</string>
+    <string name="watermark_free_card_body">Watch one short rewarded ad. Compression starts after the reward is confirmed.</string>
     <string name="watermark_free_card_badge">1 SHORT AD</string>
-    <string name="watermark_free_card_action">Make it without the mark</string>
     <string name="watermark_free_card_waiting">Preparing the ad…</string>
+    <string name="watermark_reward_not_earned">The reward was not earned. Compression did not start.</string>
+    <string name="watermark_reward_granted_title">Reward earned</string>
+    <string name="watermark_reward_granted_body">Your mark-free compression is starting.</string>
     <string name="cta_blocked_already_efficient">This video is already well compressed. Try Smaller or Smallest.</string>
     <string name="mode_level">Level</string>
     <string name="mode_size">Target size</string>

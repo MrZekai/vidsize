@@ -1,6 +1,6 @@
 # Vidsize ad model — operating document
 
-v0.9.0. This is the document you read before changing anything about ads, and
+v0.9.13. This is the document you read before changing anything about ads, and
 the one you hand a tester before a device pass.
 
 The model is adapted from a reusable pattern that was first proven in a PDF
@@ -38,18 +38,15 @@ none should be added.
 
 ## 2. The formats and where they sit
 
-| Format | Placement | Live | Respects ad-free window |
+| Format | Placement | Live | Suppresses other ads? |
 |---|---|---|---|
-| Banner | Anchored bottom of Home; top of Compression; top of the progress panel | yes | yes |
-| Native | End of the Home scroll; result screen's own labelled section | yes | yes |
-| Interstitial | After a finished compression — see §4 | yes | yes |
-| Rewarded | Offer strip on Home **and** on the Compression screen | yes | **no** (it is the thing being traded for) |
-| App open | Launcher-icon foreground only | **off — no unit** | yes |
+| Banner | Component retained; no current screen call site | no | no |
+| Native | End of the Home scroll; result screen's own labelled section | yes | no |
+| Interstitial | After a finished compression — see §4 | yes | no |
+| Rewarded | Two-way output chooser after **Compress** | yes | no |
+| App open | Launcher-icon foreground only | optional production unit | no |
 
-Only one compression banner is ever live: the top banner switches off for the
-whole processing phase so it never coexists with the one in the progress panel.
-
-### App Open is deliberately not enabled
+### App Open is deliberately optional in production
 
 No unit exists for it in this AdMob account, and on the evidence that is the
 right call for Vidsize rather than an omission to fix:
@@ -75,16 +72,22 @@ so today the app under-shows what it declares, which is the safe direction.
 
 ---
 
-## 3. The two rules that live in code
+## 3. The one rule that lives in code
 
 Everything else is a panel setting. A condition stays in code **only** if it is
 a promise the app made to the user in words:
 
-1. **60 seconds between full-screen ads.** `AdPacing.FULL_SCREEN_GAP_MILLIS`.
+1. **180 seconds between full-screen ads.** `AdPacing.FULL_SCREEN_GAP_MILLIS`.
    Shared by the app-open ad and the interstitial — one timestamp, not two, or
    the user meets both back to back while each format believes it behaved.
 That is now the only one. It used to be joined by a ten-minute rewarded ad-free
 window; v0.9.4 removed it.
+
+The timestamp is monotonic (`SystemClock.elapsedRealtime`) everywhere. v0.9.12
+stored monotonic time but compared it with wall-clock time in `AdGate` and the
+diagnostics sheet. The enormous elapsed value visible on the field device was
+the proof: pacing appeared satisfied immediately after every ad. v0.9.13 uses
+one clock end to end and has unit coverage for the three-minute boundary.
 
 ### Why the ad-free window was replaced (v0.9.4)
 
@@ -99,41 +102,25 @@ portfolio.
 And it sold something the user was not feeling. At the moment of the offer the
 ads are behind them; "ten quiet minutes" is an abstraction about the future.
 
-The reward is now **one export without the Vidsize mark** (`WatermarkOffer`),
-offered on the result screen, where the thing it removes is visible on the file
-the user is about to send someone. It suppresses nothing, and it recurs on every
-export instead of suppressing the next ten minutes of them.
+The reward is now **one export without the Vidsize mark** (`WatermarkOffer`).
+It suppresses nothing and is offered only after the user taps **Compress**.
 
-Since v0.9.5 the choice is offered TWICE, and the two placements cost
-different amounts.
+Since v0.9.13 there is one explicit, two-way output chooser. The left choice
+starts one marked export immediately. The right choice states "one short
+rewarded ad" and "one mark-free export" before the creative opens. After the
+SDK confirms the reward and the creative closes, Vidsize briefly confirms the
+reward and starts one clean encode directly from the selected source. There is
+no marked first pass and no result-screen re-encode.
 
-**Before the encode** - one quiet line under the primary button on the
-compression screen (`WatermarkFreeRow`). Taking it here costs ONE encode: the
-rewarded ad plays, then the job starts with the mark switched off. This is the
-efficient path and the honest one, because the user is told what the file will
-contain before it exists.
+If the rewarded ad is not ready, the chooser waits up to five seconds and then
+says that compression did not start. If the user closes the creative before
+earning the reward, it says the same. Vidsize never silently substitutes a
+marked export for the mark-free choice; the user can retry or explicitly choose
+the marked route.
 
-It is deliberately a line and not a second button. Two equal primary actions
-turn one clear decision into a fork, make "watermark" a vocabulary test nobody
-can get past, and start to make the free path look like it sits behind an ad
-wall.
-
-If the rewarded ad is not loaded when the line is tapped, the app waits up to
-five seconds, then says so plainly and starts the marked export. A dead control
-reads as a broken app; an honest sentence does not.
-
-**After the encode** - the result-screen card (`WatermarkStrip`), which is the
-recovery path for anyone who did not notice the line. The price is a second
-encode, from the **original** source — the mark is burned
-into the pixels of the first output, and re-encoding an encode compounds the
-loss for nothing. `CompressionService.start(replacing = ...)` deletes the marked
-copy only after the clean one is published, so a failed second pass leaves the
-user with the file they already had.
-
-The grant is spent by the export that DELIVERS, never by the one that starts.
-A second pass that fails leaves the grant standing, so the retry costs no
-second ad view - which is both the fair outcome and what AdMob's
-reward-delivery rule requires.
+The grant is spent by the export that DELIVERS, never by the one that starts. A
+failed clean export leaves the grant standing, so the retry costs no second ad
+view — the fair outcome and the reward-delivery guarantee.
 
 ### What was deleted, and why
 
@@ -159,7 +146,7 @@ A CI gate (`v0.9.0 ad model regression gates`, gate 2) fails the build if any of
 
 The intuitive wiring is backwards. Given "Compress another" and
 Share / Show in Gallery / Open Video, the obvious design shows an ad on the
-first and cancels it on the other three, so nothing gets between the user and
+first and cancels it on the external exits, so nothing gets between the user and
 their file. That reasoning is right about placement and wrong about outcome:
 practically everyone who just compressed a video wants to *do something with
 it*, so the cancelling branch is the common one and the format earns nothing.
@@ -171,21 +158,26 @@ Defer instead of cancel:
 | **Compress another** → Home | Show now. `reset()` runs first — ordering is load-bearing (§6). |
 | **Share** | Defer. Show on return. |
 | **Show in Gallery** | Defer. Show on return. |
-| **Open Video** | Defer. Show on return. |
+| **Open Video** | Clean in-app inspection path. No deferred ad. |
 | **Back** → preset picker, same video | Show now. Still a completed job and a real transition. |
 | Cancelled / failed job | Clean. No call site exists. |
 | History row on Home | Clean. Maintenance flow. |
 
-`Context.deferInterstitialOnReturn()` is one function rather than two calls on
+`Context.deferInterstitialOnReturn(outputToken)` is one function rather than two calls on
 purpose. It both marks the pending ad and suppresses the app-open ad. Doing only
 the first lets the app-open ad land on re-entry, which then blocks the
-interstitial for 60 seconds and reads to a tester as "the deferred ad is
+interstitial for 180 seconds and reads to a tester as "the deferred ad is
 broken".
 
 The pending flag is process-level and **not** persisted. If the process died
 while the user was away, the ad dies with it — resurrecting it on the next cold
 start would show an ad to someone with no context for it, and a cold start
 already has the app-open ad.
+
+The output token is also process-level. Once an interstitial is actually shown
+for a finished output, further Share/Gallery/back actions on that same result do
+not show another one. The three-minute clock prevents stacking across formats;
+the token prevents one compression from being monetized repeatedly.
 
 ---
 
@@ -271,7 +263,7 @@ render there and nowhere else.
 
 Not optional. Six causes produce one symptom ("no ad appeared") and each has a
 different fix. The screen reports build state, consent state, usage counters,
-the pacing clock, the ad-free countdown, and what is loaded — and then, at the
+the pacing clock, the unspent mark-free grant, and what is loaded — and then, at the
 bottom, **one sentence naming the binding condition and what to do about it.**
 
 Read the last line first. Do not ask a tester to interpret a column of numbers.
@@ -285,28 +277,28 @@ confused about.
 ## 8. Device test matrix
 
 Install `adsQa`. Before each test: force-stop, clear app data. Between tests:
-**wait 60 seconds** or the pacing rule will (correctly) suppress the ad.
+**wait 180 seconds** or the pacing rule will (correctly) suppress the ad.
 
 | # | Steps | Expected |
 |---|---|---|
 | T1 | Compress a video → **Compress another** | Interstitial **shows** |
 | T2 | Compress → **Share** → return to Vidsize | Interstitial **shows on return**, not before the share sheet |
-| T3 | Compress → **Open Video** → back | Interstitial **shows on return** |
+| T3 | Compress → **Open Video** → back | **No** interstitial; the in-app player stays clean |
 | T4 | Compress → **Show in Gallery** → back | Interstitial **shows on return** |
 | T5 | Share a video **into** Vidsize from Gallery | **No** app-open ad, **no** interstitial before the compression screen |
 | T6 | Start a compression, background the app, return while still running | **No** full-screen ad of any kind |
 | T7 | Let a compression finish while backgrounded, then foreground | **No** app-open ad in front of the result |
-| T8 | Tap the ad-free strip, watch the rewarded ad fully | Banner disappears, countdown starts, text states 10 minutes |
-| T9 | Inside the window: compress → Compress another | **No** ad. Result screen shows **no** ad section at all |
-| T10 | Close the rewarded ad early | No window granted, no penalty, strip returns to its offer |
+| T8 | Tap **Compress** → choose mark-free → watch fully | Reward confirmation appears after dismissal, then one mark-free compression starts |
+| T9 | Tap **Compress** → choose marked | Compression starts immediately and output carries the small Vidsize mark |
+| T10 | Close the rewarded ad early | No compression starts; chooser reports no reward and offers retry or marked output |
 | T11 | Close Vidsize, reopen from the launcher icon | App-open ad **shows** |
-| T12 | Immediately after any full-screen ad, trigger another | **Suppressed** (60-second rule) |
+| T12 | Immediately after any full-screen ad, trigger another | **Suppressed** (180-second rule) |
 | T13 | Reopen an old video from a history row on Home | **No** interstitial |
 | T14 | Cancel a compression midway | **No** interstitial |
 | T15 | Compress → **Back** (top-left arrow) from the result | Interstitial **shows** |
 | T16 | Scroll Home to the bottom | Labelled native ad after "Storage saved"; no layout jump above it |
-| T17 | Open the compression screen | Ad-free offer strip above the presets; gone while processing |
-| T18 | Open Vidsize from the launcher icon | **No** app-open ad (format has no unit) |
+| T17 | Tap **Compress** | Two side-by-side output choices appear; neither consumes permanent screen height |
+| T18 | Production/closed-test build without the optional App Open unit → open from launcher | **No** app-open ad; required formats remain enabled |
 
 If any test disagrees: open the diagnostics screen and read the **VERDICT** line
 at the bottom. It names the condition.
@@ -316,9 +308,10 @@ at the bottom. It names the condition.
 ## 9. Before production rollout
 
 - [ ] Create the interstitial and rewarded units in AdMob; set the §5 caps
-- [ ] Supply all seven Gradle properties to the signed workflow
-- [ ] Publish the updated privacy policy (it now declares all five formats, the
-      reward and its duration) — `docs/privacy.html` and the bundled copy must
+- [ ] Supply the five required Gradle properties; supply optional units only
+      for formats intentionally enabled in production
+- [ ] Publish the updated privacy policy (it declares all five formats and the
+      one-export reward) — `docs/privacy.html` and the bundled copy must
       stay byte-identical; CI checks this
 - [ ] Run the §8 matrix on `adsQa` on at least two devices
 - [ ] Confirm CI's negative tests still fire (the "New gates must FAIL when

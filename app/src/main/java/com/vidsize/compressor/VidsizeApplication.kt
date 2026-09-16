@@ -30,7 +30,7 @@ class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks
 
         // Preference-backed ad state, opened before anything can ask it a
         // question. All four share one SharedPreferences file (AdPacing.FILE_NAME)
-        // so the 60-second clock, the ad-free expiry and the display counters can
+        // so the shared full-screen clock and the display counters can
         // never disagree about which store they are reading.
         //
         // None of this touches the Mobile Ads SDK: initialisation still waits for

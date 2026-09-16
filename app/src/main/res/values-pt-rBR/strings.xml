@@ -75,7 +75,7 @@
     <string name="settings_privacy_title">Privacidade</string>
     <string name="settings_privacy_body">Seus vídeos são comprimidos neste aparelho. Nada é enviado para servidores.</string>
     <string name="settings_ads_title">Anúncios</string>
-    <string name="settings_ads_body">A Vidsize e gratuita e mantida por anuncios: um banner, um anuncio na tela de resultado, um ao abrir o app e outro apos uma compressao. Exportacoes gratuitas levam uma pequena marca da Vidsize; assista a um video de anuncio curto para gerar o video de novo sem ela.</string>
+    <string name="settings_ads_body">A Vidsize e gratuita e mantida por anuncios. Antes da compressao, escolha uma pequena marca da Vidsize ou assista a um anuncio curto com recompensa para uma exportacao sem marca. Banners e anuncios ocasionais no resultado, ao abrir o app e entre telas tambem podem aparecer.</string>
     <string name="settings_legal_section">JURÍDICO</string>
     <string name="settings_privacy_policy">Política de Privacidade</string>
     <string name="settings_terms">Termos de Uso</string>
@@ -98,7 +98,7 @@
     <string name="notification_done_title">Vídeo pronto</string>
     <string name="notification_done_body">Seu vídeo comprimido foi salvo em Movies/Vidsize.</string>
     <string name="ad_badge">Anúncio</string>
-    <string name="result_show_in_gallery">Abrir galeria</string>
+    <string name="result_show_in_gallery">Mostrar na galeria</string>
     <string name="preset_not_viable">Sem economia real</string>
 
     <!-- v0.8.8: QA v0.8.7 fixes -->
@@ -111,15 +111,19 @@
     <string name="cta_pick_another">Escolher outro vídeo</string>
     <string name="preset_not_viable_hint">Este vídeo já é pequeno o suficiente para este nível.</string>
     <string name="result_recent_hint">Você pode reabrir este vídeo quando quiser em Recentes na tela inicial.</string>
-    <string name="watermark_offer_title">Remover a marca da Vidsize</string>
-    <string name="watermark_offer_body">Assista a um video de anuncio curto e o video e gerado de novo sem a marca. Leva o mesmo tempo da primeira vez.</string>
-    <string name="watermark_offer_action">Assistir a um video de anuncio curto</string>
-    <string name="watermark_free_unavailable">Nao foi possivel carregar o anuncio. Seu video esta sendo gerado com a marca; voce pode tentar de novo na tela de resultado.</string>
+    <string name="watermark_choice_title">Escolha o resultado</string>
+    <string name="watermark_choice_body">Como a Vidsize deve criar este video?</string>
+    <string name="watermark_with_mark_title">Com a marca da Vidsize</string>
+    <string name="watermark_with_mark_body">Comece agora com uma pequena marca da Vidsize no canto.</string>
+    <string name="watermark_with_mark_badge">COMECAR AGORA</string>
+    <string name="watermark_free_unavailable">Nao foi possivel carregar o anuncio. A compressao nao comecou; continue com a marca ou tente novamente.</string>
     <string name="watermark_free_card_title">Salvar sem a marca da Vidsize</string>
-    <string name="watermark_free_card_body">Videos gratuitos levam uma pequena marca da Vidsize no canto.</string>
+    <string name="watermark_free_card_body">Assista a um anuncio curto com recompensa. A compressao sem marca comeca apos a confirmacao.</string>
     <string name="watermark_free_card_badge">1 ANUNCIO CURTO</string>
-    <string name="watermark_free_card_action">Gerar sem a marca</string>
     <string name="watermark_free_card_waiting">Preparando o anuncio…</string>
+    <string name="watermark_reward_not_earned">A recompensa nao foi recebida. A compressao nao comecou.</string>
+    <string name="watermark_reward_granted_title">Recompensa recebida</string>
+    <string name="watermark_reward_granted_body">Sua compressao sem marca esta comecando.</string>
     <string name="cta_blocked_already_efficient">Este video ja esta bem comprimido. Tente Menor ou O menor.</string>
     <string name="mode_level">Nível</string>
     <string name="mode_size">Tamanho alvo</string>

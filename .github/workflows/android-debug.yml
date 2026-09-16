@@ -81,8 +81,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 30' app/build.gradle.kts
-          grep -q 'versionName = "0.9.12"' app/build.gradle.kts
+          grep -q 'versionCode = 31' app/build.gradle.kts
+          grep -q 'versionName = "0.9.13"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -127,10 +127,11 @@ jobs:
           SETTINGS=$UI/screens/SettingsSheet.kt
           MAIN=app/src/main/java/com/vidsize/compressor/MainActivity.kt
 
-          # --- Gate 1: exactly one pacing rule in code, and it is 60 seconds ---
+          # --- Gate 1: exactly one pacing rule in code, and it is 3 minutes ---
           # The whole model rests on this. Four stacked conditions are what made
           # the v0.8.9 app-open ad unreachable and undiagnosable.
-          grep -q 'FULL_SCREEN_GAP_MILLIS: Long = 60L \* 1000L' $ADS/AdPacing.kt
+          grep -q 'GAP_MILLIS: Long = 3L \* 60L \* 1000L' $ADS/FullScreenPacingPolicy.kt
+          grep -q 'FULL_SCREEN_GAP_MILLIS: Long = FullScreenPacingPolicy.GAP_MILLIS' $ADS/AdPacing.kt
 
           # --- Gate 2: no silent quota has crept back in ---
           # A forbidden-name list, because every one of these returned false
@@ -157,7 +158,8 @@ jobs:
           grep -q 'WatermarkOffer.grant()' $ADS/RewardedAds.kt
           grep -q 'verifyRewardCopyParity' app/build.gradle.kts
           for f in app/src/main/res/values*/strings.xml; do
-            grep -q 'name="watermark_offer_title"' "$f" || { echo "$f lacks the offer copy" >&2; exit 1; }
+            grep -q 'name="watermark_choice_title"' "$f" || { echo "$f lacks the choice copy" >&2; exit 1; }
+            grep -q 'name="watermark_reward_granted_title"' "$f" || { echo "$f lacks the reward confirmation" >&2; exit 1; }
             if grep -q 'ad_free_' "$f"; then
               echo "$f still defines the removed ad-free copy" >&2
               exit 1
@@ -186,35 +188,30 @@ jobs:
           # POST_NOTIFICATIONS callback that now owns the deferred start.
           test "$(grep -c 'InterstitialAds.preload(context)' $COMPRESS)" -eq 3
 
-          # --- Gate 6: the three deferred exits are still deferred ---
+          # --- Gate 6: the two external exits are still deferred ---
           # If any of these reverts to suppressAppOpenOnReturn alone, the
           # interstitial silently stops earning on its most common path.
-          test "$(grep -c 'context.deferInterstitialOnReturn()' $RESULT)" -eq 3
+          # Share has one success branch; Gallery has ACTION_REVIEW plus an
+          # exact-item ACTION_VIEW fallback, so there are three successful
+          # hand-off branches but only two user actions.
+          test "$(grep -c 'context.deferInterstitialOnReturn(uri.toString())' $RESULT)" -eq 3
           forbid 'suppressAppOpenOnReturn' $RESULT
           # ...and both immediate exits from the result screen carry one too, so
           # "an interstitial after every compression" is true for every path a
           # user can actually take out of a finished job, not just some of them.
-          test "$(grep -c 'context.findHostActivity()?.let(InterstitialAds::showNow)' $COMPRESS)" -eq 2
+          test "$(grep -c 'InterstitialAds.showNow(activity, finished.outputUri.toString())' $COMPRESS)" -eq 2
+          grep -q 'lastShownOutputToken' $ADS/InterstitialAds.kt
+          grep -q 'outputToken == lastShownOutputToken' $ADS/InterstitialAds.kt
 
-          # The rewarded offer appears on exactly ONE surface, and it is the
-          # result screen.
-          #
-          # v0.9.4: its predecessor sat on Home and on the compression screen
-          # too, because ten quiet minutes were not attached to anything in
-          # particular. What it sells now is a property of one specific file, so
-          # Home would be asking the user to pay for a video they have not
-          # chosen, and the compression screen would be asking them to decide
-          # while a progress ring spins.
-          grep -q 'WatermarkStrip' $RESULT
-          forbid 'WatermarkStrip' $UI/screens/HomeScreen.kt
-          forbid 'WatermarkStrip' $COMPRESS
-          # ...and only while the file still carries the mark. An offer left
-          # standing after the clean export reads as a second charge.
-          grep -q 'if (result.watermarked) {' $RESULT
-          # It must stay ABOVE the ad section, or it reads as part of the
-          # creative instead of as an offer from the app.
-          test "$(grep -n 'WatermarkStrip(' $RESULT | tail -1 | cut -d: -f1)" \
-             -lt "$(grep -n 'NativeAdCard' $RESULT | tail -1 | cut -d: -f1)"
+          # The rewarded offer appears on exactly one surface: an explicit
+          # two-way chooser after COMPRESS and before any encode. The result
+          # screen must never sell a second encode of the same video.
+          grep -q 'OutputChoiceDialog(' $COMPRESS
+          forbid 'OutputChoiceDialog' $UI/screens/HomeScreen.kt
+          forbid 'OutputChoiceDialog' $RESULT
+          forbid 'WatermarkStrip' $RESULT
+          test ! -f $UI/components/WatermarkStrip.kt
+          test ! -f $UI/components/WatermarkFreeCard.kt
           # The in-content native at the end of the home scroll must not reserve
           # space it may never fill.
           grep -q 'reserveSpace = false' $UI/screens/HomeScreen.kt
@@ -222,7 +219,7 @@ jobs:
           # --- Gate 7: no ad in front of content, and ordering is preserved ---
           # reset() must precede showNow(): AdGate refuses a full-screen ad while
           # the job is non-idle, so the reverse order fails on every attempt.
-          grep -Pzoq 'CompressionJobState\.reset\(\)\n\s*context\.findHostActivity\(\)\?\.let\(InterstitialAds::showNow\)' $COMPRESS
+          grep -Pzoq 'CompressionJobState\.reset\(\)[\s\S]{0,240}?InterstitialAds\.showNow\(activity, finished\.outputUri\.toString\(\)\)' $COMPRESS
           grep -q 'Verdict.RUNNING_JOB' $ADS/AdGate.kt
           grep -q 'Verdict.RESULT_WAITING' $ADS/AdGate.kt
           grep -q 'requireIdleJob = true' $ADS/AppOpenAdPolicy.kt
@@ -413,11 +410,14 @@ jobs:
           forbid 'Intent(Intent.ACTION_SEND)' $RESULT
           forbid 'Intent(Intent.ACTION_SEND)' $UI/VidsizeRoot.kt
 
-          # "Open Gallery" opens the gallery, not a player. The item URI means
-          # "play this"; the COLLECTION uri is what a gallery app registers for.
-          grep -q 'MediaStore.Video.Media.EXTERNAL_CONTENT_URI' $RESULT
-          grep -q 'private fun showInGallery(context: Context)' $RESULT
-          forbid 'showInGallery(context, ' $RESULT
+          # "Show in Gallery" must preserve the exact output identity. Opening
+          # the collection discarded the file and showed an arbitrary gallery.
+          grep -q 'private fun showInGallery(context: Context, uri: Uri)' $RESULT
+          grep -q 'showInGallery(context, result.outputUri)' $RESULT
+          grep -q 'Intent(MediaStore.ACTION_REVIEW)' $RESULT
+          grep -q 'setDataAndType(uri, "video/\*")' $RESULT
+          grep -q 'FLAG_GRANT_READ_URI_PERMISSION' $RESULT
+          forbid 'MediaStore.Video.Media.EXTERNAL_CONTENT_URI' $RESULT
 
           # --- Gate 12d: v0.9.4 watermark model ------------------------------
           # Every free export is marked. The default is the paying-nothing case,
@@ -428,13 +428,11 @@ jobs:
           grep -q 'watermark: Boolean = true' $MEDIA/CompressionService.kt
           grep -q 'getBooleanExtra(EXTRA_WATERMARK, true)' $MEDIA/CompressionService.kt
 
-          # The mark-free re-export starts from the ORIGINAL, never from the
-          # marked output: the mark is burned into those pixels, and re-encoding
-          # an encode compounds the loss for nothing.
-          grep -q 'uri = result.sourceUri' $RESULT
-          grep -q 'watermark = false' $RESULT
-          grep -q 'replacing = result.outputUri' $RESULT
-          forbid 'uri = result.outputUri' $RESULT
+          # Mark-free is chosen before the first encode. The result screen may
+          # not start a replacement encode or import the service at all.
+          grep -q 'startCompression(watermark = false)' $COMPRESS
+          forbid 'CompressionService' $RESULT
+          forbid 'replacing = result.outputUri' $RESULT
 
           # The grant is single-use. v0.9.5 moved WHERE it is spent: the
           # completion effect in CompressionScreen, never the result screen's
@@ -454,19 +452,19 @@ jobs:
             fi
           done
 
-          # --- Gate 12e: v0.9.5 the choice is made BEFORE the encode ---------
-          # The mark-free option is one line under the primary button, never a
-          # second primary. Two equal buttons make the free path a vocabulary
-          # test and start to look like an ad wall.
-          # The CALL, not the import: a stale import alone used to satisfy this.
-          grep -q 'WatermarkFreeCard(' $COMPRESS
+          # --- Gate 12e: v0.9.13 the choice is made BEFORE the encode --------
+          # Both outcomes are explicit in one modal after the primary CTA.
+          grep -q 'OutputChoiceDialog(' $COMPRESS
+          grep -q 'watermark_with_mark_title' $UI/components/OutputChoiceDialog.kt
+          grep -q 'watermark_free_card_title' $UI/components/OutputChoiceDialog.kt
           grep -q 'fun startWithoutWatermark' $COMPRESS
           grep -q 'startCompression(watermark = false)' $COMPRESS
-          forbid 'PrimaryButton' $UI/components/WatermarkFreeCard.kt
 
-          # An unloaded rewarded ad must not block the job the user came for.
+          # An unloaded rewarded ad keeps the chooser open and must never
+          # silently substitute a marked encode for the choice the user made.
           grep -q 'withTimeoutOrNull(REWARDED_WAIT_MILLIS)' $COMPRESS
-          grep -q 'rewardedUnavailable = true' $COMPRESS
+          grep -q 'rewardedMessage = RewardedChoiceMessage.UNAVAILABLE' $COMPRESS
+          forbid 'rewardedUnavailable = true' $COMPRESS
           for f in app/src/main/res/values*/strings.xml; do
             grep -q 'name="watermark_free_unavailable"' "$f" || {
               echo "$f lacks the ad-unavailable copy" >&2; exit 1; }
@@ -481,13 +479,11 @@ jobs:
           grep -q 'if (result != null && !result.watermarked) WatermarkOffer.consume()' $COMPRESS
           forbid 'WatermarkOffer.consume' $RESULT
 
-          # The offer is read before the share button is pressed.
-          test "$(grep -n 'WatermarkStrip(' $RESULT | head -1 | cut -d: -f1)" \
-             -lt "$(grep -n 'R.string.result_share' $RESULT | head -1 | cut -d: -f1)"
-
-          # Returning from a still-marked output must not be met by an
-          # interstitial: that return is the rewarded ad's best moment.
-          grep -q 'if (!watermarked) context.deferInterstitialOnReturn()' $RESULT
+          # Reward confirmation happens only after the creative closes, and the
+          # internal player is never followed by a surprise interstitial.
+          grep -q 'if (rewardEarned) onRewardGranted() else onClosedWithoutReward()' $ADS/RewardedAds.kt
+          grep -q 'RewardGrantedDialog()' $COMPRESS
+          forbid 'deferInterstitialOnReturn' <(awk '/private fun openVideo/,/^}/' $RESULT)
 
           # --- Gate 12f: v0.9.7 production review findings -------------------
           # No internal exception text in a user-facing build. `adsQa` and
@@ -514,10 +510,9 @@ jobs:
           forbid 'CompressionBannerAd' $UI/screens/ProcessingOverlay.kt
           forbid 'AdSlots' $UI/screens/ProcessingOverlay.kt
 
-          # The offer is a card selling the outcome, with the ad as a badge -
-          # and the free path keeps the only gradient primary on the screen.
-          grep -q 'watermark_free_card_badge' $UI/components/WatermarkFreeCard.kt
-          grep -q 'SecondaryButton(' $UI/components/WatermarkFreeCard.kt
+          # The chooser states both the ordinary route and the rewarded route.
+          grep -q 'watermark_with_mark_badge' $UI/components/OutputChoiceDialog.kt
+          grep -q 'watermark_free_card_badge' $UI/components/OutputChoiceDialog.kt
 
           # Continuing the core task must not require scrolling past an ad.
           test "$(grep -n 'R.string.result_another' $RESULT | head -1 | cut -d: -f1)" \
@@ -525,7 +520,7 @@ jobs:
 
           # --- Gate 13: the published policy declares every format and the reward ---
           for term in 'Banner' 'Result-screen ad' 'App-open ad' 'Interstitial' 'Rewarded ad' \
-                      'without the' 'mark' 'one mark-free export' '60 seconds'; do
+                      'without the' 'mark' 'one mark-free export' '180 seconds'; do
             grep -Fq "$term" docs/privacy.html || { echo "privacy.html omits: $term" >&2; exit 1; }
           done
           cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html
@@ -666,7 +661,7 @@ jobs:
           # cosmetic. AdGate refuses a full-screen ad while the job is non-idle,
           # so a future edit that shows before resetting would be declined on
           # every attempt and look exactly like no fill.
-          grep -Pzoq 'onBack = \{\n\s*CompressionJobState\.reset\(\)\n\s*context\.findHostActivity\(\)\?\.let\(InterstitialAds::showNow\)\n\s*\}' "$SCREEN"
+          grep -Pzoq 'onBack = \{\n\s*CompressionJobState\.reset\(\)[\s\S]{0,240}?InterstitialAds\.showNow\(activity, finished\.outputUri\.toString\(\)\)' "$SCREEN"
 
           # 4 - the native ad keeps its reserved slot and its one-time binding,
           # and the page can scroll far enough to expose the whole creative.
@@ -831,9 +826,8 @@ jobs:
           # invariant being protected was "no slot renders without the
           # build-level switch", and it still holds - `requestable` and
           # `bannerVisible` are both defined as `enabled && ...`, so they are
-          # strictly narrower. Pinning the weaker spelling would now block the
-          # ad-free window from ever reaching these surfaces, which is the one
-          # thing v0.9.0 had to guarantee.
+          # strictly narrower. Pinning the weaker spelling would bypass the
+          # shared consent/configuration decision and let surfaces disagree.
           has "$NATIVE" 'AdSlots.requestable'
           has "$BANNER" 'AdSlots.requestable'
           has "$RESULT" 'AdSlots.requestable'
@@ -943,37 +937,16 @@ jobs:
             | grep -q 'removeByOutputUri'
 
           # --- P0-2: the layout budget ---------------------------------------
-          # The mark-free card must be INSIDE the scrolling column, not pinned
-          # between it and the action bar. Pinned, it cost ~160dp of a ~366dp
-          # window and pushed the third compression level off screen.
-          #
-          # Checked by position, not by proximity. A first attempt at this gate
-          # grepped the last 40 lines before the action bar, which swept up the
-          # tail of the scrolling column too and fired on the correct layout.
-          #
-          # The real invariant: the card must appear BEFORE the scroll column
-          # closes. The column's closing brace is the last line at the action
-          # bar's own indentation before it - anything after that brace is
-          # pinned chrome, anything before it scrolls.
+          # No rewarded card consumes permanent height on the compression
+          # screen. The two-way choice is modal and appears only after the CTA.
+          test ! -f $UI/components/WatermarkFreeCard.kt
           CTA_LINE="$(grep -n '^            CompressionActionBar(' $COMPRESS \
             | head -1 | cut -d: -f1)"
-          CLOSE_LINE="$(awk -v cta="$CTA_LINE" \
-            'NR<cta && /^            }$/ {last=NR} END{print last+0}' $COMPRESS)"
-          # The LAST call site, not the first. A regression that ADDS a pinned
-          # card while leaving the scrolling one in place would slip past a
-          # head -1 check - which it did, on the first run of this gate's own
-          # negative test. If the last one scrolls, all of them do.
-          CARD_LINE="$(grep -n 'WatermarkFreeCard(' $COMPRESS \
+          CHOICE_LINE="$(grep -n 'OutputChoiceDialog(' $COMPRESS \
             | grep -v import | tail -1 | cut -d: -f1)"
-          test -n "$CTA_LINE" && test -n "$CARD_LINE" && test "$CLOSE_LINE" -gt 0
-          if [ "$CARD_LINE" -ge "$CLOSE_LINE" ]; then
-            echo "GATE FAILED: WatermarkFreeCard (line $CARD_LINE) is pinned" >&2
-            echo "between the scroll column (closes $CLOSE_LINE) and the action" >&2
-            echo "bar (line $CTA_LINE). Pinned it costs ~160dp of a ~366dp" >&2
-            echo "window and pushes the third compression level off screen." >&2
-            exit 1
-          fi
-          echo "ok: mark-free card scrolls (line $CARD_LINE < $CLOSE_LINE)"
+          test -n "$CTA_LINE" && test -n "$CHOICE_LINE"
+          test "$CHOICE_LINE" -gt "$CTA_LINE"
+          echo "ok: output choice is modal (line $CHOICE_LINE > CTA $CTA_LINE)"
 
           # --- P1: the viability floor ---------------------------------------
           # 0.92 meant a 9% saving counted as worth a minute of the user's time
@@ -1029,8 +1002,8 @@ jobs:
           grep -q 'MAX_TARGET_PASSES = 3' $MEDIA/CompressionEngine.kt
 
           # Every correction pass must start from the ORIGINAL, never from the
-          # previous output: chaining encodes compounds generation loss, which
-          # is the whole reason the watermark-free re-export carries sourceUri.
+          # previous output: chaining target-correction passes compounds
+          # generation loss.
           # The loop body must pass `input`, and must never feed a temp back in.
           awk '/for \(pass in 1..passCeiling\)/,/^            }/' \
             $MEDIA/CompressionEngine.kt > /tmp/passloop.txt
@@ -1342,6 +1315,49 @@ jobs:
           python3 tools/check_video_selection.py
           echo 'ok: SAF selection gate rejects a non-persistable picker'
 
+      - name: Exact output and reward-choice experience
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_export_experience.py
+
+      - name: Export experience gate must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=app/src/main/java/com/vidsize/compressor/ui/screens/ResultScreen.kt
+          COMPRESS=app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          RESULT_BACKUP="$(mktemp)"
+          COMPRESS_BACKUP="$(mktemp)"
+          cp "$RESULT" "$RESULT_BACKUP"
+          cp "$COMPRESS" "$COMPRESS_BACKUP"
+          restore_export_experience() {
+            cp "$RESULT_BACKUP" "$RESULT"
+            cp "$COMPRESS_BACKUP" "$COMPRESS"
+            rm -f "$RESULT_BACKUP" "$COMPRESS_BACKUP"
+          }
+          trap restore_export_experience EXIT
+
+          # Dropping the output URI recreates the generic-gallery bug.
+          sed -i 's/showInGallery(context, result.outputUri)/showInGallery(context, Uri.EMPTY)/' "$RESULT"
+          if python3 tools/check_export_experience.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: export gate accepted a discarded output URI.' >&2
+            exit 1
+          fi
+
+          cp "$RESULT_BACKUP" "$RESULT"
+
+          # Starting immediately bypasses the two-way disclosure and reward.
+          sed -i 's/showOutputChoice = true/startCompression(watermark = true)/' "$COMPRESS"
+          if python3 tools/check_export_experience.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: export gate accepted a bypassed chooser.' >&2
+            exit 1
+          fi
+
+          cp "$COMPRESS_BACKUP" "$COMPRESS"
+          python3 tools/check_export_experience.py
+          echo 'ok: export gate rejects lost URIs and bypassed choices'
+
       - name: Decoder recovery gate must FAIL when broken (negative test)
         shell: bash
         run: |
@@ -1511,14 +1527,14 @@ jobs:
             echo "ok: rejected -> $3"
           }
 
-          W=app/src/main/java/com/vidsize/compressor/ui/components/WatermarkStrip.kt
+          W=app/src/main/java/com/vidsize/compressor/ui/components/OutputChoiceDialog.kt
           R=app/src/main/java/com/vidsize/compressor/ui/screens/ResultScreen.kt
 
-          # The exact v0.9.4 failure, reproduced.
+          # Compose-only imports that have previously escaped the source gate.
           probe "$W" '/import com.vidsize.compressor.ui.theme.VidsizeTheme/d' \
                 "a deleted VidsizeTheme import"
-          probe "$R" '/import com.vidsize.compressor.media.CompressionService/d' \
-                "a deleted CompressionService import"
+          probe "$R" '/import com.vidsize.compressor.PlayerActivity/d' \
+                "a deleted PlayerActivity import"
           # A symbol that exists nowhere at all.
           probe "$R" 's/val context = LocalContext.current/val context = NoSuchHelper.get()/' \
                 "a reference to a class that does not exist"
