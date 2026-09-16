@@ -77,12 +77,12 @@ object VideoProbe {
                 // with the frame as it is stored, and rotation is applied after
                 // decoding. Falling back to rawWidth/rawHeight keeps the check
                 // meaningful when the extractor could not report a size.
-                deviceCanDecode = DecoderSupport.canDecode(
+                decoderPrecheckPassed = DecoderSupport.canDecode(
                     mime = track?.mime,
                     width = track?.width?.takeIf { it > 0 } ?: rawWidth,
                     height = track?.height?.takeIf { it > 0 } ?: rawHeight,
                     frameRate = frameRate,
-                ).allowsAttempt,
+                ).precheckPassed,
             )
         } finally {
             retriever.release()

@@ -39,17 +39,17 @@ import kotlin.math.roundToInt
  *     showed three levels and three estimates for a video it was never going to
  *     be able to open.
  *
- * This object closes the gap. It is the mirror of [EncoderSupport]: the same
- * [MediaCodecList] query, asked of decoders, about the source.
+ * This object measures the gap. It is the mirror of [EncoderSupport]: the same
+ * [MediaCodecList] query, asked of decoders, about the source. Its answer is
+ * diagnostic only. Codec capability tables are frequently incomplete; actual
+ * Transformer initialization is the eligibility test.
  *
  * ## The one rule this file follows
  *
- * **Only refuse on a definite No.** A device that will not answer questions
- * about its codecs, an exotic container, a mime type nothing claims - all of
- * these return [Verdict.UNKNOWN], and an unknown verdict lets the job run. The
- * cost of a wrong "cannot decode" is a video the user is refused for no reason;
- * the cost of a wrong "can decode" is the failure they already have, no worse
- * than today. Those are not symmetric, so uncertainty always favours trying.
+ * **A query never refuses a job.** A device that will not answer questions
+ * about its codecs, an exotic container, or a decoder hidden behind an alias
+ * can all make this API say No while a real decode succeeds. Every verdict is
+ * retained for diagnostics and UI context, then the engine tries the source.
  */
 object DecoderSupport {
 
@@ -74,7 +74,7 @@ object DecoderSupport {
 
         /**
          * Every decoder that claims this format reports it cannot read this
-         * size. This is the only value that blocks a job.
+         * size. This requests the fallback notice; it does not block the job.
          */
         UNSUPPORTED,
 
@@ -82,8 +82,8 @@ object DecoderSupport {
         UNKNOWN,
         ;
 
-        /** True unless this device gave a definite No. */
-        val allowsAttempt: Boolean get() = this != UNSUPPORTED
+        /** False only when every queried decoder gave a definite No. */
+        val precheckPassed: Boolean get() = this != UNSUPPORTED
     }
 
     /** One decoder's own answer to the 4K questions used during field QA. */
@@ -101,11 +101,10 @@ object DecoderSupport {
     /**
      * Full device decoder inventory for the hidden diagnostics screen.
      *
-     * This deliberately uses [MediaCodecList.ALL_CODECS], not the
-     * [MediaCodecList.REGULAR_CODECS] list used by the conservative pre-check.
-     * Some vendors hide specialised, alias or software codecs from the regular
-     * list. Seeing both the ranges and each 4K answer on the affected phone is
-     * the measurement needed before changing the production blocking policy.
+     * This deliberately uses [MediaCodecList.ALL_CODECS]. Some vendors hide
+     * specialised, alias or software codecs from the regular list. Seeing both
+     * the ranges and each 4K answer on the affected phone explains which route
+     * the engine is likely to use without turning a report into a hard block.
      */
     fun fourKDiagnostics(): List<DecoderDiagnostic> = runCatching {
         buildList {
@@ -170,7 +169,7 @@ object DecoderSupport {
         if (width <= 0 || height <= 0) return Verdict.UNKNOWN
 
         return runCatching {
-            val list = MediaCodecList(MediaCodecList.REGULAR_CODECS)
+            val list = MediaCodecList(MediaCodecList.ALL_CODECS)
             var sawDecoderForMime = false
 
             for (info in list.codecInfos) {
@@ -188,8 +187,8 @@ object DecoderSupport {
 
             // No decoder claims this mime type at all. That is not the same as a
             // decoder saying no: an unusual codec the platform hides from
-            // REGULAR_CODECS, or a software decoder Media3 supplies itself,
-            // would look identical here. Let it try.
+            // ALL_CODECS, or a decoder exposed only when it is initialized,
+            // would look identical here. The engine tries either way.
             if (!sawDecoderForMime) Verdict.UNKNOWN else Verdict.UNSUPPORTED
         }.getOrDefault(Verdict.UNKNOWN)
     }

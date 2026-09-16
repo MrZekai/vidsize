@@ -12,10 +12,14 @@ import androidx.annotation.OptIn
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.Clock
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.Presentation
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.transformer.AudioEncoderSettings
 import androidx.media3.transformer.Composition
+import androidx.media3.transformer.DefaultAssetLoaderFactory
+import androidx.media3.transformer.DefaultDecoderFactory
 import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
@@ -159,16 +163,6 @@ object CompressionEngine {
         // blocks this, but a share-sheet entry or a stale pre-flight check can
         // still reach here.
         if (!plan.viable) throw NoCompressionSavingsException()
-
-        // The same principle, for the failure the 4K field report exposed. When
-        // the probe already established that no decoder on this device will
-        // open the source, there is nothing to attempt: the ladder varies the
-        // output frame, and the decoder's problem is the input frame. Refusing
-        // here costs the user a dialog; not refusing cost them several minutes
-        // and three identical failures.
-        if (!info.deviceCanDecode) {
-            throw SourceUndecodableException(width = info.width, height = info.height)
-        }
 
         val storage = StorageGuard.check(context, plan.estimatedOutputBytes, info.sourceBytes)
         if (!storage.hasRoom) throw OutOfSpaceException()
@@ -349,7 +343,11 @@ object CompressionEngine {
         val attempts = buildAttempts(plan)
         var lastFailure: Throwable? = null
 
-        attempts.forEachIndexed { index, attempt ->
+        var attemptIndex = 0
+        var decoderRoute = DecoderRoute.PLATFORM_ORDER
+
+        while (attemptIndex < attempts.size) {
+            val attempt = attempts[attemptIndex]
             try {
                 val export = runExport(
                     context = context,
@@ -362,6 +360,7 @@ object CompressionEngine {
                     useRequestedSettings = attempt.useRequestedSettings,
                     hasAudio = hasAudio,
                     watermark = watermark,
+                    decoderRoute = decoderRoute,
                     onProgress = onProgress,
                 )
 
@@ -388,7 +387,23 @@ object CompressionEngine {
                 // the next one or, worse, published.
                 runCatching { output.delete() }
 
-                // Stop the ladder dead when the DECODER is what failed.
+                val decoderFailed = DecoderFailure.isDecoderSide(throwable)
+
+                // A capability query is advisory, not an eligibility gate. A
+                // vendor may under-report a software/alias decoder, and the
+                // only trustworthy answer is an actual initialization attempt.
+                // The normal route already enables Media3's lower-priority
+                // decoder fallback. If decoding still fails, repeat this SAME
+                // output once with software codecs first; this also covers a
+                // hardware decoder that initializes and then dies on a frame.
+                val recoveryRoute = DecoderRecoveryPolicy.nextRoute(decoderRoute, decoderFailed)
+                if (recoveryRoute != null) {
+                    decoderRoute = recoveryRoute
+                    onProgress?.invoke(0f)
+                    continue
+                }
+
+                // Stop the OUTPUT ladder when both decoder routes have failed.
                 //
                 // Every rung below this one differs only in the output frame,
                 // and the decoder's problem is the input frame - it reads the
@@ -398,10 +413,7 @@ object CompressionEngine {
                 // and then a dialog telling the user their ENCODER could not
                 // manage it "even at a lower resolution".
                 //
-                // The probe normally catches this before any encode starts.
-                // This is the second line of defence, for the device that
-                // advertises a capability it does not have.
-                if (DecoderFailure.isDecoderSide(throwable)) {
+                if (decoderFailed) {
                     throw SourceUndecodableException(
                         width = sourceWidth,
                         height = sourceHeight,
@@ -410,7 +422,8 @@ object CompressionEngine {
                 }
 
                 lastFailure = throwable
-                if (index < attempts.lastIndex) {
+                attemptIndex += 1
+                if (attemptIndex < attempts.size) {
                     onProgress?.invoke(0f)
                 }
             }
@@ -507,8 +520,24 @@ object CompressionEngine {
         useRequestedSettings: Boolean,
         hasAudio: Boolean,
         watermark: Boolean,
+        decoderRoute: DecoderRoute,
         onProgress: ((Float) -> Unit)?,
     ): ExportResult = suspendCancellableCoroutine { continuation ->
+        val decoderFactoryBuilder = DefaultDecoderFactory.Builder(context)
+            // Media3 defaults this to false. With it enabled, a broken primary
+            // decoder does not prevent a lower-priority platform/software
+            // decoder from opening the same source.
+            .setEnableDecoderFallback(true)
+        if (decoderRoute == DecoderRoute.SOFTWARE_FIRST) {
+            decoderFactoryBuilder.setMediaCodecSelector(MediaCodecSelector.PREFER_SOFTWARE)
+        }
+        val assetLoaderFactory = DefaultAssetLoaderFactory(
+            context,
+            decoderFactoryBuilder.build(),
+            Clock.DEFAULT,
+            null,
+        )
+
         val encoderFactoryBuilder = DefaultEncoderFactory.Builder(context)
             .setEnableFallback(true)
 
@@ -571,6 +600,7 @@ object CompressionEngine {
         transformer = Transformer.Builder(context)
             .setVideoMimeType(MimeTypes.VIDEO_H264)
             .setAudioMimeType(MimeTypes.AUDIO_AAC)
+            .setAssetLoaderFactory(assetLoaderFactory)
             .setEncoderFactory(encoderFactory)
             .addListener(listener)
             .build()

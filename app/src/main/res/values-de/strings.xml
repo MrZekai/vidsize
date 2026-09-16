@@ -138,8 +138,8 @@
     <string name="cta_blocked_target_too_small">Diese Größe ist für dieses Video nicht erreichbar</string>
     <string name="processing_pass">Durchgang %1$d von %2$d – näher am Ziel</string>
     <string name="result_target_missed">%1$s wurden nicht unterschritten. Kleiner bekommt Vidsize es nicht.</string>
-    <string name="notice_undecodable_title">Dieses Video kann nicht verarbeitet werden</string>
-    <string name="notice_undecodable_body">Dein Gerät kann %1$d × %2$d Video nicht dekodieren. Das ist eine Grenze der Hardware, nicht der Datei — eine Aufnahme mit geringerer Auflösung lässt sich normal komprimieren.</string>
-    <string name="error_source_undecodable">Der Video-Decoder deines Geräts konnte dieses Video nicht öffnen, es gab also nichts zu komprimieren. Eine andere Stufe ändert daran nichts; ein Video mit geringerer Auflösung funktioniert.</string>
+    <string name="notice_decoder_fallback_title">Zusätzliche Decoder werden versucht</string>
+    <string name="notice_decoder_fallback_body">Die Codec-Tabelle des Geräts meldet keine Unterstützung für %1$d × %2$d. Vidsize versucht trotzdem Fallback- und Software-Decoder und startet die Ausgabe mit höchstens 1080p. Das kann länger dauern.</string>
+    <string name="error_source_undecodable">Vidsize hat die verfügbaren Fallback- und Software-Decoder des Geräts ausprobiert, aber keiner konnte diese Quelle öffnen. Nicht die gewählte Ausgabeauflösung, sondern der Quellcodec konnte auf diesem Gerät nicht dekodiert werden.</string>
     <string name="player_error">Dieses Video konnte nicht abgespielt werden. Die Datei ist möglicherweise beschädigt oder wird noch geschrieben.</string>
 </resources>

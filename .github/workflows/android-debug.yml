@@ -1093,7 +1093,7 @@ jobs:
           # instead of falling through to the next encoder configuration - which
           # is the difference between "your device gets a 720p file" and "your
           # device gets an error".
-          awk '/attempts.forEachIndexed/,/^        throw EncoderUnsupportedException/' \
+          awk '/while \(attemptIndex < attempts\.size\)/,/^        throw EncoderUnsupportedException/' \
             $MEDIA/CompressionEngine.kt > /tmp/ladder.txt
           grep -q 'verifyGeometry' /tmp/ladder.txt
           grep -q 'val export = runExport(' /tmp/ladder.txt
@@ -1203,7 +1203,7 @@ jobs:
             exit 1; }
           echo 'ok: v0.9.11 encoder honesty gates'
 
-      - name: v0.9.12 decoder pre-check and the in-app player
+      - name: v0.9.12 decoder recovery and the in-app player
         shell: bash
         run: |
           set -euo pipefail
@@ -1214,56 +1214,23 @@ jobs:
           TEST=app/src/test/java/com/vidsize/compressor/media
 
           # ================================================================
-          # PART 1 - the 4K failure: the DECODER, not the encoder
+          # PART 1 - 2K/4K must get a real decoder attempt
           # ================================================================
-          # Field report: a 3840x2160 source failed after minutes of retrying,
-          # with a dialog blaming the encoder. The real cause was three frames
-          # down the chain: CodecInfo{type=VideoDecoder}. The retry ladder only
-          # ever varies the OUTPUT frame, so it could not have helped - the
-          # decoder reads the source at its own resolution regardless.
+          # Codec tables are incomplete on real vendor builds, so the query is
+          # diagnostic only. The checker ties together the absence of a hard
+          # block, Media3's decoder fallback, one software-first recovery and
+          # the <=1080p initial output policy in both preset and target modes.
+          python3 tools/check_decoder_policy.py
 
-          # 1a. The capability check exists and is asked about the SOURCE.
-          test -f $MEDIA/DecoderSupport.kt
-          grep -q 'fun canDecode' $MEDIA/DecoderSupport.kt
-          grep -q 'MediaCodecList' $MEDIA/DecoderSupport.kt
-
-          # 1b. ...and it is actually CALLED by the probe. A capability check
-          #     nobody consults is the state this release started from.
-          grep -q 'DecoderSupport.canDecode' $MEDIA/VideoProbe.kt
-          grep -q 'deviceCanDecode' $MODEL/VideoInfo.kt
-
-          # 1c. The engine refuses BEFORE the ladder when the probe already
-          #     knows. This is what turns minutes of failing into a dialog.
-          grep -q 'if (!info.deviceCanDecode)' $MEDIA/CompressionEngine.kt
+          # A real failure after both decoder routes still reaches the user as
+          # its own reason. It must never be mislabeled as an encoder refusal.
           grep -q 'class SourceUndecodableException' $MEDIA/CompressionFailures.kt
-
-          # 1d. ...and the ladder ABORTS on a decoder-side failure rather than
-          #     stepping to the next rung. The check must be inside the ladder
-          #     and must throw: a `lastFailure = ...` there would be the old
-          #     behaviour wearing the new code's name.
-          awk '/attempts.forEachIndexed/,/^        throw EncoderUnsupportedException/' \
-            $MEDIA/CompressionEngine.kt > /tmp/ladder912.txt
-          grep -q 'DecoderFailure.isDecoderSide(throwable)' /tmp/ladder912.txt
-          grep -q 'throw SourceUndecodableException' /tmp/ladder912.txt
-
-          # 1e. The failure reaches the user as its own reason with its own
-          #     words. Reported as ENCODER_UNSUPPORTED it told the user their
-          #     encoder had failed "even at a lower resolution" - false twice.
           grep -q 'SOURCE_UNDECODABLE' $MEDIA/CompressionJobState.kt
           grep -q 'SourceUndecodableException ->' $MEDIA/CompressionService.kt
           grep -q 'FailureReason.SOURCE_UNDECODABLE -> R.string.error_source_undecodable' \
             $UI/screens/CompressionScreen.kt
 
-          # 1f. The screen must not offer levels for a video it cannot process.
-          #     QA BUG-04 was exactly this shape: an unusable file still drew
-          #     three levels, three estimates and a live button.
-          grep -q 'val undecodable = currentInfo != null && !currentInfo.deviceCanDecode' \
-            $UI/screens/CompressionScreen.kt
-          grep -q 'val blockedEntirely = probeFailed || undecodable' \
-            $UI/screens/CompressionScreen.kt
-          grep -q 'if (!blockedEntirely) {' $UI/screens/CompressionScreen.kt
-
-          # 1g. The classifier must not mistake an encoder failure for a decoder
+          # The classifier must not mistake an encoder failure for a decoder
           #     one. A false positive kills a ladder that was about to succeed.
           test -f $MEDIA/DecoderFailure.kt
           forbid 'type=VideoEncoder' $MEDIA/DecoderFailure.kt
@@ -1320,11 +1287,11 @@ jobs:
           done
           echo "ok: media3 modules all at $TRANSFORMER_V"
 
-          # Localisation: a blocked video and a failed playback must be readable
-          # in every language the app ships.
+          # Localisation: the fallback notice, final decoder failure and failed
+          # playback must be readable in every language the app ships.
           for f in app/src/main/res/values*/strings.xml; do
-            for key in error_source_undecodable notice_undecodable_title \
-                       notice_undecodable_body player_error; do
+            for key in error_source_undecodable notice_decoder_fallback_title \
+                       notice_decoder_fallback_body player_error; do
               grep -q "name=\"$key\"" "$f" || {
                 echo "GATE FAILED: $key missing from $f" >&2; exit 1; }
             done
@@ -1374,6 +1341,46 @@ jobs:
           cp "$BACKUP" "$ROOT"
           python3 tools/check_video_selection.py
           echo 'ok: SAF selection gate rejects a non-persistable picker'
+
+      - name: Decoder recovery gate must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENGINE=app/src/main/java/com/vidsize/compressor/media/CompressionEngine.kt
+          SCREEN=app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          ENGINE_BACKUP="$(mktemp)"
+          SCREEN_BACKUP="$(mktemp)"
+          cp "$ENGINE" "$ENGINE_BACKUP"
+          cp "$SCREEN" "$SCREEN_BACKUP"
+          restore_decoder_policy() {
+            cp "$ENGINE_BACKUP" "$ENGINE"
+            cp "$SCREEN_BACKUP" "$SCREEN"
+            rm -f "$ENGINE_BACKUP" "$SCREEN_BACKUP"
+          }
+          trap restore_decoder_policy EXIT
+
+          # Without this flag Transformer tries only the primary decoder. The
+          # exact field failure can then return even though a slower codec is
+          # installed and usable.
+          sed -i 's/setEnableDecoderFallback(true)/setEnableDecoderFallback(false)/' "$ENGINE"
+          if python3 tools/check_decoder_policy.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: decoder gate accepted disabled fallback.' >&2
+            exit 1
+          fi
+
+          cp "$ENGINE_BACKUP" "$ENGINE"
+
+          # The codec-table result must remain advisory. Reattaching it to the
+          # screen-wide block recreates the 2K/4K refusal before any codec runs.
+          sed -i 's/val blockedEntirely = probeFailed$/val blockedEntirely = probeFailed || decoderFallbackExpected/' "$SCREEN"
+          if python3 tools/check_decoder_policy.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: decoder gate accepted a UI hard block.' >&2
+            exit 1
+          fi
+
+          cp "$SCREEN_BACKUP" "$SCREEN"
+          python3 tools/check_decoder_policy.py
+          echo 'ok: decoder gate rejects disabled fallback and UI hard blocks'
 
       - name: Gate helpers must actually fail
         shell: bash

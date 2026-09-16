@@ -58,10 +58,10 @@ class EncoderUnsupportedException(
  *    the output size, so every rung fails the same way. The old behaviour spent
  *    minutes proving that three times over.
  *
- * So this is thrown immediately - before the ladder when [VideoProbe] already
- * knows the answer, and from inside it the moment a decoder-side failure is
- * recognised. It carries the source geometry so the message can name what the
- * device could not open.
+ * Capability tables are not trusted enough to throw this before work begins.
+ * It is thrown only after Media3's normal decoder fallback and one explicit
+ * software-first retry both fail. It carries the source geometry so the message
+ * can name what the device could not open.
  */
 class SourceUndecodableException(
     val width: Int,

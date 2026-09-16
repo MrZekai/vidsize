@@ -139,8 +139,8 @@
     <string name="cta_blocked_target_too_small">Ese tamaño no es alcanzable para este vídeo</string>
     <string name="processing_pass">Pasada %1$d de %2$d: acercándose a tu objetivo</string>
     <string name="result_target_missed">No se pudo bajar de %1$s. Este es el tamaño más pequeño que Vidsize ha logrado.</string>
-    <string name="notice_undecodable_title">Este vídeo no se puede procesar</string>
-    <string name="notice_undecodable_body">Tu dispositivo no puede decodificar vídeo de %1$d × %2$d. Es un límite del hardware del teléfono, no del archivo: una grabación de menor resolución se comprimirá con normalidad.</string>
-    <string name="error_source_undecodable">El decodificador de vídeo de tu dispositivo no pudo abrir este vídeo, así que no había nada que comprimir. Otro nivel no lo soluciona; un vídeo de menor resolución sí funcionará.</string>
+    <string name="notice_decoder_fallback_title">Se probarán decodificadores adicionales</string>
+    <string name="notice_decoder_fallback_body">La tabla de códecs del dispositivo no indica compatibilidad con %1$d × %2$d. Vidsize probará de todos modos decodificadores alternativos y de software, e iniciará la salida a 1080p o menos. Puede tardar más.</string>
+    <string name="error_source_undecodable">Vidsize probó los decodificadores alternativos y de software disponibles en el dispositivo, pero ninguno pudo abrir esta fuente. El trabajo se detuvo por el códec de origen en este dispositivo, no por la resolución de salida solicitada.</string>
     <string name="player_error">No se pudo reproducir este vídeo. El archivo puede estar dañado o aún se está escribiendo.</string>
 </resources>

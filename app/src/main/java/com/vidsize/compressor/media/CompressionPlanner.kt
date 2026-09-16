@@ -367,8 +367,16 @@ object CompressionPlanner {
      * requested size does not leave enough bits for the source resolution, the
      * honest move is to hand back a smaller, clean frame rather than a full-size
      * blocky one - so this walks down until the bits per pixel are acceptable.
+     *
+     * Target mode starts high-resolution sources at 1080p too.
+     *
+     * A size target is not a request to preserve 2K/4K pixels. Starting at 4K
+     * merely asks the encoder for the least portable output before falling back
+     * to the same 1080p frame the Balanced preset would have chosen. Capping the
+     * first attempt here makes every mode follow the same compatibility policy:
+     * decode the source once at its native size, then write at most 1080p.
      */
-    private val TARGET_SHORT_EDGES = intArrayOf(2160, 1440, 1080, 720, 480, 360)
+    private val TARGET_SHORT_EDGES = intArrayOf(1080, 720, 480, 360)
 
     /**
      * Bits per pixel per frame below which the target planner steps the

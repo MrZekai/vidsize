@@ -313,6 +313,34 @@ class CompressionPlannerTest {
         assertEquals(480, s.targetHeight)
     }
 
+    @Test
+    fun twoKAndFourKSourcesStartAt1080pOrBelowInEveryMode() {
+        val highResolutionSources = listOf(
+            VideoInfo(11_000, 2732, 1440, 13_200_000L, null, true),
+            VideoInfo(39_000, 3840, 2160, 336_000_000L, null, true),
+            VideoInfo(39_000, 2160, 3840, 336_000_000L, null, true),
+        )
+
+        highResolutionSources.forEach { info ->
+            val balanced = CompressionPlanner.plan(info, CompressionPreset.BALANCED)
+            assertTrue(
+                "Balanced must start ${info.width}x${info.height} at <=1080p",
+                minOf(balanced.targetWidth, balanced.targetHeight) <= 1080,
+            )
+
+            val target = CompressionPlanner.planForTarget(info, info.sourceBytes / 2)
+            assertTrue(
+                "Target mode must start ${info.width}x${info.height} at <=1080p",
+                minOf(target.targetWidth, target.targetHeight) <= 1080,
+            )
+        }
+
+        val fourK = highResolutionSources[1]
+        val balanced4k = CompressionPlanner.plan(fourK, CompressionPreset.BALANCED)
+        assertEquals(1920, balanced4k.targetWidth)
+        assertEquals(1080, balanced4k.targetHeight)
+    }
+
     /**
      * Re-compressing an already-compressed file must not shrink it again.
      *

@@ -138,8 +138,8 @@
     <string name="cta_blocked_target_too_small">यह आकार इस वीडियो के लिए संभव नहीं है</string>
     <string name="processing_pass">%2$d में से %1$d चरण — लक्ष्य के करीब</string>
     <string name="result_target_missed">%1$s से नीचे नहीं ला सके। Vidsize इससे छोटा नहीं बना सका।</string>
-    <string name="notice_undecodable_title">यह वीडियो प्रोसेस नहीं किया जा सकता</string>
-    <string name="notice_undecodable_body">आपका डिवाइस %1$d × %2$d वीडियो डिकोड नहीं कर सकता। यह फ़ाइल की नहीं, फ़ोन के हार्डवेयर की सीमा है — कम रिज़ॉल्यूशन वाली रिकॉर्डिंग सामान्य रूप से कंप्रेस होगी।</string>
-    <string name="error_source_undecodable">आपके डिवाइस का वीडियो डिकोडर यह वीडियो नहीं खोल सका, इसलिए कंप्रेस करने के लिए कुछ नहीं था। कोई दूसरा स्तर इसे ठीक नहीं करेगा; कम रिज़ॉल्यूशन वाला वीडियो काम करेगा।</string>
+    <string name="notice_decoder_fallback_title">अतिरिक्त डिकोडर आज़माए जाएंगे</string>
+    <string name="notice_decoder_fallback_body">डिवाइस की कोडेक सूची %1$d × %2$d के लिए समर्थन नहीं दिखाती। Vidsize फिर भी फ़ॉलबैक और सॉफ़्टवेयर डिकोडर आज़माएगा और आउटपुट को 1080p या उससे कम पर शुरू करेगा। इसमें अधिक समय लग सकता है।</string>
+    <string name="error_source_undecodable">Vidsize ने डिवाइस पर उपलब्ध फ़ॉलबैक और सॉफ़्टवेयर डिकोडर आज़माए, लेकिन कोई भी इस स्रोत को नहीं खोल सका। काम मांगी गई आउटपुट रिज़ॉल्यूशन से नहीं, इस डिवाइस पर स्रोत कोडेक के डिकोड न होने से रुका।</string>
     <string name="player_error">यह वीडियो चलाया नहीं जा सका। फ़ाइल खराब हो सकती है या अभी लिखी जा रही हो सकती है।</string>
 </resources>

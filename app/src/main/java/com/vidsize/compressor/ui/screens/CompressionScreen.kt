@@ -251,21 +251,14 @@ fun CompressionScreen(
     val currentInfo = info
     val blockedByStorage = storage != null && !storage.hasRoom
 
-    /**
-     * The video is readable, but this device's decoder cannot open it.
-     *
-     * The 4K field failure went the whole way through this screen before it was
-     * found out: three levels drawn, three estimates shown, a live COMPRESS
-     * button, and then minutes of encoding that could never have worked. The
-     * probe knows the answer before any of that is drawn, so the screen acts on
-     * it here - exactly like QA BUG-04, where an unreadable file still got a
-     * full set of levels and a tick on Balanced.
-     */
-    val undecodable = currentInfo != null && !currentInfo.deviceCanDecode
+    // A negative codec-table answer is useful context, not proof. Media3 may
+    // still open the source through a lower-priority or software decoder, so it
+    // earns an informational notice and never disables the compression action.
+    val decoderFallbackExpected = currentInfo != null && !currentInfo.decoderPrecheckPassed
 
-    // Anything that blocks the whole video rather than one level. Keeps the CTA
-    // and the level list from having to restate the same two conditions.
-    val blockedEntirely = probeFailed || undecodable
+    // Only an actually unreadable file blocks the whole screen. Codec tables do
+    // not: the engine is the authority because it performs a real decode.
+    val blockedEntirely = probeFailed
 
     // Never leave the selection parked on a level that cannot run while another
     // one can. v0.8.7 defaulted to Balanced and stayed there, so a source whose
@@ -516,22 +509,6 @@ fun CompressionScreen(
                         title = stringResource(R.string.error_unreadable_title),
                         body = stringResource(R.string.error_invalid_video),
                     )
-                } else if (undecodable && currentInfo != null) {
-                    // Named, not vague. "This device cannot open 3840x2160
-                    // video" tells the user something true about their phone
-                    // that they can act on; the old dialog told them their
-                    // encoder had failed at a lower resolution, which was false
-                    // twice over and suggested a retry that could not work.
-                    Spacer(Modifier.height(Space.md))
-                    NoticeCard(
-                        tone = NoticeTone.Blocking,
-                        title = stringResource(R.string.notice_undecodable_title),
-                        body = stringResource(
-                            R.string.notice_undecodable_body,
-                            currentInfo.width,
-                            currentInfo.height,
-                        ),
-                    )
                 } else if (currentInfo != null && !anyViable) {
                     Spacer(Modifier.height(Space.md))
                     NoticeCard(
@@ -555,6 +532,17 @@ fun CompressionScreen(
                             R.string.notice_no_space_body,
                             Fmt.bytes(storage.requiredBytes),
                             Fmt.bytes(storage.availableBytes),
+                        ),
+                    )
+                } else if (decoderFallbackExpected && currentInfo != null) {
+                    Spacer(Modifier.height(Space.md))
+                    NoticeCard(
+                        tone = NoticeTone.Info,
+                        title = stringResource(R.string.notice_decoder_fallback_title),
+                        body = stringResource(
+                            R.string.notice_decoder_fallback_body,
+                            currentInfo.width,
+                            currentInfo.height,
                         ),
                     )
                 } else if (currentInfo != null && StorageGuard.isLongJob(currentInfo)) {

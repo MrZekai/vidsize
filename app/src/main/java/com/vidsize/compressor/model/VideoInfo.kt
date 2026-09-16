@@ -35,7 +35,7 @@ data class VideoInfo(
      */
     val sourceMime: String? = null,
     /**
-     * False only when this device's decoders gave a definite "cannot read this".
+     * False only when the device codec table reports "cannot read this".
      *
      * ## Why a video can be unprocessable before anything is encoded
      *
@@ -44,12 +44,13 @@ data class VideoInfo(
      * different OUTPUT sizes. No output size can help: the decoder has to read
      * the source at its full resolution whatever the destination is.
      *
-     * So the question is asked once, up front, and the answer travels with the
-     * video. Defaults to true - an unknown answer means the job is allowed to
-     * run, because refusing a video the device could actually have handled is a
-     * worse failure than the one this field exists to catch.
+     * The answer travels with the video for diagnostics and a non-blocking UI
+     * warning only. It is never an eligibility decision: vendor capability
+     * tables under-report alias and software codecs, so [CompressionEngine]
+     * always performs a real decode with platform and software-first fallback.
+     * Unknown defaults to true because there is no negative report to surface.
      */
-    val deviceCanDecode: Boolean = true,
+    val decoderPrecheckPassed: Boolean = true,
 ) {
     val durationSeconds: Double get() = durationMs / 1000.0
 }
