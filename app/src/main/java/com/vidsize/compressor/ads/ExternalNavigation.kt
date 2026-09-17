@@ -25,27 +25,6 @@ fun Context.suppressAppOpenOnReturn() {
         ?.suppressNextForeground()
 }
 
-/**
- * The deferred-ad handoff: suppress the app-open ad AND mark an interstitial as
- * owed on return.
- *
- * Exists as one function rather than two calls because the two must always
- * travel together. Suppressing without deferring gives away the impression;
- * deferring without suppressing lets the app-open ad land first, which then
- * blocks the interstitial for three minutes and reads to a tester as "the
- * deferred ad does not work". Making it a single call is what stops a future
- * hand from reintroducing that asymmetry at a new exit point.
- *
- * Use this at exits where the user is going to *do something with their file*.
- * Use [suppressAppOpenOnReturn] alone at maintenance exits - system settings,
- * the media picker on the way in - where no work has been completed and an ad
- * would interrupt a task rather than punctuate one.
- */
-fun Context.deferInterstitialOnReturn(outputToken: String) {
-    suppressAppOpenOnReturn()
-    InterstitialAds.markPending(this, outputToken)
-}
-
 /** Unwraps the Activity a Compose tree is hosted in, for full-screen ads. */
 fun Context.findHostActivity(): Activity? {
     var context: Context? = this

@@ -3,7 +3,7 @@ package com.vidsize.compressor.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.MediaStore
+import android.provider.DocumentsContract
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -43,8 +43,8 @@ import com.vidsize.compressor.PlayerActivity
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.AdDiagnostics
-import com.vidsize.compressor.ads.deferInterstitialOnReturn
 import com.vidsize.compressor.ads.findHostActivity
+import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.growth.ReviewPrompt
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
@@ -459,24 +459,6 @@ private fun ResultFigures(
 /* Intents                                                                    */
 /* ------------------------------------------------------------------------- */
 
-/*
- * The two external exits below are the deferred-interstitial paths, and they are the
- * reason this pattern earns anything at all.
- *
- * The intuitive wiring is the opposite of this: show an ad when the user leaves
- * for Home, and cancel it when they go to view their file, so nothing gets
- * between them and their video. That reasoning is right about the *placement*
- * and catastrophically wrong about the *outcome* - practically everyone who just
- * compressed a video wants to share or find it, so the cancelling branch
- * is the common one and the format earns close to nothing.
- *
- * deferInterstitialOnReturn(outputToken) keeps the placement and recovers the revenue: no
- * ad now, on the way out; one ad when the user comes back with that task done.
- * It also suppresses the app-open ad in the same call, because an app-open ad on
- * re-entry would both break the "content the user asked for" rule and consume
- * the shared full-screen interval the interstitial needs.
- */
-
 private fun shareVideo(context: Context, uri: Uri) {
     val intent = buildVideoShareIntent(context, uri)
     val launched = runCatching {
@@ -484,53 +466,49 @@ private fun shareVideo(context: Context, uri: Uri) {
             Intent.createChooser(intent, context.getString(R.string.share_chooser)),
         )
     }.isSuccess
-    // Do not leave an ad pending when an OEM has no share target. The return
-    // placement only exists if Vidsize actually handed the user to another app.
-    if (launched) context.deferInterstitialOnReturn(uri.toString())
+    if (launched) context.suppressAppOpenOnReturn()
 }
 
 /**
- * Opens the exact finished item in a gallery/media application.
+ * Opens Movies/Vidsize as a folder, not the output item as media.
  *
- * ## QA finding: this button and "Open video" did the same thing
- *
- * Opening the MediaStore collection only proved that *a* gallery existed; it
- * discarded the identity of the file the user had just created. The output URI
- * is already the canonical MediaStore item. API 29's `ACTION_REVIEW` is the
- * platform contract for showing that item large while keeping nearby media
- * reachable, which is exactly what this button promises. OEMs without a review
- * handler fall back to `ACTION_VIEW`, still on this exact URI.
+ * Sending the video's item URI to ACTION_REVIEW/ACTION_VIEW allowed OEM gallery
+ * apps to route the request to a player or an unrelated cached preview. The
+ * user asked to see where the file was saved, so the primary contract is now a
+ * directory URI. If an OEM cannot view directory URIs, DocumentsUI opens a
+ * video browser already positioned inside Movies/Vidsize.
  */
 private fun showInGallery(context: Context, uri: Uri) {
-    val gallery = Intent(MediaStore.ACTION_REVIEW).apply {
-        setDataAndType(uri, "video/*")
+    val folderUri = DocumentsContract.buildDocumentUri(
+        EXTERNAL_STORAGE_AUTHORITY,
+        OUTPUT_FOLDER_DOCUMENT_ID,
+    )
+    val folder = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(folderUri, DocumentsContract.Document.MIME_TYPE_DIR)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    val launched = runCatching { context.startActivity(gallery) }.isSuccess
+    val launched = runCatching { context.startActivity(folder) }.isSuccess
     if (launched) {
-        context.deferInterstitialOnReturn(uri.toString())
+        context.suppressAppOpenOnReturn()
         return
     }
 
-    // Some OEM galleries do not register ACTION_REVIEW. ACTION_VIEW is the
-    // compatibility fallback, but it still receives the one finished item.
-    val view = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "video/*")
+    val browseFolder = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        type = "video/*"
+        addCategory(Intent.CATEGORY_OPENABLE)
+        putExtra(DocumentsContract.EXTRA_INITIAL_URI, folderUri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    val chosen = runCatching {
-        context.startActivity(
-            Intent.createChooser(view, context.getString(R.string.result_show_in_gallery)),
-        )
-    }.isSuccess
-    if (chosen) {
-        context.deferInterstitialOnReturn(uri.toString())
+    val browsed = runCatching { context.startActivity(browseFolder) }.isSuccess
+    if (browsed) {
+        context.suppressAppOpenOnReturn()
     } else {
-        // No external handler: preserve the useful action with Vidsize's own
-        // player, but do not arm a return ad for an exit that never happened.
         context.startActivity(PlayerActivity.intent(context, uri))
     }
 }
+
+private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
+private const val OUTPUT_FOLDER_DOCUMENT_ID = "primary:Movies/Vidsize"
 
 /**
  * Plays the finished file in Vidsize's own player.

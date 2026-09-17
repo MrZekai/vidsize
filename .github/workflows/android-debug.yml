@@ -183,25 +183,17 @@ jobs:
           forbid 'ConsentManager' $UI/components/HomeBannerAd.kt
           forbid 'ConsentManager' $UI/screens/ProcessingOverlay.kt
 
-          # --- Gate 5: preloading still happens while the job runs ---
-          # Three call sites since v0.9.2: screen open, job start, and the
-          # POST_NOTIFICATIONS callback that now owns the deferred start.
-          test "$(grep -c 'InterstitialAds.preload(context)' $COMPRESS)" -eq 3
-
-          # --- Gate 6: the two external exits are still deferred ---
-          # If any of these reverts to suppressAppOpenOnReturn alone, the
-          # interstitial silently stops earning on its most common path.
-          # Share has one success branch; Gallery has ACTION_REVIEW plus an
-          # exact-item ACTION_VIEW fallback, so there are three successful
-          # hand-off branches but only two user actions.
-          test "$(grep -c 'context.deferInterstitialOnReturn(uri.toString())' $RESULT)" -eq 3
-          forbid 'suppressAppOpenOnReturn' $RESULT
-          # ...and both immediate exits from the result screen carry one too, so
-          # "an interstitial after every compression" is true for every path a
-          # user can actually take out of a finished job, not just some of them.
-          test "$(grep -c 'InterstitialAds.showNow(activity, finished.outputUri.toString())' $COMPRESS)" -eq 2
-          grep -q 'lastShownOutputToken' $ADS/InterstitialAds.kt
-          grep -q 'outputToken == lastShownOutputToken' $ADS/InterstitialAds.kt
+          # --- Gate 5: interstitial delivery is disabled --------------------
+          # Keep the implementation available for a later product decision,
+          # but no lifecycle or user-flow entry point may initialise, preload,
+          # queue or show it in this build.
+          forbid 'InterstitialAds' $COMPRESS
+          forbid 'InterstitialAds' $RESULT
+          forbid 'InterstitialAds' $MAIN
+          forbid 'InterstitialAds' app/src/main/java/com/vidsize/compressor/VidsizeApplication.kt
+          forbid 'InterstitialAds' $ADS/ExternalNavigation.kt
+          forbid 'deferInterstitialOnReturn' $RESULT
+          grep -q 'suppressAppOpenOnReturn' $RESULT
 
           # The rewarded offer appears on exactly one surface: an explicit
           # two-way chooser after COMPRESS and before any encode. The result
@@ -216,18 +208,14 @@ jobs:
           # space it may never fill.
           grep -q 'reserveSpace = false' $UI/screens/HomeScreen.kt
 
-          # --- Gate 7: no ad in front of content, and ordering is preserved ---
-          # reset() must precede showNow(): AdGate refuses a full-screen ad while
-          # the job is non-idle, so the reverse order fails on every attempt.
-          grep -Pzoq 'CompressionJobState\.reset\(\)[\s\S]{0,240}?InterstitialAds\.showNow\(activity, finished\.outputUri\.toString\(\)\)' $COMPRESS
+          # --- Gate 7: result exits reset state without a full-screen ad -----
+          grep -q 'onBack = { CompressionJobState.reset() }' $COMPRESS
           grep -q 'Verdict.RUNNING_JOB' $ADS/AdGate.kt
           grep -q 'Verdict.RESULT_WAITING' $ADS/AdGate.kt
           grep -q 'requireIdleJob = true' $ADS/AppOpenAdPolicy.kt
 
           # --- Gate 7b: a system back gesture never answers with an ad -------
-          # The in-app arrow carries the interstitial; the platform gesture must
-          # not. Same destination, two callbacks, and the gesture's one must stay
-          # free of any show call.
+          # Both the in-app arrow and the platform gesture stay ad-free.
           grep -q 'BackHandler { onSystemBack() }' $RESULT
           grep -Pzoq 'onSystemBack = \{ CompressionJobState\.reset\(\) \},' $COMPRESS
           forbid_span 'onSystemBack[\s\S]{0,120}?InterstitialAds' $COMPRESS
@@ -239,7 +227,7 @@ jobs:
           for f in app/src/main/res/values*/strings.xml; do
             grep -q 'name="hero_share_hint"' "$f" || { echo "$f lacks hero_share_hint" >&2; exit 1; }
           done
-          # Play review asked at the result, never on the exit the ad owns.
+          # Play review is asked at the settled result, never during navigation.
           test -f app/src/main/java/com/vidsize/compressor/growth/ReviewPrompt.kt
           grep -q 'ReviewPrompt.maybeAsk' $RESULT
           forbid 'ReviewPrompt' $COMPRESS
@@ -247,7 +235,7 @@ jobs:
 
           # --- Gate 8: the share-sheet entry point still suppresses app open ---
           grep -q 'appOpenAdManager.suppressNextForeground()' $MAIN
-          grep -q 'InterstitialAds.showPendingIfAny(this)' $MAIN
+          forbid 'showPendingIfAny' $MAIN
 
           # --- Gate 9: diagnostics exists and is reachable from a signed build ---
           grep -q 'DIAGNOSTICS_TAP_COUNT = 7' $SETTINGS
@@ -410,14 +398,16 @@ jobs:
           forbid 'Intent(Intent.ACTION_SEND)' $RESULT
           forbid 'Intent(Intent.ACTION_SEND)' $UI/VidsizeRoot.kt
 
-          # "Show in Gallery" must preserve the exact output identity. Opening
-          # the collection discarded the file and showed an arbitrary gallery.
+          # "Show in Gallery" opens the real Movies/Vidsize folder. Passing the
+          # item URI can route to a player or an unrelated OEM preview.
           grep -q 'private fun showInGallery(context: Context, uri: Uri)' $RESULT
           grep -q 'showInGallery(context, result.outputUri)' $RESULT
-          grep -q 'Intent(MediaStore.ACTION_REVIEW)' $RESULT
-          grep -q 'setDataAndType(uri, "video/\*")' $RESULT
+          grep -q 'DocumentsContract.buildDocumentUri' $RESULT
+          grep -q 'OUTPUT_FOLDER_DOCUMENT_ID = "primary:Movies/Vidsize"' $RESULT
+          grep -q 'DocumentsContract.Document.MIME_TYPE_DIR' $RESULT
+          grep -q 'DocumentsContract.EXTRA_INITIAL_URI' $RESULT
           grep -q 'FLAG_GRANT_READ_URI_PERMISSION' $RESULT
-          forbid 'MediaStore.Video.Media.EXTERNAL_CONTENT_URI' $RESULT
+          forbid 'MediaStore.ACTION_REVIEW' $RESULT
 
           # --- Gate 12d: v0.9.4 watermark model ------------------------------
           # Every free export is marked. The default is the paying-nothing case,
@@ -457,6 +447,8 @@ jobs:
           grep -q 'OutputChoiceDialog(' $COMPRESS
           grep -q 'watermark_with_mark_title' $UI/components/OutputChoiceDialog.kt
           grep -q 'watermark_free_card_title' $UI/components/OutputChoiceDialog.kt
+          grep -q 'CompressionBannerAd(' $UI/components/OutputChoiceDialog.kt
+          grep -q 'AdSlots.bannerVisible' $UI/components/OutputChoiceDialog.kt
           grep -q 'fun startWithoutWatermark' $COMPRESS
           grep -q 'startCompression(watermark = false)' $COMPRESS
 
@@ -479,11 +471,9 @@ jobs:
           grep -q 'if (result != null && !result.watermarked) WatermarkOffer.consume()' $COMPRESS
           forbid 'WatermarkOffer.consume' $RESULT
 
-          # Reward confirmation happens only after the creative closes, and the
-          # internal player is never followed by a surprise interstitial.
+          # Reward confirmation happens only after the creative closes.
           grep -q 'if (rewardEarned) onRewardGranted() else onClosedWithoutReward()' $ADS/RewardedAds.kt
           grep -q 'RewardGrantedDialog()' $COMPRESS
-          forbid 'deferInterstitialOnReturn' <(awk '/private fun openVideo/,/^}/' $RESULT)
 
           # --- Gate 12f: v0.9.7 production review findings -------------------
           # No internal exception text in a user-facing build. `adsQa` and
@@ -653,15 +643,8 @@ jobs:
 
           # 3 - back from the result must clear the finished job state.
           has "$RESULT" 'BackHandler'
-          # v0.9.0: this asserted the exact one-liner
-          # `onBack = { CompressionJobState.reset() }`. The handler now also
-          # shows an interstitial, so it spans several lines - but the invariant
-          # being protected is unchanged and is checked more directly below:
-          # reset() still runs, and it still runs FIRST. The ordering is not
-          # cosmetic. AdGate refuses a full-screen ad while the job is non-idle,
-          # so a future edit that shows before resetting would be declined on
-          # every attempt and look exactly like no fill.
-          grep -Pzoq 'onBack = \{\n\s*CompressionJobState\.reset\(\)[\s\S]{0,240}?InterstitialAds\.showNow\(activity, finished\.outputUri\.toString\(\)\)' "$SCREEN"
+          has "$SCREEN" 'onBack = { CompressionJobState.reset() }'
+          nothas "$SCREEN" 'InterstitialAds'
 
           # 4 - the native ad keeps its reserved slot and its one-time binding,
           # and the page can scroll far enough to expose the whole creative.

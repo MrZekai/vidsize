@@ -15,8 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -90,20 +89,21 @@ fun HomeScreen(
     ) {
         HomeTopBar(onSettings = { showSettings = true })
 
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Space.gutter),
+                .fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = Space.gutter,
+            ),
         ) {
-            Spacer(Modifier.height(Space.xs))
+            item(key = "top-gap") { Spacer(Modifier.height(Space.xs)) }
 
-            HeroPanel(onSelectVideo = onSelectVideo)
+            item(key = "hero") { HeroPanel(onSelectVideo = onSelectVideo) }
 
-            Spacer(Modifier.height(Space.sm))
+            item(key = "trust-gap") { Spacer(Modifier.height(Space.sm)) }
 
-            TrustRow()
+            item(key = "trust") { TrustRow() }
 
             // The rewarded offer.
             //
@@ -118,32 +118,36 @@ fun HomeScreen(
             // make - ads off, consent refused, or no creative loaded - so no
             // spacing is reserved for an absent card.
 
-            Spacer(Modifier.height(Space.xxl))
+            item(key = "recent-gap") { Spacer(Modifier.height(Space.xxl)) }
 
-            SectionHeader(
-                title = stringResource(R.string.section_recent),
-                action = {
-                    if (!summary.isEmpty) {
-                        TertiaryButton(
-                            text = stringResource(R.string.clear_history),
-                            onClick = { confirmClearHistory = true },
-                            color = VidsizeColor.Muted,
-                        )
-                    }
-                },
-            )
+            item(key = "recent-header") {
+                SectionHeader(
+                    title = stringResource(R.string.section_recent),
+                    action = {
+                        if (!summary.isEmpty) {
+                            TertiaryButton(
+                                text = stringResource(R.string.clear_history),
+                                onClick = { confirmClearHistory = true },
+                                color = VidsizeColor.Muted,
+                            )
+                        }
+                    },
+                )
+            }
 
-            Spacer(Modifier.height(Space.sm))
+            item(key = "recent-panel-gap") { Spacer(Modifier.height(Space.sm)) }
 
-            RecentPanel(
-                entries = summary.entries,
-                onOpenEntry = onOpenEntry,
-                onShareEntry = onShareEntry,
-            )
+            item(key = "recent-panel") {
+                RecentPanel(
+                    entries = summary.entries,
+                    onOpenEntry = onOpenEntry,
+                    onShareEntry = onShareEntry,
+                )
+            }
 
-            Spacer(Modifier.height(Space.sm))
+            item(key = "storage-gap") { Spacer(Modifier.height(Space.sm)) }
 
-            StorageSavedPanel(summary = summary)
+            item(key = "storage") { StorageSavedPanel(summary = summary) }
 
             // The in-content native ad, at the very end of the scroll.
             //
@@ -171,21 +175,25 @@ fun HomeScreen(
             // displace anything, and holding 340dp open on a page that may never
             // fill it would add a screen of dead scroll for nothing.
             if (AdSlots.requestable) {
-                Spacer(Modifier.height(Space.xl))
-                HairLine()
-                Spacer(Modifier.height(Space.sm))
-                Eyebrow(
-                    text = stringResource(R.string.ad_label),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(Space.xs))
-                NativeAdCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    reserveSpace = false,
-                )
+                item(key = "native-ad") {
+                    Column {
+                        Spacer(Modifier.height(Space.xl))
+                        HairLine()
+                        Spacer(Modifier.height(Space.sm))
+                        Eyebrow(
+                            text = stringResource(R.string.ad_label),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(Space.xs))
+                        NativeAdCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            reserveSpace = false,
+                        )
+                    }
+                }
             }
 
-            Spacer(Modifier.height(Space.xl))
+            item(key = "bottom-gap") { Spacer(Modifier.height(Space.xl)) }
         }
 
         // Monetization stays visible without interrupting the user's workflow.

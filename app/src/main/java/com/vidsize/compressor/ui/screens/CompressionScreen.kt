@@ -74,7 +74,6 @@ import com.vidsize.compressor.ui.components.HairLine
 import androidx.compose.runtime.rememberCoroutineScope
 import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.AdSlots
-import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.RewardedAds
 import com.vidsize.compressor.ads.WatermarkOffer
 import com.vidsize.compressor.ads.findHostActivity
@@ -205,7 +204,6 @@ fun CompressionScreen(
             starting = true
             val chosen = pendingWatermark
             val chosenTarget = pendingTarget
-            InterstitialAds.preload(context)
             CompressionService.start(
                 context,
                 videoUri,
@@ -292,18 +290,7 @@ fun CompressionScreen(
         probeFailed = probed == null
     }
 
-    // Preloading an interstitial is essentially free in this app, and that is a
-    // genuine structural advantage over the reader app this ad model came from.
-    //
-    // The usual failure mode for interstitials is requesting one at the moment
-    // of display and losing the impression on a slow connection - which is why
-    // the source model argues for a nine-second load window. Vidsize has minutes
-    // of runway: the request goes out when the compression screen opens and
-    // again when the job starts, and the earliest a result screen can exist is
-    // two minutes later. There is no load timeout here because the user is never
-    // waiting on this request.
     LaunchedEffect(videoUri) {
-        InterstitialAds.preload(context)
         RewardedAds.preload(context)
     }
 
@@ -325,7 +312,6 @@ fun CompressionScreen(
             return
         }
         starting = true
-        InterstitialAds.preload(context)
         CompressionService.start(
             context,
             videoUri,
@@ -434,35 +420,10 @@ fun CompressionScreen(
     if (finished != null) {
         ResultScreen(
             result = finished,
-            // The in-app arrow: a deliberate transition out of a finished
-            // job, so it carries the ad like every other such transition.
-            //
-            // reset() first: AdGate refuses a full-screen ad while the job is
-            // non-idle, so the reverse order would be declined every time.
-            onBack = {
-                CompressionJobState.reset()
-                context.findHostActivity()?.let { activity ->
-                    InterstitialAds.showNow(activity, finished.outputUri.toString())
-                }
-            },
-            // The system back gesture: same navigation, no ad. Answering a
-            // platform gesture with a full-screen ad is the one placement in
-            // this model whose risk outweighs its return.
+            onBack = { CompressionJobState.reset() },
             onSystemBack = { CompressionJobState.reset() },
             onCompressAnother = {
-                // The immediate half of the deferred pattern: this is a plain
-                // in-app transition back to Home with the work finished, which
-                // is exactly the moment an ad belongs.
-                //
-                // reset() runs FIRST and the ordering is load-bearing. AdGate
-                // refuses a full-screen ad while a job is anything other than
-                // idle, so showing before the reset would be silently declined
-                // on every single attempt - the kind of bug that looks like no
-                // fill and takes a week to find.
                 CompressionJobState.reset()
-                context.findHostActivity()?.let { activity ->
-                    InterstitialAds.showNow(activity, finished.outputUri.toString())
-                }
                 onBack()
             },
         )

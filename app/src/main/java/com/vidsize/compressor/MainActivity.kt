@@ -13,7 +13,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import com.vidsize.compressor.ads.ConsentManager
-import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.RewardedAds
 import com.vidsize.compressor.ui.VidsizeRoot
 import com.vidsize.compressor.ui.theme.VidsizeTheme
@@ -99,23 +98,6 @@ class MainActivity : ComponentActivity() {
         // SDK initialization have already completed. With ENABLE_ADS false the
         // manager short-circuits, so the ads SDK is never touched.
         (application as VidsizeApplication).appOpenAdManager.preload()
-
-        // The deferred interstitial lands here, and only here.
-        //
-        // This is the one callback that fires for every way back into Vidsize:
-        // the share sheet dismissing, a video player or the gallery being
-        // closed, the task switcher. Putting the show call on a specific
-        // screen's focus effect would have meant re-deriving "did the user come
-        // back?" once per exit point and forgetting one of them - which is the
-        // single most common way this pattern leaks revenue.
-        //
-        // It is safe against loops: showPendingIfAny consumes the flag before it
-        // shows, and the ad's own dismissal re-enters onResume with nothing
-        // pending. It is safe against stacking: AdGate consults the same
-        // shared full-screen clock the app-open ad writes to, so a return that has just
-        // been met by an app-open ad skips the interstitial rather than
-        // following one full-screen ad with another.
-        InterstitialAds.showPendingIfAny(this)
 
         // Rewarded is preloaded here rather than on the Home composable alone so
         // the output chooser is ready on the first frame of a warm return, not one
