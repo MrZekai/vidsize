@@ -1,0 +1,136 @@
+name: Vidsize Cloud Monkey QA
+
+on:
+  push:
+    branches:
+      - feature/ads-v0.9.0
+    paths:
+      - .github/workflows/cloud-monkey.yml
+      - scripts/qa/cloud-monkey.sh
+      - docs/CLOUD_MONKEY_QA.md
+  workflow_dispatch:
+    inputs:
+      events:
+        description: Number of Monkey events per Android version
+        required: true
+        default: '10000'
+        type: string
+      seed:
+        description: Reproducible Monkey random seed
+        required: true
+        default: '20260917'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-monkey-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APK_ARTIFACT_NAME: vidsize-adsqa-apk
+  APK_OUTPUT_PATH: app/build/outputs/apk/adsQa/app-adsQa.apk
+
+jobs:
+  build-apk:
+    name: Build adsQa APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Gradle 9.5
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Build adsQa APK
+        run: ./gradlew :app:assembleAdsQa --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$APK_OUTPUT_PATH"
+          sha256sum "$APK_OUTPUT_PATH"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_ARTIFACT_NAME }}
+          path: ${{ env.APK_OUTPUT_PATH }}
+          if-no-files-found: error
+          retention-days: 14
+
+  monkey:
+    name: Monkey / Android ${{ matrix.api-level }}
+    needs: build-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [29, 36]
+
+    env:
+      API_LEVEL: ${{ matrix.api-level }}
+      EVENTS: ${{ inputs.events || '10000' }}
+      SEED: ${{ inputs.seed || '20260917' }}
+      PACKAGE_NAME: com.vidsize.compressor.adsqa
+      APK_PATH: ${{ github.workspace }}/apk/app-adsQa.apk
+      RESULT_DIR: ${{ github.workspace }}/artifacts/monkey-api-${{ matrix.api-level }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download APK
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ env.APK_ARTIFACT_NAME }}
+          path: apk
+
+      - name: Enable KVM access
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Pinned v2.38.0. Keep the full SHA so a mutable action tag cannot alter
+      # a production QA run without a reviewed repository change.
+      - name: Run Monkey on emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          ram-size: 4096M
+          heap-size: 512M
+          disk-size: 6000M
+          disable-animations: true
+          emulator-options: >-
+            -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio
+            -no-boot-anim -camera-back none
+          script: bash scripts/qa/cloud-monkey.sh
+
+      - name: Upload Monkey diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-monkey-api-${{ matrix.api-level }}
+          path: ${{ env.RESULT_DIR }}
+          if-no-files-found: warn
+          retention-days: 14
