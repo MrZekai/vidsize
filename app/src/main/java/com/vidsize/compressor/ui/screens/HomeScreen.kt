@@ -1,8 +1,7 @@
 package com.vidsize.compressor.ui.screens
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -43,6 +43,7 @@ import com.vidsize.compressor.data.history.HistorySummary
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
+import com.vidsize.compressor.ui.components.HomeBannerAd
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SavingsChart
@@ -61,13 +62,14 @@ import com.vidsize.compressor.ui.theme.Space
  *
  * Layout contract:
  *  - A fixed app bar that clears the status bar via [statusBarsPadding].
- *  - A single lazy scrolling column below the bar.
+ *  - A short, eager Compose column as the only scrolling region.
+ *  - An anchored adaptive banner outside that scrolling region.
  *
- * Home deliberately contains no AndroidView-backed ad. A NativeAdView embeds a
- * MediaView and can request, inflate and start media while a short list is
- * flinging. On the most-used screen that made every swipe visibly stall on
- * real devices. Native monetisation remains on Result; Home stays a pure
- * Compose list so scrolling work is limited to the visible product content.
+ * Home never embeds a NativeAdView/MediaView in its scroll. The only ad is the
+ * fixed banner below it, so ad loading cannot join a fling, resize the list or
+ * intercept vertical gestures. The list has a strict three-row history cap;
+ * composing it once avoids lazy-list measurement and item-provider overhead on
+ * every swipe without risking an unbounded screen.
  */
 @Composable
 fun HomeScreen(
@@ -87,21 +89,20 @@ fun HomeScreen(
     ) {
         HomeTopBar(onSettings = { showSettings = true })
 
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                horizontal = Space.gutter,
-            ),
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = Space.gutter),
         ) {
-            item(key = "top-gap") { Spacer(Modifier.height(Space.xs)) }
+            Spacer(Modifier.height(Space.xs))
 
-            item(key = "hero") { HeroPanel(onSelectVideo = onSelectVideo) }
+            HeroPanel(onSelectVideo = onSelectVideo)
 
-            item(key = "trust-gap") { Spacer(Modifier.height(Space.sm)) }
+            Spacer(Modifier.height(Space.sm))
 
-            item(key = "trust") { TrustRow() }
+            TrustRow()
 
             // The rewarded offer.
             //
@@ -116,39 +117,37 @@ fun HomeScreen(
             // make - ads off, consent refused, or no creative loaded - so no
             // spacing is reserved for an absent card.
 
-            item(key = "recent-gap") { Spacer(Modifier.height(Space.xxl)) }
+            Spacer(Modifier.height(Space.xxl))
 
-            item(key = "recent-header") {
-                SectionHeader(
-                    title = stringResource(R.string.section_recent),
-                    action = {
-                        if (!summary.isEmpty) {
-                            TertiaryButton(
-                                text = stringResource(R.string.clear_history),
-                                onClick = { confirmClearHistory = true },
-                                color = VidsizeColor.Muted,
-                            )
-                        }
-                    },
-                )
-            }
+            SectionHeader(
+                title = stringResource(R.string.section_recent),
+                action = {
+                    if (!summary.isEmpty) {
+                        TertiaryButton(
+                            text = stringResource(R.string.clear_history),
+                            onClick = { confirmClearHistory = true },
+                            color = VidsizeColor.Muted,
+                        )
+                    }
+                },
+            )
 
-            item(key = "recent-panel-gap") { Spacer(Modifier.height(Space.sm)) }
+            Spacer(Modifier.height(Space.sm))
 
-            item(key = "recent-panel") {
-                RecentPanel(
-                    entries = summary.entries,
-                    onOpenEntry = onOpenEntry,
-                    onShareEntry = onShareEntry,
-                )
-            }
+            RecentPanel(
+                entries = summary.entries,
+                onOpenEntry = onOpenEntry,
+                onShareEntry = onShareEntry,
+            )
 
-            item(key = "storage-gap") { Spacer(Modifier.height(Space.sm)) }
+            Spacer(Modifier.height(Space.sm))
 
-            item(key = "storage") { StorageSavedPanel(summary = summary) }
+            StorageSavedPanel(summary = summary)
 
-            item(key = "bottom-gap") { Spacer(Modifier.height(Space.xl)) }
+            Spacer(Modifier.height(Space.xl))
         }
+
+        HomeBannerAd(modifier = Modifier.fillMaxWidth())
     }
 
     if (showSettings) {
@@ -427,13 +426,12 @@ private fun RecentPanel(
  * "Show in Gallery" and "Open Video" beneath a full-height native ad, a user who
  * left the result screen had no route back to their file at all.
  *
- * The row is now the route back: a tap opens the video in the device's player, a
- * long press shares it, and the trailing chevron makes the affordance visible
- * rather than implied. Rows are only ever rendered for files that still exist -
+ * The row is now the route back: a tap opens the video in the device's player,
+ * while a labelled share button exposes the second action without a hidden
+ * long-press gesture. Rows are only ever rendered for files that still exist -
  * [HistoryController.refresh] prunes the rest - so a tap can no longer be a
  * no-op.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecentRow(
     entry: CompressionHistoryEntry,
@@ -444,10 +442,9 @@ private fun RecentRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(VidsizeShape.small)
-            .combinedClickable(
+            .clickable(
                 role = Role.Button,
                 onClick = onOpen,
-                onLongClick = onShare,
             )
             .padding(vertical = Space.xxs),
         verticalAlignment = Alignment.CenterVertically,
@@ -505,14 +502,13 @@ private fun RecentRow(
             foreground = VidsizeColor.Mint,
         )
 
-        // Makes the row's interactivity visible instead of leaving the user to
-        // guess, which is what BUG-06 was really about.
+        // A separate labelled action is discoverable by sight and TalkBack;
+        // sharing is never hidden behind a long-press gesture.
         Spacer(Modifier.width(Space.xxs))
-        Icon(
-            painter = painterResource(R.drawable.ic_chevron_right),
-            contentDescription = null,
-            tint = VidsizeColor.Faint,
-            modifier = Modifier.size(18.dp),
+        IconAction(
+            icon = R.drawable.ic_share,
+            contentDescription = stringResource(R.string.result_share),
+            onClick = onShare,
         )
     }
 }

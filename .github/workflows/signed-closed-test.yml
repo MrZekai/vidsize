@@ -35,7 +35,7 @@ jobs:
       VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID: ${{ secrets.VIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID }}
 
     steps:
-      - name: Checkout exact main source
+      - name: Checkout requested source
         uses: actions/checkout@v5
 
       - name: Prepare secure signing path
@@ -61,14 +61,19 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'applicationId = "com.vidsize.compressor"' app/build.gradle.kts
-          grep -Fq 'versionCode = 17' app/build.gradle.kts
-          grep -Fq 'versionName = "0.8.9"' app/build.gradle.kts
-          grep -Fq 'buildConfigField("boolean", "USE_TEST_ADS", "true")' app/build.gradle.kts
-          grep -Fq 'buildConfigField("boolean", "ENABLE_ADS", "false")' app/build.gradle.kts
-          grep -Fq 'isMinifyEnabled = false' app/build.gradle.kts
-          grep -Fq 'isShrinkResources = false' app/build.gradle.kts
+          version_code="$(awk '/versionCode = /{print $3; exit}' app/build.gradle.kts)"
+          version_name="$(awk -F'"' '/versionName = /{print $2; exit}' app/build.gradle.kts)"
+          [[ "$version_code" =~ ^[1-9][0-9]*$ ]]
+          [[ "$version_name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          grep -Fq 'create("closedTest")' app/build.gradle.kts
+          grep -Fq 'initWith(getByName("release"))' app/build.gradle.kts
+          grep -Fq 'buildConfigField("boolean", "USE_TEST_ADS", "false")' app/build.gradle.kts
+          grep -Fq 'buildConfigField("boolean", "ENABLE_ADS", "$adsConfigured")' app/build.gradle.kts
+          grep -Fq 'isMinifyEnabled = true' app/build.gradle.kts
+          grep -Fq 'isShrinkResources = true' app/build.gradle.kts
           grep -Fq 'verifyClosedTestSigningConfig' app/build.gradle.kts
-          grep -Fq 'verifyAdsOffWithoutRealIds' app/build.gradle.kts
+          grep -Fq 'verifyProductionAdConfig' app/build.gradle.kts
+          echo "Version: $version_name ($version_code)"
           echo "Commit: $(git rev-parse HEAD)"
 
       - name: Validate signing secrets
@@ -123,7 +128,9 @@ jobs:
             :app:testDebugUnitTest \
             :app:lintClosedTest \
             :app:verifyClosedTestSigningConfig \
-            :app:verifyAdsOffWithoutRealIds \
+            :app:verifyProductionAdConfig \
+            :app:verifyAdUnitCoverage \
+            :app:verifyRewardCopyParity \
             :app:bundleClosedTest \
             --stacktrace
 
@@ -172,9 +179,10 @@ jobs:
             echo "Commit: $(git rev-parse HEAD)"
             echo "Upload certificate SHA256: $bundle_fp"
             echo "AAB SHA256: $sha256"
-            echo "Ads mode: disabled for closedTest startup-stability hotfix"
-            echo "R8: disabled for closedTest hotfix"
-            echo "Resource shrinking: disabled for closedTest hotfix"
+            echo "Ads mode: enabled with required production AdMob identifiers"
+            echo "Ad units: production (Google sample identifiers rejected by Gradle gate)"
+            echo "R8: enabled"
+            echo "Resource shrinking: enabled"
           } > release/SIGNING-REPORT.txt
 
           echo "artifact=vidsize-v${compact}-closed-test-SIGNED-aab" >> "$GITHUB_OUTPUT"

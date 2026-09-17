@@ -1,13 +1,12 @@
 package com.vidsize.compressor.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -19,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
@@ -27,8 +26,7 @@ import com.vidsize.compressor.ads.AdIds
 import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ui.theme.VidsizeColor
 
-private val BannerWidth = 320.dp
-private val BannerHeight = 50.dp
+private val PreviewBannerHeight = 50.dp
 
 /**
  * Dead space kept between an anchored banner and whatever borders it - the
@@ -53,7 +51,7 @@ fun HomeBannerAd(modifier: Modifier = Modifier) {
 }
 
 /**
- * Currently called from nowhere.
+ * Used only inside the explicit output-choice dialog.
  *
  * v0.9.9 removed the compression screen's banner: that screen's fixed chrome
  * had grown to the point where the third compression level was off screen, and
@@ -81,7 +79,7 @@ fun CompressionBannerAd(
     )
 }
 
-/** Compact standard banner for the two persistent bottom placements. */
+/** Anchored adaptive banner for persistent bottom placements. */
 @Composable
 private fun FixedBannerAd(
     unitId: String?,
@@ -106,8 +104,8 @@ private fun FixedBannerAd(
     // `requestable`, so consent and build configuration stay consistent.
     if (!inspecting && !AdSlots.requestable) return
 
-    // No fill and no id are the same thing to the layout: emit nothing rather
-    // than a reserved 320x50 hole.
+    // Disabled and missing-id states emit nothing rather than reserving an
+    // empty ad-shaped hole.
     if (!inspecting && (!active || unitId.isNullOrBlank())) return
 
     val container = if (includeNavigationPadding) {
@@ -122,31 +120,35 @@ private fun FixedBannerAd(
             .background(VidsizeColor.Surface)
     }
 
-    Box(
-        modifier = container.height(BannerHeight),
+    BoxWithConstraints(
+        modifier = container,
         contentAlignment = Alignment.Center,
     ) {
         if (inspecting) {
             Spacer(
                 Modifier
-                    .width(BannerWidth)
-                    .height(BannerHeight)
+                    .fillMaxWidth()
+                    .height(PreviewBannerHeight)
                     .background(VidsizeColor.SurfaceMuted),
             )
-            return@Box
+            return@BoxWithConstraints
         }
 
-        if (unitId.isNullOrBlank()) return@Box
+        if (unitId.isNullOrBlank()) return@BoxWithConstraints
 
         val context = LocalContext.current
-        val adView = remember(context, unitId) {
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val widthDp = maxWidth.value.toInt().coerceAtLeast(1)
+        val adSize = remember(context, widthDp) {
+            AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, widthDp)
+        }
+        val adView = remember(context, unitId, adSize) {
             AdView(context).apply {
                 adUnitId = unitId
-                setAdSize(AdSize.BANNER)
+                setAdSize(adSize)
                 loadAd(AdRequest.Builder().build())
             }
         }
-        val lifecycleOwner = context as? LifecycleOwner
 
         DisposableEffect(adView, lifecycleOwner) {
             val observer = LifecycleEventObserver { _, event ->
@@ -156,12 +158,12 @@ private fun FixedBannerAd(
                     else -> Unit
                 }
             }
-            lifecycleOwner?.lifecycle?.addObserver(observer)
-            if (lifecycleOwner?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) == true) {
+            lifecycleOwner.lifecycle.addObserver(observer)
+            if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                 adView.resume()
             }
             onDispose {
-                lifecycleOwner?.lifecycle?.removeObserver(observer)
+                lifecycleOwner.lifecycle.removeObserver(observer)
                 adView.pause()
                 adView.destroy()
             }
@@ -169,7 +171,9 @@ private fun FixedBannerAd(
 
         AndroidView(
             factory = { adView },
-            modifier = Modifier.width(BannerWidth).height(BannerHeight),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(adSize.height.dp),
         )
     }
 }

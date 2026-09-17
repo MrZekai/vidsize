@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/ads-v0.9.0
       - 'qa/**'
       - 'fix/**'
   pull_request:
@@ -81,8 +82,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 31' app/build.gradle.kts
-          grep -q 'versionName = "0.9.13"' app/build.gradle.kts
+          grep -q 'versionCode = 32' app/build.gradle.kts
+          grep -q 'versionName = "0.9.14"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -105,7 +106,7 @@ jobs:
           # The gate is not deleted, it is inverted: re-adding it would silently
           # re-break the layout this release exists to fix.
           forbid 'CompressionBannerAd' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
-          grep -q 'setAdSize(AdSize.BANNER)' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
+          grep -q 'getCurrentOrientationAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           forbid 'getLargeAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           grep -q 'ic_launcher_monochrome' app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
           test -f store/assets/icon-512.png
@@ -172,11 +173,11 @@ jobs:
           grep -q 'AdSlots.requestable' $UI/components/HomeBannerAd.kt
           grep -q 'AdSlots.requestable' $UI/components/NativeAdCard.kt
           grep -q 'AdSlots.requestable' $ADS/NativeAdLoader.kt
-          # Home is the highest-frequency scroll surface and remains free of
-          # AndroidView-backed ads. NativeAdView embeds a MediaView whose load
-          # and layout caused severe fling jank on real devices. Native stays on
-          # Result; banner/rewarded placements elsewhere remain unchanged.
-          forbid 'HomeBannerAd' $UI/screens/HomeScreen.kt
+          # Home keeps NativeAdView/MediaView out of its scroll, but monetises
+          # with one anchored adaptive banner below the scrolling region.
+          # Loading and resizing therefore cannot join a fling.
+          grep -q 'HomeBannerAd' $UI/screens/HomeScreen.kt
+          grep -q 'getCurrentOrientationAnchoredAdaptiveBannerAdSize' $UI/components/HomeBannerAd.kt
           forbid 'NativeAdCard' $UI/screens/HomeScreen.kt
           # The progress panel used to carry a banner; v0.9.7 removed it. The
           # compression screen itself still has one, and that is the surface the
@@ -206,8 +207,7 @@ jobs:
           forbid 'WatermarkStrip' $RESULT
           test ! -f $UI/components/WatermarkStrip.kt
           test ! -f $UI/components/WatermarkFreeCard.kt
-          # Home must remain a pure Compose scroll surface. Embedded ad views
-          # are kept off this screen after device testing exposed severe jank.
+          # The scrolling region stays free of media-heavy native ads.
           forbid 'NativeAdCard' $UI/screens/HomeScreen.kt
           test "$(grep -c 'elevation = 0.dp' $UI/screens/HomeScreen.kt)" -ge 3
 
@@ -622,7 +622,7 @@ jobs:
           # next to the one button the user is reaching for. The unit still
           # exists and still serves the compression screen itself; see Gate 12f,
           # which forbids any ad reference inside the overlay.
-          has "$BANNER"  'setAdSize(AdSize.BANNER)'
+          has "$BANNER"  'getCurrentOrientationAnchoredAdaptiveBannerAdSize'
           has "$BANNER"  'AdIds.compressionBanner'
           nothas "$OVERLAY" 'CompressionBannerAd'
           nothas "$OVERLAY" 'Interstitial'
@@ -817,10 +817,11 @@ jobs:
           has "$NATIVE" 'AdSlots.requestable'
           has "$BANNER" 'AdSlots.requestable'
           has "$RESULT" 'AdSlots.requestable'
-          # Home has no ad surface; adding one back must be an explicit
-          # performance decision rather than an accidental import.
+          # Home monetisation is explicit: a fixed adaptive banner exists, while
+          # the media-heavy native placement remains Result-only.
           nothas "$HOME" 'NativeAdCard'
-          nothas "$HOME" 'HomeBannerAd'
+          has "$HOME" 'HomeBannerAd'
+          has "$BANNER" 'getCurrentOrientationAnchoredAdaptiveBannerAdSize'
           # ...and the definitions themselves still start from the build switch.
           grep -Fq 'val enabled: Boolean get() = BuildConfig.ENABLE_ADS' "$SLOTS"
           grep -Fq 'enabled && ConsentManager.adsAllowed' "$SLOTS"
@@ -831,7 +832,10 @@ jobs:
           # BUG-06 / BUG-07 - recent rows are a real route back to the file,
           # and rows whose file is gone leave storage instead of being counted
           # by the "Storage saved" total for ever.
-          has "$HOME"      'combinedClickable'
+          has "$HOME"      '.verticalScroll(rememberScrollState())'
+          nothas "$HOME"   'LazyColumn('
+          nothas "$HOME"   'combinedClickable'
+          has "$HOME"      'R.string.result_share'
           has "$HOME"      'onOpenEntry'
           has "$ROOT"      'onOpenEntry'
           has "$HISTMODEL" 'fun remove(id: Long)'
@@ -1731,13 +1735,13 @@ jobs:
 
       - name: Create exact source audit ZIP
         shell: bash
-        run: git archive --format=zip --output=vidsize-v089-source-audit.zip HEAD
+        run: git archive --format=zip --output=vidsize-source-audit.zip HEAD
 
       - name: Upload QA APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-qa-apk
+          name: vidsize-qa-apk
           path: app/build/outputs/apk/*/*.apk
           if-no-files-found: warn
 
@@ -1745,7 +1749,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-closed-test-UNSIGNED-audit-aab
+          name: vidsize-closed-test-UNSIGNED-audit-aab
           path: app/build/outputs/bundle/closedTest/*.aab
           if-no-files-found: warn
 
@@ -1753,15 +1757,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-source-audit
-          path: vidsize-v089-source-audit.zip
+          name: vidsize-source-audit
+          path: vidsize-source-audit.zip
           if-no-files-found: warn
 
       - name: Upload lint reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-lint
+          name: vidsize-lint
           path: |
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-closedTest.html

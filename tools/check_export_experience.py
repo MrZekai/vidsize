@@ -132,13 +132,15 @@ for text, label in (
     reject(text, "InterstitialAds", f"interstitial call in {label}")
 reject(result, "deferInterstitialOnReturn", "deferred interstitial on external exit")
 
-# Home must compose only visible product items and must stay free of embedded
-# Android Views. NativeAdView/MediaView loading during a fling caused severe
-# jank on the test device; the result screen keeps the native placement.
-require(home, "LazyColumn(", "lazy home content")
-reject(home, ".verticalScroll(", "eager home scroll column")
+# Home has a strict three-entry cap, so composing its short content once avoids
+# lazy-list measurement overhead. Monetisation is a banner anchored outside the
+# scroll; NativeAdView/MediaView remains Result-only and cannot join a fling.
+require(home, ".verticalScroll(rememberScrollState())", "bounded eager home scroll")
+reject(home, "LazyColumn(", "lazy-list overhead on bounded home content")
 reject(home, "NativeAdCard", "media-heavy native ad on home")
-reject(home, "HomeBannerAd", "AndroidView banner on home")
+require(home, "HomeBannerAd", "anchored home banner")
+reject(home, "combinedClickable", "hidden recent-row long-press action")
+require(home, "R.string.result_share", "visible recent-row share action")
 if home.count("elevation = 0.dp") < 3:
     errors.append("home cards must avoid GPU-heavy scrolling shadows")
 

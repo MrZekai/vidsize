@@ -1,6 +1,6 @@
 # Vidsize ad model — operating document
 
-v0.9.13. This is the document you read before changing anything about ads, and
+v0.9.14. This is the document you read before changing anything about ads, and
 the one you hand a tester before a device pass.
 
 The model is adapted from a reusable pattern that was first proven in a PDF
@@ -296,7 +296,7 @@ Install `adsQa`. Before each test: force-stop, clear app data. Between tests:
 | T13 | Reopen an old video from a history row on Home | **No** interstitial |
 | T14 | Cancel a compression midway | **No** interstitial |
 | T15 | Compress → **Back** (top-left arrow) from the result | Interstitial **shows** |
-| T16 | Scroll Home to the bottom | Labelled native ad after "Storage saved"; no layout jump above it |
+| T16 | Fling Home repeatedly in both directions | Content remains smooth; the anchored adaptive banner stays fixed above system navigation and never overlaps or resizes the scroll |
 | T17 | Tap **Compress** | Two side-by-side output choices appear; neither consumes permanent screen height |
 | T18 | Production/closed-test build without the optional App Open unit → open from launcher | **No** app-open ad; required formats remain enabled |
 
