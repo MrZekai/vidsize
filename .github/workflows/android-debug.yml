@@ -172,10 +172,12 @@ jobs:
           grep -q 'AdSlots.requestable' $UI/components/HomeBannerAd.kt
           grep -q 'AdSlots.requestable' $UI/components/NativeAdCard.kt
           grep -q 'AdSlots.requestable' $ADS/NativeAdLoader.kt
-          # v0.9.1: Home no longer carries the anchored banner - it keeps the
-          # rewarded offer and the in-content native. The progress panel keeps
-          # its banner; that surface is the longest-dwell one in the app.
+          # Home is the highest-frequency scroll surface and remains free of
+          # AndroidView-backed ads. NativeAdView embeds a MediaView whose load
+          # and layout caused severe fling jank on real devices. Native stays on
+          # Result; banner/rewarded placements elsewhere remain unchanged.
           forbid 'HomeBannerAd' $UI/screens/HomeScreen.kt
+          forbid 'NativeAdCard' $UI/screens/HomeScreen.kt
           # The progress panel used to carry a banner; v0.9.7 removed it. The
           # compression screen itself still has one, and that is the surface the
           # chokepoint now has to cover here.
@@ -204,9 +206,10 @@ jobs:
           forbid 'WatermarkStrip' $RESULT
           test ! -f $UI/components/WatermarkStrip.kt
           test ! -f $UI/components/WatermarkFreeCard.kt
-          # The in-content native at the end of the home scroll must not reserve
-          # space it may never fill.
-          grep -q 'reserveSpace = false' $UI/screens/HomeScreen.kt
+          # Home must remain a pure Compose scroll surface. Embedded ad views
+          # are kept off this screen after device testing exposed severe jank.
+          forbid 'NativeAdCard' $UI/screens/HomeScreen.kt
+          test "$(grep -c 'elevation = 0.dp' $UI/screens/HomeScreen.kt)" -ge 3
 
           # --- Gate 7: result exits reset state without a full-screen ad -----
           grep -q 'onBack = { CompressionJobState.reset() }' $COMPRESS
@@ -398,16 +401,17 @@ jobs:
           forbid 'Intent(Intent.ACTION_SEND)' $RESULT
           forbid 'Intent(Intent.ACTION_SEND)' $UI/VidsizeRoot.kt
 
-          # "Show in Gallery" opens the real Movies/Vidsize folder. Passing the
-          # item URI can route to a player or an unrelated OEM preview.
+          # Android has no portable "reveal in folder" intent. The old
+          # ACTION_OPEN_DOCUMENT fallback was a picker whose selected result was
+          # ignored. Open the exact finished item externally instead.
           grep -q 'private fun showInGallery(context: Context, uri: Uri)' $RESULT
           grep -q 'showInGallery(context, result.outputUri)' $RESULT
-          grep -q 'DocumentsContract.buildDocumentUri' $RESULT
-          grep -q 'OUTPUT_FOLDER_DOCUMENT_ID = "primary:Movies/Vidsize"' $RESULT
-          grep -q 'DocumentsContract.Document.MIME_TYPE_DIR' $RESULT
-          grep -q 'DocumentsContract.EXTRA_INITIAL_URI' $RESULT
+          grep -q 'Intent(Intent.ACTION_VIEW)' $RESULT
+          grep -q 'setDataAndType(uri, "video/\*")' $RESULT
+          grep -q 'ClipData.newRawUri' $RESULT
           grep -q 'FLAG_GRANT_READ_URI_PERMISSION' $RESULT
-          forbid 'MediaStore.ACTION_REVIEW' $RESULT
+          forbid 'Intent.ACTION_OPEN_DOCUMENT' $RESULT
+          forbid 'DocumentsContract' $RESULT
 
           # --- Gate 12d: v0.9.4 watermark model ------------------------------
           # Every free export is marked. The default is the paying-nothing case,
@@ -717,11 +721,10 @@ jobs:
           # simply no longer standing in the user's path.
           test "$ANOTHER_LINE" -lt "$AD_LINE"
 
-          # Q3 - the anchored home banner keeps a divider and a dead buffer
-          # between the creative and the system navigation area.
+          # Q3 - if the reusable banner is used on another surface, it keeps a
+          # dead buffer from the system navigation area.
           has "$BANNER" 'SystemEdgeBuffer'
           has "$BANNER" 'navigationBarsPadding()'
-          has "$HOME"   'HairLine()'
 
           # Q4 - the v0.8.4 processing transition must not have been touched.
           test "$(grep -c 'ProcessingOverlay(' "$SCREEN")" -eq 1
@@ -814,7 +817,10 @@ jobs:
           has "$NATIVE" 'AdSlots.requestable'
           has "$BANNER" 'AdSlots.requestable'
           has "$RESULT" 'AdSlots.requestable'
-          has "$HOME"   'AdSlots.requestable'
+          # Home has no ad surface; adding one back must be an explicit
+          # performance decision rather than an accidental import.
+          nothas "$HOME" 'NativeAdCard'
+          nothas "$HOME" 'HomeBannerAd'
           # ...and the definitions themselves still start from the build switch.
           grep -Fq 'val enabled: Boolean get() = BuildConfig.ENABLE_ADS' "$SLOTS"
           grep -Fq 'enabled && ConsentManager.adsAllowed' "$SLOTS"

@@ -1,9 +1,9 @@
 package com.vidsize.compressor.ui.screens
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.DocumentsContract
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -470,45 +470,28 @@ private fun shareVideo(context: Context, uri: Uri) {
 }
 
 /**
- * Opens Movies/Vidsize as a folder, not the output item as media.
+ * Opens the exact finished MediaStore item in an external gallery/player.
  *
- * Sending the video's item URI to ACTION_REVIEW/ACTION_VIEW allowed OEM gallery
- * apps to route the request to a player or an unrelated cached preview. The
- * user asked to see where the file was saved, so the primary contract is now a
- * directory URI. If an OEM cannot view directory URIs, DocumentsUI opens a
- * video browser already positioned inside Movies/Vidsize.
+ * Android has no portable "reveal this item inside this folder" intent. Using
+ * A document-picker folder fallback was worse: it is a picker contract,
+ * so tapping a file merely returned a result to Vidsize and appeared to do
+ * nothing. The output remains organised in Movies/Vidsize, while this action
+ * now grants the receiving app access to the exact video and lets the user's
+ * gallery handle playback, sharing, editing and deletion.
  */
 private fun showInGallery(context: Context, uri: Uri) {
-    val folderUri = DocumentsContract.buildDocumentUri(
-        EXTERNAL_STORAGE_AUTHORITY,
-        OUTPUT_FOLDER_DOCUMENT_ID,
-    )
-    val folder = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(folderUri, DocumentsContract.Document.MIME_TYPE_DIR)
+    val externalView = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "video/*")
+        clipData = ClipData.newRawUri("Vidsize output", uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    val launched = runCatching { context.startActivity(folder) }.isSuccess
+    val launched = runCatching { context.startActivity(externalView) }.isSuccess
     if (launched) {
-        context.suppressAppOpenOnReturn()
-        return
-    }
-
-    val browseFolder = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-        type = "video/*"
-        addCategory(Intent.CATEGORY_OPENABLE)
-        putExtra(DocumentsContract.EXTRA_INITIAL_URI, folderUri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    val browsed = runCatching { context.startActivity(browseFolder) }.isSuccess
-    if (browsed) {
         context.suppressAppOpenOnReturn()
     } else {
         context.startActivity(PlayerActivity.intent(context, uri))
     }
 }
-
-private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
-private const val OUTPUT_FOLDER_DOCUMENT_ID = "primary:Movies/Vidsize"
 
 /**
  * Plays the finished file in Vidsize's own player.

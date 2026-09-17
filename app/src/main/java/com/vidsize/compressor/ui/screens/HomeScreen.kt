@@ -38,14 +38,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
-import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.data.history.CompressionHistoryEntry
 import com.vidsize.compressor.data.history.HistorySummary
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
-import com.vidsize.compressor.ui.components.HairLine
-import com.vidsize.compressor.ui.components.NativeAdCard
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
 import com.vidsize.compressor.ui.components.SavingsChart
@@ -64,12 +61,13 @@ import com.vidsize.compressor.ui.theme.Space
  *
  * Layout contract:
  *  - A fixed app bar that clears the status bar via [statusBarsPadding].
- *  - A single scrolling content column between the bar and the ad.
- *  - An anchored ad strip pinned above the navigation bar.
+ *  - A single lazy scrolling column below the bar.
  *
- * The bar and the ad never scroll; only the content between them does. That is
- * what makes the screen feel like an app rather than a long web page, and it is
- * also what keeps the banner in a stable, non-accidental position.
+ * Home deliberately contains no AndroidView-backed ad. A NativeAdView embeds a
+ * MediaView and can request, inflate and start media while a short list is
+ * flinging. On the most-used screen that made every swipe visibly stall on
+ * real devices. Native monetisation remains on Result; Home stays a pure
+ * Compose list so scrolling work is limited to the visible product content.
  */
 @Composable
 fun HomeScreen(
@@ -149,75 +147,8 @@ fun HomeScreen(
 
             item(key = "storage") { StorageSavedPanel(summary = summary) }
 
-            // The in-content native ad, at the very end of the scroll.
-            //
-            // ## Why here and not higher
-            //
-            // Home's entire job is "tap Select Video", and a user in a hurry
-            // never reaches this. Everything above it is the product; this sits
-            // after the last piece of real content, so a user who arrives here
-            // scrolled deliberately. It is also as far from the Select Video
-            // button as the screen allows - the opposite end of the scroll -
-            // which matters because a native creative carries its own tappable
-            // call to action.
-            //
-            // ## Why it does not replace the anchored banner
-            //
-            // Native eCPM runs several times banner eCPM, which is an argument
-            // for swapping them and a bad one here. The anchored banner is the
-            // only ad that reaches a user who never scrolls, and it refreshes on
-            // a 60-second cycle; this one is a single impression that requires
-            // the user to travel to it. They earn from different behaviour, so
-            // they are not substitutes. The whole scroll separates them, and
-            // neither is adjacent to a Vidsize control.
-            //
-            // reserveSpace = false: nothing sits below this, so no-fill cannot
-            // displace anything, and holding 340dp open on a page that may never
-            // fill it would add a screen of dead scroll for nothing.
-            if (AdSlots.requestable) {
-                item(key = "native-ad") {
-                    Column {
-                        Spacer(Modifier.height(Space.xl))
-                        HairLine()
-                        Spacer(Modifier.height(Space.sm))
-                        Eyebrow(
-                            text = stringResource(R.string.ad_label),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(Modifier.height(Space.xs))
-                        NativeAdCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            reserveSpace = false,
-                        )
-                    }
-                }
-            }
-
             item(key = "bottom-gap") { Spacer(Modifier.height(Space.xl)) }
         }
-
-        // Monetization stays visible without interrupting the user's workflow.
-        // The scrollable content remains above this consent-gated banner.
-        //
-        // The banner stays anchored rather than scrolling with the content. In
-        // the content it would end up beside the Select Video button, the Clear
-        // history action or the history rows - all of them app controls, which is
-        // a worse accidental-click neighbourhood than the system navigation area,
-        // and it would scroll out of view entirely. What the anchored placement
-        // did lack was separation, so it now carries a divider above it and a
-        // 12dp dead buffer on both sides (see SystemEdgeBuffer).
-        // The divider exists to separate the creative from the content above it.
-        // With ads off there is no creative, so a dangling rule at the bottom of
-        // the screen would be a decoration with no meaning.
-        // v0.9.1: the anchored banner is gone from Home.
-        //
-        // Home now carries the rewarded offer and an in-content native at the
-        // end of the scroll. A third ad surface on the app's front door - a
-        // screen whose entire job is "tap Select Video" and where the median
-        // visit is a few seconds - was density without a matching return. The
-        // banner survives where it actually earns: the compression screen, and
-        // above all the progress panel, which is the longest-dwell surface in
-        // the app and refreshes on a 60-second cycle for the whole job.
     }
 
     if (showSettings) {
@@ -434,6 +365,7 @@ private fun RecentPanel(
 ) {
     VidsizeCard(
         modifier = Modifier.fillMaxWidth(),
+        elevation = 0.dp,
         contentPadding = Space.md,
     ) {
         if (entries.isEmpty()) {
@@ -589,6 +521,7 @@ private fun RecentRow(
 private fun StorageSavedPanel(summary: HistorySummary) {
     VidsizeCard(
         modifier = Modifier.fillMaxWidth(),
+        elevation = 0.dp,
         contentPadding = Space.md,
     ) {
         Row(

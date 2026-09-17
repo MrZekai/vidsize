@@ -48,25 +48,25 @@ external_navigation = read(
 )
 home = read("app/src/main/java/com/vidsize/compressor/ui/screens/HomeScreen.kt")
 
-# The gallery action must open Movies/Vidsize as a folder. Passing the exact
-# media item to ACTION_REVIEW/ACTION_VIEW can open a player or an unrelated OEM
-# preview instead of showing where the output was saved.
+# Android exposes no portable "reveal in folder" contract. The old
+# ACTION_OPEN_DOCUMENT fallback was a picker: selecting a video returned an
+# ignored result to Vidsize. Open the exact output externally instead.
 require(result, "showInGallery(context, result.outputUri)", "output URI gallery call")
 require(
     result,
     "private fun showInGallery(context: Context, uri: Uri)",
     "URI-taking gallery helper",
 )
-require(result, "DocumentsContract.buildDocumentUri", "output folder document URI")
-require(result, '"primary:Movies/Vidsize"', "Movies/Vidsize document id")
-require(result, "DocumentsContract.Document.MIME_TYPE_DIR", "folder MIME type")
-require(result, "DocumentsContract.EXTRA_INITIAL_URI", "folder browser fallback")
+require(result, "Intent(Intent.ACTION_VIEW)", "external output view intent")
+require(result, 'setDataAndType(uri, "video/*")', "exact video MIME and URI")
+require(result, "ClipData.newRawUri", "URI permission ClipData")
 require(result, "Intent.FLAG_GRANT_READ_URI_PERMISSION", "read permission grant")
 reject(
     result,
-    "MediaStore.ACTION_REVIEW",
-    "exact-item gallery review",
+    "Intent.ACTION_OPEN_DOCUMENT",
+    "picker used as gallery browser",
 )
+reject(result, "DocumentsContract", "non-portable folder document intent")
 
 # One explicit decision before encoding; no result-screen second pass.
 for needle, label in (
@@ -132,12 +132,15 @@ for text, label in (
     reject(text, "InterstitialAds", f"interstitial call in {label}")
 reject(result, "deferInterstitialOnReturn", "deferred interstitial on external exit")
 
-# Home must compose only visible scroll items. A single eager Column also
-# inflated the NativeAd AndroidView and every history/statistics surface during
-# initial layout, which made long swipes visibly hitch on the test device.
+# Home must compose only visible product items and must stay free of embedded
+# Android Views. NativeAdView/MediaView loading during a fling caused severe
+# jank on the test device; the result screen keeps the native placement.
 require(home, "LazyColumn(", "lazy home content")
-require(home, 'item(key = "native-ad")', "lazy native-ad item")
 reject(home, ".verticalScroll(", "eager home scroll column")
+reject(home, "NativeAdCard", "media-heavy native ad on home")
+reject(home, "HomeBannerAd", "AndroidView banner on home")
+if home.count("elevation = 0.dp") < 3:
+    errors.append("home cards must avoid GPU-heavy scrolling shadows")
 
 # Every locale must describe the same two-way exchange and must not mention the
 # removed result-screen re-encode offer.
