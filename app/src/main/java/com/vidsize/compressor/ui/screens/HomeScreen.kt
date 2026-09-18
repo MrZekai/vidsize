@@ -1,8 +1,7 @@
 package com.vidsize.compressor.ui.screens
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,13 +38,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.vidsize.compressor.R
-import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.data.history.CompressionHistoryEntry
 import com.vidsize.compressor.data.history.HistorySummary
 import com.vidsize.compressor.ui.components.Eyebrow
 import com.vidsize.compressor.ui.components.VidsizeCard
 import com.vidsize.compressor.ui.components.HeroArt
-import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.HomeBannerAd
 import com.vidsize.compressor.ui.components.IconAction
 import com.vidsize.compressor.ui.components.PrimaryButton
@@ -65,12 +62,14 @@ import com.vidsize.compressor.ui.theme.Space
  *
  * Layout contract:
  *  - A fixed app bar that clears the status bar via [statusBarsPadding].
- *  - A single scrolling content column between the bar and the ad.
- *  - An anchored ad strip pinned above the navigation bar.
+ *  - A short, eager Compose column as the only scrolling region.
+ *  - An anchored adaptive banner outside that scrolling region.
  *
- * The bar and the ad never scroll; only the content between them does. That is
- * what makes the screen feel like an app rather than a long web page, and it is
- * also what keeps the banner in a stable, non-accidental position.
+ * Home never embeds a NativeAdView/MediaView in its scroll. The only ad is the
+ * fixed banner below it, so ad loading cannot join a fling, resize the list or
+ * intercept vertical gestures. The list has a strict three-row history cap;
+ * composing it once avoids lazy-list measurement and item-provider overhead on
+ * every swipe without risking an unbounded screen.
  */
 @Composable
 fun HomeScreen(
@@ -105,6 +104,19 @@ fun HomeScreen(
 
             TrustRow()
 
+            // The rewarded offer.
+            //
+            // Placed here, below the trust row, for two reasons. It is above the
+            // fold on a 360dp phone, so the highest-eCPM unit in the app is
+            // actually discoverable rather than buried in Settings. And the
+            // trust row sits between it and the Select Video button, so a thumb
+            // travelling to the primary action never crosses a control that
+            // opens a full-screen ad.
+            //
+            // The composable renders nothing at all when there is no offer to
+            // make - ads off, consent refused, or no creative loaded - so no
+            // spacing is reserved for an absent card.
+
             Spacer(Modifier.height(Space.xxl))
 
             SectionHeader(
@@ -135,23 +147,7 @@ fun HomeScreen(
             Spacer(Modifier.height(Space.xl))
         }
 
-        // Monetization stays visible without interrupting the user's workflow.
-        // The scrollable content remains above this consent-gated banner.
-        //
-        // The banner stays anchored rather than scrolling with the content. In
-        // the content it would end up beside the Select Video button, the Clear
-        // history action or the history rows - all of them app controls, which is
-        // a worse accidental-click neighbourhood than the system navigation area,
-        // and it would scroll out of view entirely. What the anchored placement
-        // did lack was separation, so it now carries a divider above it and a
-        // 12dp dead buffer on both sides (see SystemEdgeBuffer).
-        // The divider exists to separate the creative from the content above it.
-        // With ads off there is no creative, so a dangling rule at the bottom of
-        // the screen would be a decoration with no meaning.
-        if (AdSlots.enabled) {
-            HairLine()
-            HomeBannerAd()
-        }
+        HomeBannerAd(modifier = Modifier.fillMaxWidth())
     }
 
     if (showSettings) {
@@ -280,6 +276,25 @@ private fun HeroPanel(onSelectVideo: () -> Unit) {
             leadingIcon = R.drawable.ic_video_file,
             trailingIcon = R.drawable.ic_chevron_right,
         )
+
+        // The share-sheet entry point, said out loud.
+        //
+        // The manifest has declared an ACTION_SEND filter for video/* since
+        // v0.8.x: a user can share a video into Vidsize straight from Gallery
+        // and never open the app at all. Nothing in the UI has ever mentioned
+        // it, so effectively nobody knows.
+        //
+        // For a tool people reach for occasionally, that path is the whole
+        // retention story - it removes the step where the user has to remember
+        // this app exists. One caption is the cheapest feature in the product.
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            text = stringResource(R.string.hero_share_hint),
+            style = VidsizeType.caption,
+            color = VidsizeColor.Muted,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -349,6 +364,7 @@ private fun RecentPanel(
 ) {
     VidsizeCard(
         modifier = Modifier.fillMaxWidth(),
+        elevation = 0.dp,
         contentPadding = Space.md,
     ) {
         if (entries.isEmpty()) {
@@ -410,13 +426,12 @@ private fun RecentPanel(
  * "Show in Gallery" and "Open Video" beneath a full-height native ad, a user who
  * left the result screen had no route back to their file at all.
  *
- * The row is now the route back: a tap opens the video in the device's player, a
- * long press shares it, and the trailing chevron makes the affordance visible
- * rather than implied. Rows are only ever rendered for files that still exist -
+ * The row is now the route back: a tap opens the video in the device's player,
+ * while a labelled share button exposes the second action without a hidden
+ * long-press gesture. Rows are only ever rendered for files that still exist -
  * [HistoryController.refresh] prunes the rest - so a tap can no longer be a
  * no-op.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RecentRow(
     entry: CompressionHistoryEntry,
@@ -427,10 +442,9 @@ private fun RecentRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(VidsizeShape.small)
-            .combinedClickable(
+            .clickable(
                 role = Role.Button,
                 onClick = onOpen,
-                onLongClick = onShare,
             )
             .padding(vertical = Space.xxs),
         verticalAlignment = Alignment.CenterVertically,
@@ -454,7 +468,12 @@ private fun RecentRow(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = entry.displayName,
+                // Was entry.displayName. Every generated name shares a prefix
+                // long enough that the ellipsis cut before the part that made
+                // it unique, so same-day rows were indistinguishable. See
+                // Fmt.dateTime.
+                text = Fmt.dateTime(entry.completedAtMillis)
+                    .ifBlank { entry.displayName },
                 style = VidsizeType.cardTitle,
                 color = VidsizeColor.Ink,
                 maxLines = 1,
@@ -483,14 +502,13 @@ private fun RecentRow(
             foreground = VidsizeColor.Mint,
         )
 
-        // Makes the row's interactivity visible instead of leaving the user to
-        // guess, which is what BUG-06 was really about.
+        // A separate labelled action is discoverable by sight and TalkBack;
+        // sharing is never hidden behind a long-press gesture.
         Spacer(Modifier.width(Space.xxs))
-        Icon(
-            painter = painterResource(R.drawable.ic_chevron_right),
-            contentDescription = null,
-            tint = VidsizeColor.Faint,
-            modifier = Modifier.size(18.dp),
+        IconAction(
+            icon = R.drawable.ic_share,
+            contentDescription = stringResource(R.string.result_share),
+            onClick = onShare,
         )
     }
 }
@@ -499,6 +517,7 @@ private fun RecentRow(
 private fun StorageSavedPanel(summary: HistorySummary) {
     VidsizeCard(
         modifier = Modifier.fillMaxWidth(),
+        elevation = 0.dp,
         contentPadding = Space.md,
     ) {
         Row(

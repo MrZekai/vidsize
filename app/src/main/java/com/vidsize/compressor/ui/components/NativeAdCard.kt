@@ -27,7 +27,6 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
-import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ads.NativeAdLoader
 import com.vidsize.compressor.ui.theme.VidsizeColor
 import com.vidsize.compressor.ui.theme.VidsizeShape
@@ -55,7 +54,23 @@ private val AdSlotMinHeight = 340.dp
  * click listener, and no Vidsize control is drawn on top of the card.
  */
 @Composable
-fun NativeAdCard(modifier: Modifier = Modifier) {
+fun NativeAdCard(
+    modifier: Modifier = Modifier,
+    /**
+     * Whether to hold the slot open before the creative arrives.
+     *
+     * True on the result sheet, which is bottom-anchored: anything that grows
+     * inside it pushes every button upward, so a late creative would shove
+     * Share / Show in Gallery / Open under a thumb already travelling towards
+     * them. The slot is reserved for the lifetime of that sheet.
+     *
+     * False at the end of the home scroll, where the opposite is true. Nothing
+     * sits below it, so nothing can be displaced - and reserving 340dp that may
+     * never fill would add a screen of empty scroll to the app's most-used
+     * page for no reason.
+     */
+    reserveSpace: Boolean = true,
+) {
     val context = LocalContext.current
     val inspecting = LocalInspectionMode.current
 
@@ -74,9 +89,12 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
     // QA v0.8.7 BUG-02 and BUG-08. No request, no creative, no debug validator
     // popup over SHARE VIDEO, and nothing tappable laid out where the progress
     // dialog's Cancel button was a moment earlier.
-    if (!AdSlots.enabled) return
-
-    val adsAllowed = ConsentManager.adsAllowed
+    //
+    // AdSlots.requestable carries the one shared permission decision, so a
+    // consent refusal produces a result screen with no ad section at all rather
+    // than an empty labelled slot.
+    val adsAllowed = AdSlots.requestable
+    if (!adsAllowed) return
     var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
 
     // Requested once per result sheet, and only after consent resolves.
@@ -105,9 +123,17 @@ fun NativeAdCard(modifier: Modifier = Modifier) {
 
     val ad = nativeAd
 
-    // The Box is always present at the reserved height, so no-fill and late fill
-    // both leave the surrounding layout exactly where it was.
-    Box(modifier = modifier.fillMaxWidth().heightIn(min = AdSlotMinHeight)) {
+    if (!reserveSpace && ad == null) return
+
+    // Where the slot is reserved, the Box is always present at that height, so
+    // no-fill and late fill both leave the surrounding layout exactly where it
+    // was.
+    val slot = if (reserveSpace) {
+        modifier.fillMaxWidth().heightIn(min = AdSlotMinHeight)
+    } else {
+        modifier.fillMaxWidth()
+    }
+    Box(modifier = slot) {
         if (ad != null) {
             AndroidView(
                 modifier = Modifier.fillMaxWidth(),

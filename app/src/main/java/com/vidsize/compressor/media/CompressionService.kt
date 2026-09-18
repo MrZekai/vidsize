@@ -20,6 +20,7 @@ import com.vidsize.compressor.data.history.CompressionHistoryEntry
 import com.vidsize.compressor.data.history.PrefsHistoryRepository
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
+import com.vidsize.compressor.model.SizeTarget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,6 +77,16 @@ class CompressionService : Service() {
         val uri = intent?.getStringExtra(EXTRA_URI)?.let(Uri::parse)
         val preset = intent?.getStringExtra(EXTRA_PRESET)
             ?.let { name -> runCatching { CompressionPreset.valueOf(name) }.getOrNull() }
+        // Marked unless the caller says otherwise: a missing extra must never
+        // silently produce a free unmarked export.
+        val watermark = intent?.getBooleanExtra(EXTRA_WATERMARK, true) ?: true
+        // Optional service-level replacement hook. The v0.9.13 UI does not use
+        // it for rewarded output: that route chooses mark-free before encoding.
+        val replacing = intent?.getStringExtra(EXTRA_REPLACE_URI)?.let(Uri::parse)
+        // Zero means "no target": an absent extra and an explicitly useless
+        // target land in the same place rather than reaching the planner, which
+        // requires a positive number.
+        val targetBytes = intent?.getLongExtra(EXTRA_TARGET_BYTES, 0L)?.takeIf { it > 0L }
 
         if (uri == null || preset == null) {
             stopSelf(startId)
@@ -101,13 +112,22 @@ class CompressionService : Service() {
                     context = applicationContext,
                     input = uri,
                     preset = preset,
+                    watermark = watermark,
+                    targetBytes = targetBytes,
                     onProgress = { value ->
                         CompressionJobState.markProgress(value)
                         updateNotification((value.coerceIn(0f, 1f) * 100f).roundToInt())
                     },
+                    onPass = { pass, ceiling ->
+                        CompressionJobState.markPass(pass, ceiling)
+                    },
                 )
             }.onSuccess { result ->
-                recordHistory(result)
+                // Order matters: the replaced file is removed only after the
+                // new one exists. A delete before the export would leave the
+                // user with nothing if the second pass failed.
+                if (replacing != null) deleteReplaced(replacing)
+                recordHistory(result, targetBytes)
                 CompressionJobState.markDone(result)
                 showCompletionNotification()
             }.onFailure { throwable ->
@@ -121,6 +141,11 @@ class CompressionService : Service() {
                             CompressionJobState.FailureReason.NO_SAVINGS
                         throwable is OutOfSpaceException ->
                             CompressionJobState.FailureReason.OUT_OF_SPACE
+                        // Before EncoderUnsupportedException: a decoder failure
+                        // caught inside the ladder is rethrown as this, and it
+                        // is the more specific of the two.
+                        throwable is SourceUndecodableException ->
+                            CompressionJobState.FailureReason.SOURCE_UNDECODABLE
                         throwable is EncoderUnsupportedException ->
                             CompressionJobState.FailureReason.ENCODER_UNSUPPORTED
                         throwable.looksLikeOutOfSpace() ->
@@ -128,6 +153,7 @@ class CompressionService : Service() {
                         else ->
                             CompressionJobState.FailureReason.GENERIC
                     }
+                    LastFailure.record(reason, throwable.diagnostic())
                     CompressionJobState.markFailed(
                         reason = reason,
                         debugMessage = throwable.diagnostic(),
@@ -151,8 +177,44 @@ class CompressionService : Service() {
     }
 
     private fun handleTimeout() {
-        // The system gives us seconds, not minutes. Stop immediately.
-        cancelJob()
+        // The system gives us seconds, not minutes, so the job stops first and
+        // everything else happens after.
+        //
+        // QA finding: this used to call cancelJob(), which resets the state to
+        // Idle - indistinguishable from "nothing ever happened". A user who had
+        // waited hours was returned to Home with no output and no explanation.
+        // A six-hour job that the platform killed is a failure and has to be
+        // reported as one, with a reason of its own so the dialog can say what
+        // actually happened instead of offering a generic retry.
+        job?.cancel()
+        CompressionJobState.markFailed(CompressionJobState.FailureReason.TIMEOUT)
+        notifyTimeout()
+        stopSelfSafely(latestStartId)
+    }
+
+    /**
+     * A notification, because by definition nobody is looking at the screen.
+     *
+     * The six-hour limit is reached by jobs left running in the background; the
+     * in-app dialog would go unseen for hours, and by then the user has long
+     * concluded the app simply lost their video.
+     */
+    private fun notifyTimeout() {
+        runCatching {
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(getString(R.string.notification_timeout_title))
+                .setContentText(getString(R.string.notification_timeout_body))
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText(getString(R.string.notification_timeout_body)),
+                )
+                .setAutoCancel(true)
+                .setOngoing(false)
+                .build()
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            manager?.notify(TIMEOUT_NOTIFICATION_ID, notification)
+        }
     }
 
     private fun cancelJob() {
@@ -162,6 +224,29 @@ class CompressionService : Service() {
     }
 
     // -- notification ---------------------------------------------------------
+
+    /**
+     * Removes the file an explicit replacement job supersedes, AND its row.
+     *
+     * ## The bug this signature fixes
+     *
+     * Up to v0.9.8 this deleted only the file. The row survived, so removing a
+     * watermark left the user with:
+     *
+     *  - a recent-items row pointing at a URI that no longer resolved, which
+     *    did nothing when tapped;
+     *  - "Space saved" and the video count both one too high, because
+     *    `HistorySummary` sums and counts every stored row;
+     *  - two rows that looked identical, since both carried the same sizes and
+     *    the name was truncated before the seconds that told them apart.
+     *
+     * One missing call, three visible symptoms. The file and the record are one
+     * fact and have to leave together.
+     */
+    private fun deleteReplaced(uri: Uri) {
+        runCatching { contentResolver.delete(uri, null, null) }
+        runCatching { PrefsHistoryRepository(applicationContext).removeByOutputUri(uri.toString()) }
+    }
 
     private fun startForegroundSafely(notification: Notification) {
         // FOREGROUND_SERVICE_TYPE_MANIFEST is available from API 29. The
@@ -272,7 +357,7 @@ class CompressionService : Service() {
         }
     }
 
-    private fun recordHistory(result: CompressionResult) {
+    private fun recordHistory(result: CompressionResult, targetBytes: Long?) {
         runCatching {
             PrefsHistoryRepository(applicationContext).add(
                 CompressionHistoryEntry(
@@ -281,7 +366,14 @@ class CompressionService : Service() {
                     displayName = queryDisplayName(result.outputUri),
                     sourceBytes = result.sourceBytes,
                     outputBytes = result.outputBytes,
-                    presetTitle = result.preset.title,
+                    // A size-target job is labelled by what the user asked for.
+                    // Recording "Balanced" would name a level they never chose
+                    // and never saw.
+                    presetTitle = if (targetBytes != null) {
+                        "${targetBytes / SizeTarget.BYTES_PER_MB} MB"
+                    } else {
+                        result.preset.title
+                    },
                     completedAtMillis = System.currentTimeMillis(),
                 ),
             )
@@ -299,16 +391,60 @@ class CompressionService : Service() {
         private const val CHANNEL_ID = "vidsize_compression"
         private const val NOTIFICATION_ID = 1001
         private const val COMPLETION_NOTIFICATION_ID = 1002
+        private const val TIMEOUT_NOTIFICATION_ID = 1003
         private const val ACTION_CANCEL = "com.vidsize.compressor.CANCEL"
         private const val EXTRA_URI = "uri"
         private const val EXTRA_PRESET = "preset"
+        private const val EXTRA_WATERMARK = "watermark"
+        private const val EXTRA_REPLACE_URI = "replace_uri"
+        private const val EXTRA_TARGET_BYTES = "target_bytes"
 
-        /** Starts a compression. Safe to call from the UI thread. */
-        fun start(context: Context, uri: Uri, preset: CompressionPreset) {
+        /**
+         * Starts a compression. Safe to call from the UI thread.
+         *
+         * @param watermark false only when the user has earned a mark-free
+         *        export. The default is the paying-nothing case, so a caller
+         *        that forgets the argument produces a marked file rather than
+         *        giving the reward away.
+         * @param replacing an older app-owned output to delete only after the
+         *        new one is published. The current rewarded UI never passes it;
+         *        mark-free output is selected before the first encode.
+         */
+        fun start(
+            context: Context,
+            uri: Uri,
+            preset: CompressionPreset,
+            watermark: Boolean = true,
+            replacing: Uri? = null,
+            targetBytes: Long? = null,
+        ) {
             val intent = Intent(context, CompressionService::class.java)
                 .putExtra(EXTRA_URI, uri.toString())
                 .putExtra(EXTRA_PRESET, preset.name)
-            ContextCompat.startForegroundService(context, intent)
+                .putExtra(EXTRA_WATERMARK, watermark)
+            if (replacing != null) intent.putExtra(EXTRA_REPLACE_URI, replacing.toString())
+            // `preset` is still sent in target mode and still has to be a valid
+            // enum name: onStartCommand refuses an intent without one, and a
+            // target job that silently did nothing would be far worse than an
+            // unused extra.
+            if (targetBytes != null) intent.putExtra(EXTRA_TARGET_BYTES, targetBytes)
+
+            // Guarded, like cancel() below it already was.
+            //
+            // startForegroundService throws ForegroundServiceStartNotAllowedException
+            // on Android 12+ when the app is not in a valid state to start one.
+            // That is not a hypothetical: a call arriving as the user taps
+            // COMPRESS, a race with the app being backgrounded, or an OEM that
+            // restricts this further will all produce it. Uncaught it crashed the
+            // app and fed Android vitals; caught, the screen shows a failure the
+            // user can act on and the job can simply be started again.
+            runCatching { ContextCompat.startForegroundService(context, intent) }
+                .onFailure {
+                    CompressionJobState.markFailed(
+                        reason = CompressionJobState.FailureReason.SERVICE_START_FAILED,
+                        debugMessage = it.diagnostic(),
+                    )
+                }
         }
 
         /** Cancels the running compression, if any. */

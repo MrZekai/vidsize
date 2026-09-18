@@ -58,7 +58,7 @@ code{background:#EEEFF6;padding:2px 6px;border-radius:4px;font-size:.9em}
   </ul>
 
   <h2>5. Device limits</h2>
-  <p>Vidsize does not impose a maximum file size or duration. Real limits come from your device: available storage, the capabilities of its video encoder, its thermal behaviour, and battery. The app checks free space before starting and warns about long jobs, but some videos — unusual codecs, damaged files, very high resolutions on older hardware — may fail to compress on some devices. That is a hardware limitation, not a defect in the app.</p>
+  <p>Vidsize does not impose a fixed maximum file size or resolution. It attempts 2K and 4K sources with the decoders the device actually makes available and may begin the output at 1080p or lower. Real limits still include free storage, codec and profile compatibility, encoder capability, thermal behaviour and battery. A device capability-table warning alone is not treated as proof that a video cannot be processed; Vidsize performs a real attempt. Damaged files or a source codec/profile for which the device exposes no usable decoder can still fail.</p>
 
   <h2>6. Advertising</h2>
   <p>The app is free and supported by advertising served through Google AdMob. Interfering with ad delivery, or attempting to generate invalid ad activity, is not permitted. How ad-related data is handled is described in the <a href="./privacy.html">Privacy Policy</a>.</p>

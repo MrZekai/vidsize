@@ -6,8 +6,13 @@ import android.os.Bundle
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.vidsize.compressor.ads.AdDiagnostics
+import com.vidsize.compressor.ads.AdPacing
+import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.AppOpenAdManager
 import com.vidsize.compressor.ads.AppOpenAdPolicy
+import com.vidsize.compressor.growth.ReviewPrompt
+import com.vidsize.compressor.media.CompressionEngine
 
 class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks,
     DefaultLifecycleObserver {
@@ -22,6 +27,33 @@ class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks
 
     override fun onCreate() {
         super<Application>.onCreate()
+
+        // Preference-backed ad state, opened before anything can ask it a
+        // question. All four share one SharedPreferences file (AdPacing.FILE_NAME)
+        // so the shared full-screen clock and the display counters can
+        // never disagree about which store they are reading.
+        //
+        // None of this touches the Mobile Ads SDK: initialisation still waits for
+        // ConsentManager, and with ENABLE_ADS false these objects simply hold
+        // zeroes that nothing reads.
+        AdPacing.init(this)
+        AdDiagnostics.init(this)
+        ReviewPrompt.init(this)
+
+        // Interstitial counters live in the same preference file as the shared
+        // full-screen clock above.
+        //
+        // This call was missing up to v0.9.14, and its absence was silent in the
+        // worst way: `prefs` stayed null, so `shownToday()` always answered 0 and
+        // `recordShownToday()` wrote nothing. The daily cap could never bind and
+        // the diagnostics screen reported a counter that was structurally frozen.
+        InterstitialAds.init(this)
+
+        // Scratch files from a process that was killed mid-job. Safe here and
+        // only here: at process start no job of ours can be running, so every
+        // vidsize_* file in the cache is an orphan.
+        CompressionEngine.sweepOrphanedTempFiles(this)
+
         appOpenAdPolicy = AppOpenAdPolicy(this)
         appOpenAdManager = AppOpenAdManager(this, appOpenAdPolicy)
         registerActivityLifecycleCallbacks(this)

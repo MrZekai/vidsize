@@ -65,10 +65,21 @@ outright; the rest cost you ratings rather than approval.
       and that **no ad loads before consent resolves** (the ad slots stay empty).
 - [ ] Verify **Settings → Ad privacy options** appears for an EEA user and
       re-opens the form.
-- [ ] App Open QA: first 3 days suppressed, first 3 sessions suppressed, no ad over
-      compression/result/share-sheet entry, no entry delay when an ad is unavailable.
-- [ ] Confirm `closedTest` uses Google demo ads and the true `release`
-      variant uses only the four real Vidsize ad units.
+- [ ] App Open QA (only if `VIDSIZE_APP_OPEN_AD_UNIT_ID` is set; skip otherwise):
+      no ad over compression, result or share-sheet entry, and no entry delay when
+      an ad is unavailable. The 3-day/3-session warm-up this line used to require
+      was removed in v0.8.9/v0.9.4 — `AppOpenAdPolicy` plus the shared `AdPacing`
+      interval are what actually govern it now.
+- [ ] Confirm `closedTest` carries `USE_TEST_ADS = false` (it does since v0.9.9,
+      so it shows the **real** Vidsize units, not Google demo creatives) and that
+      `release` uses the same real units. This line previously said closedTest
+      used demo ads; that has not been true since v0.9.9 and a tester acting on
+      it would have reported real impressions as a configuration error.
+- [ ] Interstitial QA: compress a video, then leave the result screen each way in
+      turn — Share, Show in Gallery, back arrow, system back, "Compress another".
+      Exactly ONE interstitial may appear per completed compression, whichever
+      exit is used; the output URI is the token that enforces it. Re-entering the
+      same result must not produce a second.
 
 ## D. Play Console
 
@@ -106,7 +117,7 @@ outright; the rest cost you ratings rather than approval.
 
 | Item | Status | Why |
 |---|---|---|
-| App Open ads | **Implemented and enabled** | 3-day grace, 3-session warm-up, 6-hour cooldown, no blocking when an ad is unavailable. |
+| App Open ads | **Implemented; enabled only if a unit ID is supplied** | `VIDSIZE_APP_OPEN_AD_UNIT_ID` sits in `optionalAdIds`, so an absent ID disables this one format silently and leaves the other four working. The 3-day grace, 3-session warm-up and 6-hour cooldown described here were removed in v0.8.9/v0.9.4; `AppOpenAdPolicy` and the shared `AdPacing` interval are the current rules. If this account has no App Open unit, the app ships with **no** app-open ads — check `AdDiagnostics` rather than this table. |
 | Trim before compress | Not built | Highest-value V1.1 feature; needs a new screen and touches the export path. |
 | Batch compression | Not built | V1.1. |
 | Dark theme | Not built | V1 is Light Minimal by decision; the token system makes it a small change later. |

@@ -23,8 +23,32 @@
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${ADMOB_APP_ID}" />
 
+        <!--
+            singleTask: a second shared video, and the completion notification's
+            own intent, reach the existing activity through onNewIntent instead
+            of stacking a second copy of the app on top of the first. Both then
+            render the one CompressionJobState the process owns, which is what
+            the UI already assumed.
+        -->
+        <!--
+          Vidsize's own player. exported="false": it is reachable only through
+          PlayerActivity.intent() from inside this app, never by an implicit
+          ACTION_VIEW from another app - which is the handover it exists to
+          replace.
+
+          configChanges keeps a rotation from destroying the activity and
+          restarting the video from zero, which is what a user rotating to
+          watch landscape would otherwise get.
+        -->
+        <activity
+            android:name=".PlayerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Vidsize.Player"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTask"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

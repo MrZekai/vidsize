@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/ads-v0.9.0
       - 'qa/**'
       - 'fix/**'
   pull_request:
@@ -13,6 +14,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # Why this is here and not just in .gitignore.
+    #
+    # Run 34890837352 was green in every gate and still failed, because
+    # tools/check_kotlin_syntax.py does `from check_kotlin_references import
+    # strip_noise`. An import - unlike running a script directly - compiles the
+    # imported module and writes tools/__pycache__/*.pyc. That untracked file
+    # made the "working tree must be clean" assertion at the end of the negative
+    # tests fire, and the source audit ZIP was never cut.
+    #
+    # .gitignore now covers it, which is the durable fix. This variable is the
+    # second lock: it stops the file from ever being created on the runner, so
+    # the audit ZIP is cut from a tree that is byte-identical to the checkout
+    # rather than from one that merely LOOKS clean because we told git to look
+    # away. Both are needed - the ignore rule protects the developer's machine,
+    # this protects the artifact.
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -47,22 +67,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          . tools/gate_helpers.sh
           legacy_brand="fit""size"
           legacy_package="com\\.fit""size"
           if grep -RIniE "${legacy_brand}|${legacy_package}" app docs README.md store --exclude='*.png'; then
             echo 'Legacy brand reference found.' >&2
             exit 1
           fi
-          ! grep -q 'FOREGROUND_SERVICE_DATA_SYNC' app/src/main/AndroidManifest.xml
-          ! grep -q 'foregroundServiceType="[^"]*dataSync' app/src/main/AndroidManifest.xml
+          forbid 'FOREGROUND_SERVICE_DATA_SYNC' app/src/main/AndroidManifest.xml
+          forbid 'foregroundServiceType="[^"]*dataSync' app/src/main/AndroidManifest.xml
           grep -q 'android:allowBackup="false"' app/src/main/AndroidManifest.xml
           grep -q 'android:dataExtractionRules="@xml/data_extraction_rules"' app/src/main/AndroidManifest.xml
           test -f app/src/main/res/xml/data_extraction_rules.xml
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 17' app/build.gradle.kts
-          grep -q 'versionName = "0.8.9"' app/build.gradle.kts
+          grep -q 'versionCode = 33' app/build.gradle.kts
+          grep -q 'versionName = "0.9.15"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -71,10 +92,22 @@ jobs:
           grep -q 'AdIds.appOpen' app/src/main/java/com/vidsize/compressor/ads/AppOpenAdManager.kt
           grep -q 'AdIds.nativeResult' app/src/main/java/com/vidsize/compressor/ads/NativeAdLoader.kt
           grep -q 'AdIds.homeBanner' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
-          grep -q 'CompressionBannerAd(active = !processing)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
-          test "$(grep -c 'CompressionBannerAd(active = !processing)' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt)" -eq 1
-          grep -q 'setAdSize(AdSize.BANNER)' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
-          ! grep -q 'getLargeAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
+          # REVERSED in v0.9.9. This used to require the compression-screen
+          # banner to be present exactly once. The banner is now gone, on
+          # purpose.
+          #
+          # Measured on a 393x873dp device, the fixed chrome on that screen -
+          # banner 50dp, divider 9dp, mark-free card ~160dp, action bar ~73dp -
+          # left a ~366dp window for ~510dp of content, so the third compression
+          # level was off screen and the second one's estimate was cut in half.
+          # The banner was the cheapest 59dp to reclaim and the likeliest to be
+          # tapped by accident mid-scroll. Four placements remain.
+          #
+          # The gate is not deleted, it is inverted: re-adding it would silently
+          # re-break the layout this release exists to fix.
+          forbid 'CompressionBannerAd' app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          grep -q 'getCurrentOrientationAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
+          forbid 'getLargeAnchoredAdaptiveBannerAdSize' app/src/main/java/com/vidsize/compressor/ui/components/HomeBannerAd.kt
           grep -q 'ic_launcher_monochrome' app/src/main/res/mipmap-anydpi-v33/ic_launcher.xml
           test -f store/assets/icon-512.png
           test -f docs/index.html
@@ -82,6 +115,435 @@ jobs:
           cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html
           cmp -s docs/terms.html app/src/main/assets/legal/terms.html
           cmp -s docs/index.html app/src/main/assets/legal/index.html
+
+      - name: v0.9.0 ad model regression gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          . tools/gate_helpers.sh
+          ADS=app/src/main/java/com/vidsize/compressor/ads
+          UI=app/src/main/java/com/vidsize/compressor/ui
+          RESULT=$UI/screens/ResultScreen.kt
+          COMPRESS=$UI/screens/CompressionScreen.kt
+          SETTINGS=$UI/screens/SettingsSheet.kt
+          MAIN=app/src/main/java/com/vidsize/compressor/MainActivity.kt
+
+          # --- Gate 1: exactly one pacing rule in code, and it is 3 minutes ---
+          # The whole model rests on this. Four stacked conditions are what made
+          # the v0.8.9 app-open ad unreachable and undiagnosable.
+          grep -q 'GAP_MILLIS: Long = 3L \* 60L \* 1000L' $ADS/FullScreenPacingPolicy.kt
+          grep -q 'FULL_SCREEN_GAP_MILLIS: Long = FullScreenPacingPolicy.GAP_MILLIS' $ADS/AdPacing.kt
+
+          # --- Gate 2: no silent quota has crept back in ---
+          # A forbidden-name list, because every one of these returned false
+          # without a trace and the outcome was indistinguishable from no fill.
+          for banned in INSTALL_GRACE MIN_SESSIONS_BEFORE COOLDOWN_MILLIS DAILY_LIMIT \
+                        SESSION_QUOTA MAX_PER_SESSION MAX_PER_DAY FREE_USES MIN_COMPRESSIONS; do
+            if grep -rqn "$banned" $ADS; then
+              echo "Silent quota reintroduced in ads/: $banned" >&2
+              exit 1
+            fi
+          done
+
+          # --- Gate 3: the reward buys a mark-free export, and nothing else ---
+          # v0.9.4 replaced the ten-minute ad-free window. The old reward was
+          # revenue-negative - one rewarded impression traded for ten minutes of
+          # empty inventory - so the rule now is that NOTHING the user can earn
+          # suppresses an ad.
+          test -f $ADS/WatermarkOffer.kt
+          if test -f $ADS/AdFreeWindow.kt; then
+            echo 'AdFreeWindow is back. The reward must not suppress ads.' >&2
+            exit 1
+          fi
+          grep -q 'fun consume(): Boolean' $ADS/WatermarkOffer.kt
+          grep -q 'WatermarkOffer.grant()' $ADS/RewardedAds.kt
+          grep -q 'verifyRewardCopyParity' app/build.gradle.kts
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="watermark_choice_title"' "$f" || { echo "$f lacks the choice copy" >&2; exit 1; }
+            grep -q 'name="watermark_reward_granted_title"' "$f" || { echo "$f lacks the reward confirmation" >&2; exit 1; }
+            if grep -q 'ad_free_' "$f"; then
+              echo "$f still defines the removed ad-free copy" >&2
+              exit 1
+            fi
+          done
+
+          # --- Gate 4: one chokepoint; no surface asks its own question ---
+          # A surface that decides for itself is how a consent refusal used to
+          # leave a divider with nothing under it. One predicate, asked once.
+          grep -q 'AdSlots.requestable' $UI/components/HomeBannerAd.kt
+          grep -q 'AdSlots.requestable' $UI/components/NativeAdCard.kt
+          grep -q 'AdSlots.requestable' $ADS/NativeAdLoader.kt
+          # Home keeps NativeAdView/MediaView out of its scroll, but monetises
+          # with one anchored adaptive banner below the scrolling region.
+          # Loading and resizing therefore cannot join a fling.
+          grep -q 'HomeBannerAd' $UI/screens/HomeScreen.kt
+          grep -q 'getCurrentOrientationAnchoredAdaptiveBannerAdSize' $UI/components/HomeBannerAd.kt
+          forbid 'NativeAdCard' $UI/screens/HomeScreen.kt
+          # The progress panel used to carry a banner; v0.9.7 removed it. The
+          # compression screen itself still has one, and that is the surface the
+          # chokepoint now has to cover here.
+          grep -q 'AdSlots.requestable' $UI/components/HomeBannerAd.kt
+          forbid 'ConsentManager' $UI/components/HomeBannerAd.kt
+          forbid 'ConsentManager' $UI/screens/ProcessingOverlay.kt
+
+          # --- Gate 5: interstitial delivery is WIRED -----------------------
+          # This gate used to forbid every InterstitialAds reference, on the
+          # grounds that the format was "disabled pending a product decision".
+          # docs/DECISIONS.md names the revenue model as "Home/Result native +
+          # Interstitial + Rewarded", so no such decision was ever taken - and a
+          # prohibition cannot tell a format switched off on purpose from one
+          # that quietly lost its call sites, which is what had happened. The
+          # audit found zero callers outside AdDiagnostics: the format earned
+          # nothing, while the exits it was meant to pair with went on deleting
+          # the app-open ad, giving up impressions in both directions.
+          #
+          # Each link of the chain is now required, so it cannot come apart
+          # again without the build saying so.
+          grep -q 'InterstitialAds.init(' \
+            app/src/main/java/com/vidsize/compressor/VidsizeApplication.kt
+          grep -q 'InterstitialAds.preload(' $COMPRESS
+          grep -q 'InterstitialAds.markPending(' $RESULT
+          grep -q 'InterstitialAds.showNow(' $RESULT
+          grep -q 'InterstitialAds.showPendingIfAny(' $MAIN
+          # markPending() suppresses the app-open ad itself. A bare suppression
+          # left on the result screen is the regression above, exactly.
+          forbid 'suppressAppOpenOnReturn' $RESULT
+          forbid 'deferInterstitialOnReturn' $RESULT
+          # One interstitial per finished job, enforced by the output token.
+          grep -q 'InterstitialAds.showNow(activity, result.outputUri.toString())' $RESULT
+
+          # The rewarded offer appears on exactly one surface: an explicit
+          # two-way chooser after COMPRESS and before any encode. The result
+          # screen must never sell a second encode of the same video.
+          grep -q 'OutputChoiceDialog(' $COMPRESS
+          forbid 'OutputChoiceDialog' $UI/screens/HomeScreen.kt
+          forbid 'OutputChoiceDialog' $RESULT
+          forbid 'WatermarkStrip' $RESULT
+          test ! -f $UI/components/WatermarkStrip.kt
+          test ! -f $UI/components/WatermarkFreeCard.kt
+          # The scrolling region stays free of media-heavy native ads.
+          forbid 'NativeAdCard' $UI/screens/HomeScreen.kt
+          test "$(grep -c 'elevation = 0.dp' $UI/screens/HomeScreen.kt)" -ge 3
+
+          # --- Gate 7: result exits reset state without a full-screen ad -----
+          grep -q 'onBack = { CompressionJobState.reset() }' $COMPRESS
+          grep -q 'Verdict.RUNNING_JOB' $ADS/AdGate.kt
+          grep -q 'Verdict.RESULT_WAITING' $ADS/AdGate.kt
+          grep -q 'requireIdleJob = true' $ADS/AppOpenAdPolicy.kt
+
+          # --- Gate 7b: leaving the result screen is one path ----------------
+          # The arrow, the system gesture and "Compress another" all leave a
+          # finished job, so they all go through leaveScreen() and none of them
+          # may navigate without it. The token inside leaveScreen is what caps
+          # this at one interstitial per completed compression, whichever exit
+          # the user picks.
+          grep -q 'BackHandler { leaveScreen(onSystemBack) }' $RESULT
+          grep -q 'fun leaveScreen(' $RESULT
+          grep -Pzoq 'onSystemBack = \{ CompressionJobState\.reset\(\) \},' $COMPRESS
+          # The compression screen itself stays free of full-screen ads: nothing
+          # interrupts an active job or fronts a result the user has not seen.
+          forbid 'InterstitialAds.showNow' $COMPRESS
+          forbid 'InterstitialAds.showPendingIfAny' $COMPRESS
+
+          # --- Gate 7c: growth surfaces are wired --------------------------
+          # The share-sheet path has existed since v0.8.x and was never
+          # mentioned in the UI. A caption is the whole retention story here.
+          grep -q 'hero_share_hint' $UI/screens/HomeScreen.kt
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="hero_share_hint"' "$f" || { echo "$f lacks hero_share_hint" >&2; exit 1; }
+          done
+          # Play review is asked at the settled result, never during navigation.
+          test -f app/src/main/java/com/vidsize/compressor/growth/ReviewPrompt.kt
+          grep -q 'ReviewPrompt.maybeAsk' $RESULT
+          forbid 'ReviewPrompt' $COMPRESS
+          grep -q 'review-ktx' app/build.gradle.kts
+
+          # --- Gate 8: the share-sheet entry point still suppresses app open ---
+          # The suppression stays. What was dropped here is the companion
+          # `forbid 'showPendingIfAny' $MAIN`, added when the interstitial was
+          # believed to be switched off: onResume is the one callback that fires
+          # for every way back into the app, so it is the only correct place to
+          # consume a deferred interstitial. Gate 5 above now requires it.
+          grep -q 'appOpenAdManager.suppressNextForeground()' $MAIN
+
+          # --- Gate 9: diagnostics exists and is reachable from a signed build ---
+          grep -q 'DIAGNOSTICS_TAP_COUNT = 7' $SETTINGS
+          grep -q 'AdDiagnosticsSheet' $SETTINGS
+          test -f $UI/screens/AdDiagnosticsSheet.kt
+          grep -q 'VERDICT' $UI/screens/AdDiagnosticsSheet.kt
+
+          # --- Gate 10: real units only; the ads-off-without-ids invariant holds ---
+          grep -q 'VIDSIZE_INTERSTITIAL_AD_UNIT_ID' app/build.gradle.kts
+          grep -q 'VIDSIZE_REWARDED_AD_UNIT_ID' app/build.gradle.kts
+          grep -q 'verifyAdUnitCoverage' app/build.gradle.kts
+          grep -q 'verifyAdsOffWithoutRealIds' app/build.gradle.kts
+          # closedTest must no longer be pinned ads-off, or T1-T7 cannot be run
+          # against the artefact that ships.
+          forbid_span 'create\("closedTest"\)[\s\S]{0,600}?ENABLE_ADS", "false"' app/build.gradle.kts
+          # ...and the test-creative variant must be debuggable, or AdIds' sample
+          # backstop refuses every unit and the variant shows nothing.
+          grep -Pzoq 'create\("adsQa"\)[\s\S]{0,400}?isDebuggable = true' app/build.gradle.kts
+
+          # --- Gate 11: no real AdMob identifier is ever committed -----------
+          # The audit guarantee: a clone must package with ads OFF. Only Google's
+          # sample publisher and the all-zero placeholder may appear in tracked
+          # source. A real one leaking in would silently arm the SDK for anyone
+          # who builds the repo.
+          # Allowed publishers, and why each is safe:
+          #   3940256099942544 - Google's public sample publisher
+          #   0000000000000000 - the all-zero placeholder
+          #   1111111111111111 - the repeated-digit dummy this workflow's own
+          #                      negative tests pass to bundleRelease
+          # Anything else is a live publisher and must never be committed.
+          ALLOWED_PUBS='3940256099942544|0000000000000000|1111111111111111'
+          leaked="$(grep -rhoE 'ca-app-pub-[0-9]{16}' \
+                      app/src docs app/build.gradle.kts .github 2>/dev/null \
+                    | sort -u | grep -vE "ca-app-pub-($ALLOWED_PUBS)" || true)"
+          if [ -n "$leaked" ]; then
+            echo "Live AdMob publisher committed to source:" >&2
+            echo "$leaked" >&2
+            exit 1
+          fi
+          # .gitignore must list ads.properties as a whole line - a substring
+          # match would be satisfied by "ads.properties.example".
+          #
+          # Why the \r and why this gate got its own error message.
+          #
+          # Run 34903198496 died here, silently, in twenty seconds. The repo
+          # carries Windows line endings in the files that came from the
+          # developer's machine, and `ads.properties` happened to be the LAST
+          # line of .gitignore with no terminator at all - so `grep -qx` saw
+          # exactly "ads.properties" and passed. Appending new rules below it
+          # gave that line a CRLF terminator, grep started seeing
+          # "ads.properties\r", -x stopped matching, and `set -e` killed the
+          # step with no output. The rule had not changed. Its line ending had.
+          #
+          # .gitignore is now LF, which is the real fix. This tolerates \r
+          # anyway, because a file that round-trips through Windows must not be
+          # able to switch a security gate off by accident - and it says so out
+          # loud instead of dying mute.
+          if ! grep -qE '^ads\.properties[[:space:]]*$' .gitignore; then
+            echo 'GATE FAILED: .gitignore does not list ads.properties on its own line.' >&2
+            echo 'Real AdMob identifiers would be committable. Refusing to build.' >&2
+            exit 1
+          fi
+
+          # And keep the file itself LF, so the failure above cannot come back
+          # through the back door on the next Windows round-trip.
+          if grep -q $'\r' .gitignore; then
+            echo 'GATE FAILED: .gitignore contains CR (Windows line endings).' >&2
+            echo 'Run: sed -i "s/\r$//" .gitignore' >&2
+            exit 1
+          fi
+
+          test -f ads.properties.example
+          if git ls-files --error-unmatch ads.properties >/dev/null 2>&1; then
+            echo 'GATE FAILED (must not match): git ls-files --error-unmatch ads.properties >/dev/null 2>&1' >&2
+            exit 1
+          fi
+
+          # --- Gate 12: required and optional identifier sets are as designed --
+          # App Open is optional because this account has no unit for it; making
+          # it required would take the other four formats down with it.
+          grep -q 'val requiredAdIds' app/build.gradle.kts
+          grep -q 'val optionalAdIds' app/build.gradle.kts
+          grep -Pzoq 'val optionalAdIds[\s\S]{0,300}?VIDSIZE_APP_OPEN_AD_UNIT_ID' app/build.gradle.kts
+          grep -Pzoq 'val requiredAdIds[\s\S]{0,400}?VIDSIZE_INTERSTITIAL_AD_UNIT_ID' app/build.gradle.kts
+          grep -Pzoq 'val requiredAdIds[\s\S]{0,400}?VIDSIZE_REWARDED_AD_UNIT_ID' app/build.gradle.kts
+
+          # --- Gate 12b: v0.9.2 hardening, each tied to its QA finding -------
+          ADSDIR=app/src/main/java/com/vidsize/compressor/ads
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+
+          # Pacing reads a clock the user cannot set. A wall-clock read here
+          # would let a forward clock change stack two full-screen ads.
+          grep -q 'SystemClock.elapsedRealtime()' $ADSDIR/AdPacing.kt
+          forbid 'System.currentTimeMillis' $ADSDIR/AdPacing.kt
+          # v0.9.4: the clock-tampering surface this used to guard is gone with
+          # the window itself. The grant that replaced it holds no timestamp, is
+          # single-use, and is not persisted, so there is nothing for a moved
+          # clock or an edited preferences file to stretch.
+          forbid 'currentTimeMillis' $ADSDIR/WatermarkOffer.kt
+          forbid 'SharedPreferences' $ADSDIR/WatermarkOffer.kt
+
+          # Consent decides before the SDK starts: no synchronous syncState.
+          test "$(grep -c 'syncState(activity, consentInformation)' $ADSDIR/ConsentManager.kt)" -eq 2
+
+          # Shared URIs are grants, not paths.
+          grep -q 'ContentResolver.SCHEME_CONTENT' $MAIN
+          grep -q 'uri.authority.equals(packageName' $MAIN
+          # A second share reaches the running activity instead of stacking one.
+          grep -q 'android:launchMode="singleTask"' app/src/main/AndroidManifest.xml
+          grep -q 'override fun onNewIntent' $MAIN
+
+          # A platform-killed job is reported, not silently reset.
+          grep -q 'FailureReason.TIMEOUT' $MEDIA/CompressionService.kt
+          grep -q 'TIMEOUT,' $MEDIA/CompressionJobState.kt
+          forbid_span 'private fun handleTimeout\(\)[\s\S]{0,200}?cancelJob\(\)' $MEDIA/CompressionService.kt
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="notification_timeout_title"' "$f" || { echo "$f lacks timeout copy" >&2; exit 1; }
+          done
+
+          # Orphaned scratch files are swept at process start.
+          grep -q 'fun sweepOrphanedTempFiles' $MEDIA/CompressionEngine.kt
+          grep -q 'CompressionEngine.sweepOrphanedTempFiles' app/src/main/java/com/vidsize/compressor/VidsizeApplication.kt
+
+          # No test build may occupy the production package name.
+          # Both suffixes must exist; a distance-based match would break the
+          # moment someone adds a comment, which is exactly what happened.
+          grep -q 'applicationIdSuffix = ".debug"' app/build.gradle.kts
+          grep -q 'applicationIdSuffix = ".adsqa"' app/build.gradle.kts
+          test "$(grep -c 'applicationIdSuffix' app/build.gradle.kts)" -eq 2
+
+          # A closed test built WITH real identifiers runs the production check,
+          # including the privacy-policy pairing for App Open.
+          grep -q 'if (adsConfigured) dependsOn(verifyProductionAdConfig)' app/build.gradle.kts
+
+          # The diagnostics sheet must never print an ad unit id.
+          if grep -qE 'Line\(.*AdIds\.' $UI/screens/AdDiagnosticsSheet.kt; then
+            echo 'GATE FAILED (must not match): grep -qE Line\(.*AdIds\. $UI/screens/AdDiagnosticsSheet.kt' >&2
+            exit 1
+          fi
+
+          # Stale duplicate build script must stay deleted.
+          if test -f app/build.gradle-1.kts; then
+            echo 'GATE FAILED (must not match): test -f app/build.gradle-1.kts' >&2
+            exit 1
+          fi
+
+          # --- Gate 12c: v0.9.3 device-test findings -------------------------
+          # The output carries a readable date, not an epoch.
+          grep -q 'NAME_TIMESTAMP_PATTERN = "yyyy-MM-dd_HH-mm-ss"' $MEDIA/CompressionEngine.kt
+          grep -q 'fun outputDisplayName' $MEDIA/CompressionEngine.kt
+          forbid 'Vidsize_\${System.currentTimeMillis()}' $MEDIA/CompressionEngine.kt
+
+          # The share sheet gets a name and a thumbnail, which it reads from
+          # ClipData - EXTRA_STREAM alone left it showing the MediaStore row id.
+          grep -q 'ClipData.newUri' $UI/MediaIntents.kt
+          grep -q 'putExtra(Intent.EXTRA_STREAM, uri)' $UI/MediaIntents.kt
+          grep -q 'buildVideoShareIntent(context, uri)' $RESULT
+          grep -q 'buildVideoShareIntent(context, Uri.parse(entry.outputUri))' $UI/VidsizeRoot.kt
+          # No screen may hand-roll a share intent again.
+          forbid 'Intent(Intent.ACTION_SEND)' $RESULT
+          forbid 'Intent(Intent.ACTION_SEND)' $UI/VidsizeRoot.kt
+
+          # Android has no portable "reveal in folder" intent. The old
+          # ACTION_OPEN_DOCUMENT fallback was a picker whose selected result was
+          # ignored. Open the exact finished item externally instead.
+          grep -q 'private fun showInGallery(context: Context, uri: Uri)' $RESULT
+          grep -q 'showInGallery(context, result.outputUri)' $RESULT
+          grep -q 'Intent(Intent.ACTION_VIEW)' $RESULT
+          grep -q 'setDataAndType(uri, "video/\*")' $RESULT
+          grep -q 'ClipData.newRawUri' $RESULT
+          grep -q 'FLAG_GRANT_READ_URI_PERMISSION' $RESULT
+          forbid 'Intent.ACTION_OPEN_DOCUMENT' $RESULT
+          forbid 'DocumentsContract' $RESULT
+
+          # --- Gate 12d: v0.9.4 watermark model ------------------------------
+          # Every free export is marked. The default is the paying-nothing case,
+          # so a caller that forgets the argument produces a marked file rather
+          # than giving the reward away.
+          grep -q 'watermark: Boolean' $MEDIA/CompressionEngine.kt
+          grep -q 'if (watermark) add(Watermark.effect(targetHeight))' $MEDIA/CompressionEngine.kt
+          grep -q 'watermark: Boolean = true' $MEDIA/CompressionService.kt
+          grep -q 'getBooleanExtra(EXTRA_WATERMARK, true)' $MEDIA/CompressionService.kt
+
+          # Mark-free is chosen before the first encode. The result screen may
+          # not start a replacement encode or import the service at all.
+          grep -q 'startCompression(watermark = false)' $COMPRESS
+          forbid 'CompressionService' $RESULT
+          forbid 'replacing = result.outputUri' $RESULT
+
+          # The grant is single-use. v0.9.5 moved WHERE it is spent: the
+          # completion effect in CompressionScreen, never the result screen's
+          # launch path. See Gate 12e.
+          grep -q 'fun consume(): Boolean' $ADS/WatermarkOffer.kt
+
+          # The old reward must not come back anywhere.
+          forbid 'AdFreeWindow' $ADS/AdSlots.kt
+          forbid 'AdFreeWindow' $ADS/AdGate.kt
+          grep -q 'val requestable: Boolean get() = permitted' $ADS/AdSlots.kt
+
+          # The home screen may not claim what the app no longer does.
+          for f in app/src/main/res/values*/strings.xml; do
+            if grep -qiE 'name="trust_no_watermark">[^<]*(watermark|filigran|wasserzeichen|marca)' "$f"; then
+              echo "$f still advertises no watermark" >&2
+              exit 1
+            fi
+          done
+
+          # --- Gate 12e: v0.9.13 the choice is made BEFORE the encode --------
+          # Both outcomes are explicit in one modal after the primary CTA.
+          grep -q 'OutputChoiceDialog(' $COMPRESS
+          grep -q 'watermark_with_mark_title' $UI/components/OutputChoiceDialog.kt
+          grep -q 'watermark_free_card_title' $UI/components/OutputChoiceDialog.kt
+          grep -q 'CompressionBannerAd(' $UI/components/OutputChoiceDialog.kt
+          grep -q 'AdSlots.bannerVisible' $UI/components/OutputChoiceDialog.kt
+          grep -q 'fun startWithoutWatermark' $COMPRESS
+          grep -q 'startCompression(watermark = false)' $COMPRESS
+
+          # An unloaded rewarded ad keeps the chooser open and must never
+          # silently substitute a marked encode for the choice the user made.
+          grep -q 'withTimeoutOrNull(REWARDED_WAIT_MILLIS)' $COMPRESS
+          grep -q 'rewardedMessage = RewardedChoiceMessage.UNAVAILABLE' $COMPRESS
+          forbid 'rewardedUnavailable = true' $COMPRESS
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="watermark_free_unavailable"' "$f" || {
+              echo "$f lacks the ad-unavailable copy" >&2; exit 1; }
+          done
+
+          # The permission round trip must not lose the choice.
+          grep -q 'pendingWatermark = watermark' $COMPRESS
+          grep -q 'watermark = chosen' $COMPRESS
+
+          # The grant is spent by the export that DELIVERS, never at launch:
+          # a failed second pass must not cost the user their rewarded view.
+          grep -q 'if (result != null && !result.watermarked) WatermarkOffer.consume()' $COMPRESS
+          forbid 'WatermarkOffer.consume' $RESULT
+
+          # Reward confirmation happens only after the creative closes.
+          grep -q 'if (rewardEarned) onRewardGranted() else onClosedWithoutReward()' $ADS/RewardedAds.kt
+          grep -q 'RewardGrantedDialog()' $COMPRESS
+
+          # --- Gate 12f: v0.9.7 production review findings -------------------
+          # No internal exception text in a user-facing build. `adsQa` and
+          # `debug` are debuggable and keep it; closedTest and release do not.
+          grep -q 'failure.debugMessage.takeIf { BuildConfig.DEBUG }' $COMPRESS
+
+          # The already-efficient source is refused BEFORE the encode, not after
+          # a job the user waited through.
+          # The names existing is not the same as the logic being live: assert
+          # the comparison itself and the clause that actually blocks the job.
+          grep -q 'sourceBpp < ALREADY_EFFICIENT_BPP' $MEDIA/CompressionPlanner.kt
+          grep -q 'viable = savesEnough && encodable && !alreadyEfficient' \
+            $MEDIA/CompressionPlanner.kt
+          grep -q 'alreadyEfficient = alreadyEfficient' $MEDIA/CompressionPlanner.kt
+          grep -q 'val alreadyEfficient: Boolean' \
+            app/src/main/java/com/vidsize/compressor/model/CompressionPlan.kt
+          grep -q 'cta_blocked_already_efficient' $COMPRESS
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="cta_blocked_already_efficient"' "$f" || {
+              echo "$f lacks the already-compressed copy" >&2; exit 1; }
+          done
+
+          # No advertising of any kind inside the progress modal.
+          forbid 'CompressionBannerAd' $UI/screens/ProcessingOverlay.kt
+          forbid 'AdSlots' $UI/screens/ProcessingOverlay.kt
+
+          # The chooser states both the ordinary route and the rewarded route.
+          grep -q 'watermark_with_mark_badge' $UI/components/OutputChoiceDialog.kt
+          grep -q 'watermark_free_card_badge' $UI/components/OutputChoiceDialog.kt
+
+          # Continuing the core task must not require scrolling past an ad.
+          test "$(grep -n 'R.string.result_another' $RESULT | head -1 | cut -d: -f1)" \
+             -lt "$(grep -n 'NativeAdCard(' $RESULT | head -1 | cut -d: -f1)"
+
+          # --- Gate 13: the published policy declares every format and the reward ---
+          for term in 'Banner' 'Result-screen ad' 'App-open ad' 'Interstitial' 'Rewarded ad' \
+                      'without the' 'mark' 'one mark-free export' '180 seconds'; do
+            grep -Fq "$term" docs/privacy.html || { echo "privacy.html omits: $term" >&2; exit 1; }
+          done
+          cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html
 
       - name: v0.8.3 compression + v0.8.4 UI + v0.8.5 quality/ad guards
         shell: bash
@@ -177,15 +639,18 @@ jobs:
           has    "$OVERLAY" 'trackOnly = !progressKnown'
           nothasre "$RING"  'sweepAngle = 72'
 
-          # 2 - the processing panel carries the compression banner, reusing the
-          # standard 320x50 AdSize.BANNER infrastructure and its consent gate.
-          has "$OVERLAY" 'CompressionBannerAd('
-          has "$BANNER"  'setAdSize(AdSize.BANNER)'
+          # 2 - the compression banner keeps its own infrastructure, but the
+          # PROCESSING PANEL no longer carries it.
+          #
+          # v0.9.7 removed that placement outright. An ad above a progress
+          # indicator, in a modal whose only other control is Cancel, makes the
+          # panel read as an advertising container and puts a tappable creative
+          # next to the one button the user is reaching for. The unit still
+          # exists and still serves the compression screen itself; see Gate 12f,
+          # which forbids any ad reference inside the overlay.
+          has "$BANNER"  'getCurrentOrientationAnchoredAdaptiveBannerAdSize'
           has "$BANNER"  'AdIds.compressionBanner'
-          has "$OVERLAY" 'ConsentManager'
-          # exactly one banner call site inside the overlay
-          test "$(grep -c 'CompressionBannerAd(' "$OVERLAY")" -eq 1
-          # and no full-screen ad format anywhere on this surface
+          nothas "$OVERLAY" 'CompressionBannerAd'
           nothas "$OVERLAY" 'Interstitial'
           nothas "$OVERLAY" 'AppOpenAd'
 
@@ -209,6 +674,11 @@ jobs:
           # 3 - back from the result must clear the finished job state.
           has "$RESULT" 'BackHandler'
           has "$SCREEN" 'onBack = { CompressionJobState.reset() }'
+          # The compression screen hosts the result screen but must not itself
+          # show a full-screen ad; preloading one for later is the only
+          # interstitial call allowed here.
+          nothas "$SCREEN" 'InterstitialAds.showNow'
+          nothas "$SCREEN" 'InterstitialAds.showPendingIfAny'
 
           # 4 - the native ad keeps its reserved slot and its one-time binding,
           # and the page can scroll far enough to expose the whole creative.
@@ -274,18 +744,21 @@ jobs:
           test "$SHARE_LINE" -lt "$GALLERY_LINE"
           test "$GALLERY_LINE" -lt "$OPEN_LINE"
           test "$OPEN_LINE" -lt "$AD_LINE"
-          test "$AD_LINE" -lt "$ANOTHER_LINE"
+          # v0.9.7 inverted the last pair. The native creative used to sit
+          # between the finished job and the way to start the next one, so
+          # continuing the core task meant scrolling past an advertisement. The
+          # ad keeps its labelled section with real content after it - it is
+          # simply no longer standing in the user's path.
+          test "$ANOTHER_LINE" -lt "$AD_LINE"
 
-          # Q3 - the anchored home banner keeps a divider and a dead buffer
-          # between the creative and the system navigation area.
+          # Q3 - if the reusable banner is used on another surface, it keeps a
+          # dead buffer from the system navigation area.
           has "$BANNER" 'SystemEdgeBuffer'
           has "$BANNER" 'navigationBarsPadding()'
-          has "$HOME"   'HairLine()'
 
           # Q4 - the v0.8.4 processing transition must not have been touched.
           test "$(grep -c 'ProcessingOverlay(' "$SCREEN")" -eq 1
           has "$OVERLAY" 'trackOnly = !progressKnown'
-          has "$OVERLAY" 'CompressionBannerAd('
 
           # ==================== v0.8.8 guards (QA v0.8.7) ====================
 
@@ -340,10 +813,21 @@ jobs:
           has "$STATE"    'ENCODER_UNSUPPORTED'
           has "$SCREEN"   'AlertDialog('
           has "$SCREEN"   'FailureDialog('
-          # The v0.8.7 shape - a failure card appended inside the scrolling
-          # column, with its detail line hidden behind BuildConfig.DEBUG - must
-          # not come back.
-          nothas "$SCREEN" 'failure.debugMessage.takeIf'
+          # v0.8.7 hid the detail behind BuildConfig.DEBUG inside a failure
+          # CARD appended to the scrolling column, and v0.8.8 replaced the card
+          # with a dialog and made the detail unconditional so QA could report
+          # more than "it does nothing".
+          #
+          # v0.9.7 split the difference rather than reversing either: the dialog
+          # stays, the detail is debuggable-only (a production user was shown
+          # "NoCompressionSavingsException: ..."), and every build records it for
+          # the hidden diagnostics screen so a closed-test tester keeps the exact
+          # string. The card shape must still not come back.
+          nothas "$SCREEN" 'FailureCard('
+          has "$SCREEN" 'failure.debugMessage.takeIf { BuildConfig.DEBUG }'
+          has app/src/main/java/com/vidsize/compressor/media/LastFailure.kt 'object LastFailure'
+          has app/src/main/java/com/vidsize/compressor/media/CompressionService.kt 'LastFailure.record('
+          has app/src/main/java/com/vidsize/compressor/ui/screens/AdDiagnosticsSheet.kt 'LastFailure.detail'
           # and the reason a disabled button is disabled must be next to it.
           has "$SCREEN" 'hint = when {'
           has "$SCREEN" 'R.string.cta_blocked_no_savings'
@@ -354,10 +838,23 @@ jobs:
           has "$ADIDS"  'BuildConfig.ENABLE_ADS'
           has "$ADIDS"  'GOOGLE_SAMPLE_PUBLISHER'
           has "$ADIDS"  'isGoogleSample'
-          has "$NATIVE" 'AdSlots.enabled'
-          has "$BANNER" 'AdSlots.enabled'
-          has "$RESULT" 'AdSlots.enabled'
-          has "$HOME"   'AdSlots.enabled'
+          # v0.9.0: these four asserted the literal `AdSlots.enabled`. The
+          # invariant being protected was "no slot renders without the
+          # build-level switch", and it still holds - `requestable` and
+          # `bannerVisible` are both defined as `enabled && ...`, so they are
+          # strictly narrower. Pinning the weaker spelling would bypass the
+          # shared consent/configuration decision and let surfaces disagree.
+          has "$NATIVE" 'AdSlots.requestable'
+          has "$BANNER" 'AdSlots.requestable'
+          has "$RESULT" 'AdSlots.requestable'
+          # Home monetisation is explicit: a fixed adaptive banner exists, while
+          # the media-heavy native placement remains Result-only.
+          nothas "$HOME" 'NativeAdCard'
+          has "$HOME" 'HomeBannerAd'
+          has "$BANNER" 'getCurrentOrientationAnchoredAdaptiveBannerAdSize'
+          # ...and the definitions themselves still start from the build switch.
+          grep -Fq 'val enabled: Boolean get() = BuildConfig.ENABLE_ADS' "$SLOTS"
+          grep -Fq 'enabled && ConsentManager.adsAllowed' "$SLOTS"
           grep -Fq 'googleSamplePublisher' app/build.gradle.kts
           grep -Fq 'adsConfigured' app/build.gradle.kts
           grep -Fq 'verifyAdsOffWithoutRealIds' app/build.gradle.kts
@@ -365,7 +862,10 @@ jobs:
           # BUG-06 / BUG-07 - recent rows are a real route back to the file,
           # and rows whose file is gone leave storage instead of being counted
           # by the "Storage saved" total for ever.
-          has "$HOME"      'combinedClickable'
+          has "$HOME"      '.verticalScroll(rememberScrollState())'
+          nothas "$HOME"   'LazyColumn('
+          nothas "$HOME"   'combinedClickable'
+          has "$HOME"      'R.string.result_share'
           has "$HOME"      'onOpenEntry'
           has "$ROOT"      'onOpenEntry'
           has "$HISTMODEL" 'fun remove(id: Long)'
@@ -383,9 +883,17 @@ jobs:
           has "$RESULT" 'ARRIVAL_GUARD_MS'
           has "$RESULT" 'enabled = interactive'
 
-          # BUG-09 - the estimate factor is recalibrated and named, not a
-          # magic literal buried in an expression.
-          has "$PLANNER" 'ENCODER_VARIANCE = 1.22'
+          # BUG-09 - the estimate factor is a named constant, not a magic
+          # literal buried in an expression.
+          #
+          # This gate pinned the literal 1.22 from v0.8.8 to v0.9.10. That was a
+          # mistake of the same family as the bug it guarded: it froze a
+          # calibration that was only ever a guess at how far VBR would overshoot,
+          # and it would have blocked the v0.9.11 fix that removed the need for
+          # it. What BUG-09 actually asked for is that the factor be named and
+          # reviewable - so that is what is pinned here, and the v0.9.11 step
+          # below range-checks the value itself.
+          has "$PLANNER" 'ENCODER_VARIANCE ='
 
           # UX - the save location is stated in-app, and a disabled level says
           # why it is disabled.
@@ -405,8 +913,773 @@ jobs:
             done
           done
 
+      # Runs BEFORE the first Gradle invocation on purpose.
+      #
+      # v0.9.2 postmortem: two new strings carried a bare apostrophe. The XML
+      # was well-formed - an apostrophe is perfectly legal XML - so every
+      # structural check passed, and the failure only surfaced 46 seconds into
+      # aapt2 as "Invalid unicode escape sequence", naming a line but not the
+      # character. Well-formedness and resource validity are two different
+      # things, and only the second one is what the build actually needs.
+      #
+      # This closes that gap for every locale at once, in under a second,
+      # before any compiler is started.
+      # The gate that guards the gates.
+      #
+      # v0.9.3 postmortem: nineteen "this must NOT be in the source" checks were
+      # written as `! grep -q ...` under `set -euo pipefail`. None of them could
+      # ever fail a build - POSIX exempts a command whose status is inverted
+      # with `!` from `set -e`, so the line reported failure and the script
+      # carried on. Among the checks that were decoration: consent handling on
+      # the banner surfaces, the removed home banner, and the ad-pacing clock.
+      #
+      # Two of them turned out to be hiding nothing, and two more fired on
+      # comments the moment they became real. Both outcomes were invisible for
+      # as long as the checks were no-ops.
+      - name: v0.9.9 size targets, history integrity, layout budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/gate_helpers.sh
+          UI=app/src/main/java/com/vidsize/compressor/ui
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+          MODEL=app/src/main/java/com/vidsize/compressor/model
+          DATA=app/src/main/java/com/vidsize/compressor/data/history
+          COMPRESS=$UI/screens/CompressionScreen.kt
+
+          # --- P0-1: a replaced file takes its history row with it ------------
+          # The bug: deleteReplaced() removed the FILE and left the ROW. One
+          # missing call produced a row that opened nothing, a "Space saved"
+          # total inflated by every watermark removal, and two rows a user could
+          # not tell apart. Assert the repair, not just the method name.
+          grep -q 'fun removeByOutputUri' $DATA/HistoryModels.kt
+          grep -q 'override fun removeByOutputUri' $DATA/PrefsHistoryRepository.kt
+          grep -q 'removeByOutputUri(uri.toString())' $MEDIA/CompressionService.kt
+          # ...and that the call lives inside deleteReplaced, where the file goes.
+          awk '/private fun deleteReplaced/,/^    }/' $MEDIA/CompressionService.kt \
+            | grep -q 'removeByOutputUri'
+
+          # --- P0-2: the layout budget ---------------------------------------
+          # No rewarded card consumes permanent height on the compression
+          # screen. The two-way choice is modal and appears only after the CTA.
+          test ! -f $UI/components/WatermarkFreeCard.kt
+          CTA_LINE="$(grep -n '^            CompressionActionBar(' $COMPRESS \
+            | head -1 | cut -d: -f1)"
+          CHOICE_LINE="$(grep -n 'OutputChoiceDialog(' $COMPRESS \
+            | grep -v import | tail -1 | cut -d: -f1)"
+          test -n "$CTA_LINE" && test -n "$CHOICE_LINE"
+          test "$CHOICE_LINE" -gt "$CTA_LINE"
+          echo "ok: output choice is modal (line $CHOICE_LINE > CTA $CTA_LINE)"
+
+          # --- P1: the viability floor ---------------------------------------
+          # 0.92 meant a 9% saving counted as worth a minute of the user's time
+          # and a permanent quality loss.
+          grep -q 'VIABLE_RATIO = 0.85' $MEDIA/CompressionPlanner.kt
+          forbid 'VIABLE_RATIO = 0.92' $MEDIA/CompressionPlanner.kt
+
+          # The unit tests encode expectations that depend on this constant, and
+          # run 34910448683 died because it moved and they did not: a test still
+          # asserting "Balanced is viable here" met a Balanced that was now
+          # correctly refused. Nothing in the source gates caught it, because
+          # nothing in the source was wrong.
+          #
+          # The test suite now mirrors the number. This asserts the mirror
+          # matches, so the next person to move the floor is told which file to
+          # update instead of finding out from a red test six minutes later.
+          TEST=app/src/test/java/com/vidsize/compressor/media/CompressionPlannerTest.kt
+          PROD_RATIO="$(grep -o 'VIABLE_RATIO = [0-9.]*' $MEDIA/CompressionPlanner.kt \
+            | head -1 | awk '{print $3}')"
+          TEST_RATIO="$(grep -o 'VIABLE_RATIO_UNDER_TEST = [0-9.]*' $TEST \
+            | head -1 | awk '{print $3}')"
+          if [ "$PROD_RATIO" != "$TEST_RATIO" ]; then
+            echo "GATE FAILED: VIABLE_RATIO is $PROD_RATIO in the planner but" >&2
+            echo "$TEST_RATIO in CompressionPlannerTest. The unit tests will" >&2
+            echo "fail six minutes from now. Update both." >&2
+            exit 1
+          fi
+          echo "ok: viability floor mirrored in the tests ($PROD_RATIO)"
+
+          # --- P1: recent rows must be distinguishable ------------------------
+          # entry.displayName ellipsised before the seconds that made it unique.
+          grep -q 'Fmt.dateTime(entry.completedAtMillis)' $UI/screens/HomeScreen.kt
+          grep -q 'fun dateTime(' $UI/format/Formatters.kt
+
+          # --- P1: the tested artifact must be the shipped artifact -----------
+          # closedTest had R8 off while release had it on, so the minified path
+          # had never run on a device.
+          awk '/create\("closedTest"\)/,/^        }/' app/build.gradle.kts \
+            > /tmp/closedtest.txt
+          grep -q 'isMinifyEnabled = true' /tmp/closedtest.txt
+          grep -q 'isShrinkResources = true' /tmp/closedtest.txt
+          grep -q 'androidx.media3.transformer' app/proguard-rules.pro
+          grep -q 'com.vidsize.compressor.model' app/proguard-rules.pro
+
+          # --- P2: dead code and a comment describing a removed feature -------
+          forbid 'ten minutes with no ads' $COMPRESS
+
+          # --- size targets ---------------------------------------------------
+          test -f $MODEL/SizeTarget.kt
+          grep -q 'enum class TargetVerdict' $MODEL/CompressionPlan.kt
+          grep -q 'fun planForTarget' $MEDIA/CompressionPlanner.kt
+          grep -q 'fun correctedForTarget' $MEDIA/CompressionPlanner.kt
+          grep -q 'MAX_TARGET_PASSES = 3' $MEDIA/CompressionEngine.kt
+
+          # Every correction pass must start from the ORIGINAL, never from the
+          # previous output: chaining target-correction passes compounds
+          # generation loss.
+          # The loop body must pass `input`, and must never feed a temp back in.
+          awk '/for \(pass in 1..passCeiling\)/,/^            }/' \
+            $MEDIA/CompressionEngine.kt > /tmp/passloop.txt
+          grep -q 'input = input,' /tmp/passloop.txt
+          forbid 'input = candidate' /tmp/passloop.txt
+          forbid 'input = best' /tmp/passloop.txt
+
+          # A missed target must be reported, not quietly rounded into success.
+          grep -q 'targetMet' $MODEL/CompressionResult.kt
+          grep -q 'result.targetMet' $UI/screens/ResultScreen.kt
+          grep -q 'result_target_missed' $UI/screens/ResultScreen.kt
+
+          # The two refusals point in opposite directions and must stay separate.
+          grep -q 'cta_blocked_target_not_smaller' $COMPRESS
+          grep -q 'cta_blocked_target_too_small' $COMPRESS
+
+          # A second encode must say why the ring restarted.
+          grep -q 'processing_pass' $UI/screens/ProcessingOverlay.kt
+          grep -q 'fun markPass' $MEDIA/CompressionJobState.kt
+
+          # Every new string in every locale. A missing translation is a blank
+          # control on somebody's phone.
+          for f in app/src/main/res/values*/strings.xml; do
+            for key in mode_level mode_size section_size size_custom \
+                       size_plan_title size_plan_body size_too_small_body \
+                       processing_pass result_target_missed \
+                       cta_blocked_target_missing; do
+              grep -q "name=\"$key\"" "$f" || {
+                echo "GATE FAILED: $key missing from $f" >&2; exit 1; }
+            done
+          done
+
+          echo 'ok: v0.9.9 gates'
+
+      - name: v0.9.10 output verification (QA NEW-01)
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/gate_helpers.sh
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+          TEST=app/src/test/java/com/vidsize/compressor/media
+
+          # --- the check exists and is a pure, testable predicate ------------
+          test -f $MEDIA/OutputVerification.kt
+          grep -q 'fun aspectMatches' $MEDIA/OutputVerification.kt
+          grep -q 'class OutputGeometryException' $MEDIA/OutputVerification.kt
+          grep -q 'class OutputUnreadableException' $MEDIA/OutputVerification.kt
+          grep -q 'fun probeGeometry' $MEDIA/VideoProbe.kt
+
+          # --- it is actually WIRED INTO the encode path ---------------------
+          # The whole defect was that nothing looked at the file after it was
+          # written. A verification function nobody calls would reproduce that
+          # exactly, so the call site is asserted, not just the definition.
+          grep -q 'verifyGeometry(output, sourceWidth, sourceHeight)' \
+            $MEDIA/CompressionEngine.kt
+          grep -q 'private fun verifyGeometry' $MEDIA/CompressionEngine.kt
+
+          # ...and it runs INSIDE the attempt ladder, before the export is
+          # returned. Outside the try, a mismatch would abort the whole job
+          # instead of falling through to the next encoder configuration - which
+          # is the difference between "your device gets a 720p file" and "your
+          # device gets an error".
+          awk '/while \(attemptIndex < attempts\.size\)/,/^        throw EncoderUnsupportedException/' \
+            $MEDIA/CompressionEngine.kt > /tmp/ladder.txt
+          grep -q 'verifyGeometry' /tmp/ladder.txt
+          grep -q 'val export = runExport(' /tmp/ladder.txt
+
+          # The source dimensions must be the DISPLAYED ones. Comparing coded
+          # dimensions would have called the NEW-01 output correct.
+          grep -q 'sourceWidth = info.width' $MEDIA/CompressionEngine.kt
+          grep -q 'sourceHeight = info.height' $MEDIA/CompressionEngine.kt
+
+          # --- the tolerance must stay a tolerance ---------------------------
+          # Widened far enough, this gate passes while the defect returns. The
+          # NEW-01 drift was 0.76; anything at or above 0.10 would admit a
+          # visibly reshaped picture.
+          TOL="$(grep -o 'ASPECT_TOLERANCE = [0-9.]*' $MEDIA/OutputVerification.kt \
+            | head -1 | awk '{print $3}')"
+          awk -v t="$TOL" 'BEGIN { exit !(t > 0 && t < 0.10) }' || {
+            echo "GATE FAILED: ASPECT_TOLERANCE is $TOL - outside (0, 0.10)." >&2
+            echo "At 0.10 a 10% reshaped frame would pass verification." >&2
+            exit 1; }
+
+          # --- the QA case must be pinned by a test --------------------------
+          test -f $TEST/OutputVerificationTest.kt
+          grep -q '1080, 1920, 1080, 1088' $TEST/OutputVerificationTest.kt
+
+          # --- size targets: the last correction may drop the frame ----------
+          grep -q 'allowResolutionDrop' $MEDIA/CompressionPlanner.kt
+          grep -q 'allowResolutionDrop = targetBytes != null && pass == passCeiling - 1' \
+            $MEDIA/CompressionEngine.kt
+          grep -q 'theLastCorrectionDropsTheFrame' $TEST/CompressionPlannerTest.kt
+          grep -q 'theLastCorrectionKeepsTheFrame' $TEST/CompressionPlannerTest.kt
+
+          echo 'ok: v0.9.10 output verification gates'
+
+      - name: v0.9.11 the encoder must honour the bitrate it is given
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/gate_helpers.sh
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+          TEST=app/src/test/java/com/vidsize/compressor/media
+
+          # --- WHY THIS STEP EXISTS ------------------------------------------
+          # Field report, v0.9.10: "Dengeli" was refused on three of four real
+          # videos, and the one that ran took 18.8 MB down to 17.6 MB - 7% -
+          # while the screen had estimated 11.7 MB.
+          #
+          # One cause, two symptoms. The encoder ran in the platform's default
+          # VBR mode, which treats the requested bitrate as an average and
+          # overshot it by 1.87x and 2.15x on measured clips. The planner
+          # compensated by inflating its estimate 22% (ENCODER_VARIANCE = 1.22),
+          # and VIABLE_RATIO then judged that inflated number, so ordinary
+          # sources were declared "no real saving".
+          #
+          # Each of the three gates below pins one half of the fix. Any of them
+          # silently reverting brings the field failure straight back.
+
+          # 1. CBR is requested, on the encoder settings the export actually uses.
+          grep -q 'setBitrateMode(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)' \
+            $MEDIA/CompressionEngine.kt
+          grep -q 'import android.media.MediaCodecInfo' $MEDIA/CompressionEngine.kt
+
+          # 2. ENCODER_VARIANCE stays in the band CBR justifies. Above 1.10 it is
+          #    modelling an overshoot instead of a residual, which is the v0.9.9
+          #    mistake: a prediction so pessimistic the viability floor refuses
+          #    videos the app could compress well. Below 1.0 it would predict
+          #    output smaller than the bitrate asked for, which is not physical.
+          VAR="$(grep -o 'ENCODER_VARIANCE = [0-9.]*' $MEDIA/CompressionPlanner.kt \
+            | head -1 | awk '{print $3}')"
+          awk -v v="$VAR" 'BEGIN { exit !(v >= 1.0 && v <= 1.10) }' || {
+            echo "GATE FAILED: ENCODER_VARIANCE is $VAR - outside [1.0, 1.10]." >&2
+            echo "With CBR in force the residual is a few percent. A larger" >&2
+            echo "number means the estimate is padding for an overshoot that" >&2
+            echo "should have been fixed at the encoder, and VIABLE_RATIO will" >&2
+            echo "refuse presets on ordinary videos again (v0.9.10 field bug)." >&2
+            exit 1; }
+          echo "ok: ENCODER_VARIANCE = $VAR"
+
+          # 3. Presets get the measure-and-correct pass too, not just size
+          #    targets. Before v0.9.11 a preset job encoded once and shipped
+          #    whatever came out; that is how a 11.7 MB estimate became a 17.6 MB
+          #    file with no second attempt.
+          grep -q 'MAX_PRESET_PASSES' $MEDIA/CompressionEngine.kt
+          grep -q 'PRESET_OVERSHOOT_TOLERANCE' $MEDIA/CompressionEngine.kt
+          grep -q 'val passCeiling = if (targetBytes != null) MAX_TARGET_PASSES else MAX_PRESET_PASSES' \
+            $MEDIA/CompressionEngine.kt
+          grep -q 'val goalBytes = targetBytes ?: plan.estimatedOutputBytes' \
+            $MEDIA/CompressionEngine.kt
+          grep -q 'if (bestBytes <= acceptableBytes) break' $MEDIA/CompressionEngine.kt
+
+          # ...and a preset correction must never shrink the frame. The user
+          # picked a quality level; silently dropping 1080p to 480p to hit an
+          # internal estimate is not a correction, it is a different job.
+          grep -q 'allowResolutionDrop = targetBytes != null && pass == passCeiling - 1' \
+            $MEDIA/CompressionEngine.kt
+
+          # 4. The test that this fix flips back must be flipped back. v0.9.9
+          #    edited it to assert Balanced was NOT viable for the 480x854/18 MB
+          #    clip - faithful to the code, wrong about the world, and the exact
+          #    behaviour the field report complained about.
+          BLOCK="$(awk '/fun aPresetThatCannotSaveAnythingIsMarkedUnviable/,/^    }/' \
+            $TEST/CompressionPlannerTest.kt)"
+          echo "$BLOCK" | grep -q 'assertTrue("Balanced saves enough here' || {
+            echo "GATE FAILED: aPresetThatCannotSaveAnythingIsMarkedUnviable no" >&2
+            echo "longer expects Balanced to be viable. With CBR and" >&2
+            echo "ENCODER_VARIANCE = $VAR it saves ~26% on that clip, well over" >&2
+            echo "the 15% floor. Asserting otherwise re-pins the field bug." >&2
+            exit 1; }
+          echo 'ok: v0.9.11 encoder honesty gates'
+
+      - name: v0.9.12 decoder recovery and the in-app player
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/gate_helpers.sh
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+          MODEL=app/src/main/java/com/vidsize/compressor/model
+          UI=app/src/main/java/com/vidsize/compressor/ui
+          TEST=app/src/test/java/com/vidsize/compressor/media
+
+          # ================================================================
+          # PART 1 - 2K/4K must get a real decoder attempt
+          # ================================================================
+          # Codec tables are incomplete on real vendor builds, so the query is
+          # diagnostic only. The checker ties together the absence of a hard
+          # block, Media3's decoder fallback, one software-first recovery and
+          # the <=1080p initial output policy in both preset and target modes.
+          python3 tools/check_decoder_policy.py
+
+          # A real failure after both decoder routes still reaches the user as
+          # its own reason. It must never be mislabeled as an encoder refusal.
+          grep -q 'class SourceUndecodableException' $MEDIA/CompressionFailures.kt
+          grep -q 'SOURCE_UNDECODABLE' $MEDIA/CompressionJobState.kt
+          grep -q 'SourceUndecodableException ->' $MEDIA/CompressionService.kt
+          grep -q 'FailureReason.SOURCE_UNDECODABLE -> R.string.error_source_undecodable' \
+            $UI/screens/CompressionScreen.kt
+
+          # The classifier must not mistake an encoder failure for a decoder
+          #     one. A false positive kills a ladder that was about to succeed.
+          test -f $MEDIA/DecoderFailure.kt
+          forbid 'type=VideoEncoder' $MEDIA/DecoderFailure.kt
+          test -f $TEST/DecoderFailureTest.kt
+          grep -q 'anEncoderFailureDoesNotStopTheLadder' $TEST/DecoderFailureTest.kt
+          grep -q 'theFieldFailureIsRecognisedAsDecoderSide' $TEST/DecoderFailureTest.kt
+
+          # ================================================================
+          # PART 2 - the player belongs to this app
+          # ================================================================
+          # "Open video" and a Recent row both built an implicit ACTION_VIEW and
+          # handed the file to whatever player the device had. This is the gate
+          # that stops that coming back.
+
+          test -f app/src/main/java/com/vidsize/compressor/PlayerActivity.kt
+          test -f $UI/screens/VideoPlayerScreen.kt
+          grep -q 'PlayerActivity.intent(context' $UI/VidsizeRoot.kt
+          grep -q 'PlayerActivity.intent(context' $UI/screens/ResultScreen.kt
+
+          # The regression itself: neither playback path may build ACTION_VIEW
+          # on the video file again. ResultScreen still uses ACTION_VIEW for
+          # "Show in Gallery", which points at the COLLECTION - a different
+          # intent for a different purpose - so the forbidden pattern is the
+          # file-typed one that means "some app, please play this".
+          forbid 'setDataAndType(uri, "video/mp4")' $UI/screens/ResultScreen.kt
+          forbid 'setDataAndType(Uri.parse(entry.outputUri)' $UI/VidsizeRoot.kt
+
+          # Declared, and not reachable from outside this app.
+          grep -q 'android:name=".PlayerActivity"' app/src/main/AndroidManifest.xml
+          PLAYER_BLOCK="$(awk '/android:name=".PlayerActivity"/,/\/>/' \
+            app/src/main/AndroidManifest.xml)"
+          echo "$PLAYER_BLOCK" | grep -q 'android:exported="false"' || {
+            echo "GATE FAILED: PlayerActivity must not be exported. An exported" >&2
+            echo "player can be handed arbitrary URIs by any app on the device." >&2
+            exit 1; }
+
+          # A released ExoPlayer that outlives its composition holds a codec and
+          # a surface. On a phone with few codec instances that is a hang.
+          grep -q 'exoPlayer.release()' $UI/screens/VideoPlayerScreen.kt
+          grep -q 'onDispose' $UI/screens/VideoPlayerScreen.kt
+
+          # Media3 modules share internal classes and are only supported in
+          # matching versions. A mismatched pair compiles and then throws
+          # NoSuchMethodError on a user's device.
+          TRANSFORMER_V="$(grep -o 'media3-transformer:[0-9.]*' app/build.gradle.kts \
+            | head -1 | cut -d: -f2)"
+          for m in media3-exoplayer media3-ui media3-common media3-effect; do
+            V="$(grep -o "$m:[0-9.]*" app/build.gradle.kts | head -1 | cut -d: -f2)"
+            if [ "$V" != "$TRANSFORMER_V" ]; then
+              echo "GATE FAILED: $m is $V but media3-transformer is $TRANSFORMER_V." >&2
+              echo "Media3 modules must be version-matched." >&2
+              exit 1
+            fi
+          done
+          echo "ok: media3 modules all at $TRANSFORMER_V"
+
+          # Localisation: the fallback notice, final decoder failure and failed
+          # playback must be readable in every language the app ships.
+          for f in app/src/main/res/values*/strings.xml; do
+            for key in error_source_undecodable notice_decoder_fallback_title \
+                       notice_decoder_fallback_body player_error; do
+              grep -q "name=\"$key\"" "$f" || {
+                echo "GATE FAILED: $key missing from $f" >&2; exit 1; }
+            done
+          done
+
+          echo 'ok: v0.9.12 decoder and player gates'
+
+      - name: v0.9.15 interstitial wiring and foreground-service safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/gate_helpers.sh
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+          UI=app/src/main/java/com/vidsize/compressor/ui
+
+          # --- the foreground service start may not crash the app ------------
+          # Android 12+ throws ForegroundServiceStartNotAllowedException when the
+          # app is not in a valid state to start one: a call arriving as the user
+          # taps COMPRESS, a race with backgrounding, an OEM that restricts this
+          # further. Uncaught it crashed the app and fed Android vitals, where a
+          # bad enough rate halts a staged rollout. cancel() next to it had been
+          # guarded since v0.8.x; start() never was.
+          grep -q 'runCatching { ContextCompat.startForegroundService(context, intent) }' \
+            $MEDIA/CompressionService.kt
+          grep -q 'FailureReason.SERVICE_START_FAILED' $MEDIA/CompressionService.kt
+          grep -q 'SERVICE_START_FAILED' $MEDIA/CompressionJobState.kt
+          # ...and the user is told, rather than left on a screen that did nothing.
+          grep -q 'FailureReason.SERVICE_START_FAILED ->' $UI/screens/CompressionScreen.kt
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="error_service_start"' "$f" || {
+              echo "GATE FAILED: error_service_start missing from $f" >&2; exit 1; }
+          done
+
+          # --- the dialog banner keeps its distance from Cancel ---------------
+          # A modal with the creative in the path of the thumb reaching for
+          # Cancel is how an accidental ad click - AdMob invalid traffic -
+          # happens. HomeBannerAd already isolates itself; the dialog did not.
+          grep -q 'private val AdTapBuffer' $UI/components/OutputChoiceDialog.kt
+          BUF="$(grep -o 'AdTapBuffer = [0-9]*' $UI/components/OutputChoiceDialog.kt \
+            | head -1 | awk '{print $3}')"
+          if [ "${BUF:-0}" -lt 16 ]; then
+            echo "GATE FAILED: AdTapBuffer is ${BUF}dp; under 16dp the banner sits" >&2
+            echo "in the path of the thumb reaching for Cancel." >&2
+            exit 1
+          fi
+          echo "ok: dialog ad buffer ${BUF}dp"
+
+          # --- the privacy policy must describe the mechanism in the code -----
+          # The policy claimed the Android photo picker; the app uses SAF
+          # (OpenDocument). Play cross-checks the Data Safety form against this
+          # page, and the two shipped copies must stay byte-identical.
+          for f in docs/privacy.html app/src/main/assets/legal/privacy.html; do
+            grep -q 'Storage Access Framework' "$f" || {
+              echo "GATE FAILED: $f does not name the Storage Access Framework." >&2
+              echo "The app selects video with ActivityResultContracts.OpenDocument." >&2
+              exit 1; }
+            grep -q 'Notifications' "$f" || {
+              echo "GATE FAILED: $f omits the notification permission." >&2; exit 1; }
+          done
+          cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html || {
+            echo "GATE FAILED: the two privacy policy copies have drifted." >&2; exit 1; }
+          forbid 'system photo picker' docs/privacy.html
+
+          echo 'ok: v0.9.15 gates'
+
+      - name: SAF video selection and 4K decoder diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_video_selection.py
+
+          DECODER=app/src/main/java/com/vidsize/compressor/media/DecoderSupport.kt
+          DIAGNOSTICS=app/src/main/java/com/vidsize/compressor/ui/screens/AdDiagnosticsSheet.kt
+
+          # The field device cannot expose useful logcat. The hidden screen
+          # therefore carries the complete ALL_CODECS measurement itself.
+          grep -q 'fun fourKDiagnostics' "$DECODER"
+          grep -q 'MediaCodecList(MediaCodecList.ALL_CODECS)' "$DECODER"
+          grep -q 'isSizeSupported(UHD_WIDTH, UHD_HEIGHT)' "$DECODER"
+          grep -q 'areSizeAndRateSupported' "$DECODER"
+          grep -q 'info.isHardwareAccelerated' "$DECODER"
+          grep -q 'DecoderSupport.fourKDiagnostics()' "$DIAGNOSTICS"
+          grep -q '4K decoder measurement' "$DIAGNOSTICS"
+
+          echo 'ok: SAF selection and on-device 4K decoder measurement'
+
+      - name: SAF selection gate must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=app/src/main/java/com/vidsize/compressor/ui/VidsizeRoot.kt
+          BACKUP="$(mktemp)"
+          cp "$ROOT" "$BACKUP"
+          restore_picker() { cp "$BACKUP" "$ROOT"; rm -f "$BACKUP"; }
+          trap restore_picker EXIT
+
+          # GetContent can browse files but cannot persist the URI permission.
+          # Accepting it would recreate a delayed foreground-service failure.
+          sed -i 's/ActivityResultContracts.OpenDocument()/ActivityResultContracts.GetContent()/' "$ROOT"
+          if python3 tools/check_video_selection.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: SAF gate accepted GetContent.' >&2
+            exit 1
+          fi
+
+          cp "$BACKUP" "$ROOT"
+          python3 tools/check_video_selection.py
+          echo 'ok: SAF selection gate rejects a non-persistable picker'
+
+      - name: Exact output and reward-choice experience
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_export_experience.py
+
+      - name: Export experience gate must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT=app/src/main/java/com/vidsize/compressor/ui/screens/ResultScreen.kt
+          COMPRESS=app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          RESULT_BACKUP="$(mktemp)"
+          COMPRESS_BACKUP="$(mktemp)"
+          cp "$RESULT" "$RESULT_BACKUP"
+          cp "$COMPRESS" "$COMPRESS_BACKUP"
+          restore_export_experience() {
+            cp "$RESULT_BACKUP" "$RESULT"
+            cp "$COMPRESS_BACKUP" "$COMPRESS"
+            rm -f "$RESULT_BACKUP" "$COMPRESS_BACKUP"
+          }
+          trap restore_export_experience EXIT
+
+          # Dropping the output URI recreates the generic-gallery bug.
+          sed -i 's/showInGallery(context, result.outputUri)/showInGallery(context, Uri.EMPTY)/' "$RESULT"
+          if python3 tools/check_export_experience.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: export gate accepted a discarded output URI.' >&2
+            exit 1
+          fi
+
+          cp "$RESULT_BACKUP" "$RESULT"
+
+          # Starting immediately bypasses the two-way disclosure and reward.
+          sed -i 's/showOutputChoice = true/startCompression(watermark = true)/' "$COMPRESS"
+          if python3 tools/check_export_experience.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: export gate accepted a bypassed chooser.' >&2
+            exit 1
+          fi
+
+          cp "$COMPRESS_BACKUP" "$COMPRESS"
+          python3 tools/check_export_experience.py
+          echo 'ok: export gate rejects lost URIs and bypassed choices'
+
+      - name: Decoder recovery gate must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENGINE=app/src/main/java/com/vidsize/compressor/media/CompressionEngine.kt
+          SCREEN=app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          ENGINE_BACKUP="$(mktemp)"
+          SCREEN_BACKUP="$(mktemp)"
+          cp "$ENGINE" "$ENGINE_BACKUP"
+          cp "$SCREEN" "$SCREEN_BACKUP"
+          restore_decoder_policy() {
+            cp "$ENGINE_BACKUP" "$ENGINE"
+            cp "$SCREEN_BACKUP" "$SCREEN"
+            rm -f "$ENGINE_BACKUP" "$SCREEN_BACKUP"
+          }
+          trap restore_decoder_policy EXIT
+
+          # Without this flag Transformer tries only the primary decoder. The
+          # exact field failure can then return even though a slower codec is
+          # installed and usable.
+          sed -i 's/setEnableDecoderFallback(true)/setEnableDecoderFallback(false)/' "$ENGINE"
+          if python3 tools/check_decoder_policy.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: decoder gate accepted disabled fallback.' >&2
+            exit 1
+          fi
+
+          cp "$ENGINE_BACKUP" "$ENGINE"
+
+          # The codec-table result must remain advisory. Reattaching it to the
+          # screen-wide block recreates the 2K/4K refusal before any codec runs.
+          sed -i 's/val blockedEntirely = probeFailed$/val blockedEntirely = probeFailed || decoderFallbackExpected/' "$SCREEN"
+          if python3 tools/check_decoder_policy.py >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: decoder gate accepted a UI hard block.' >&2
+            exit 1
+          fi
+
+          cp "$SCREEN_BACKUP" "$SCREEN"
+          python3 tools/check_decoder_policy.py
+          echo 'ok: decoder gate rejects disabled fallback and UI hard blocks'
+
+      - name: Gate helpers must actually fail
+        shell: bash
+        run: |
+          set -euo pipefail
+          . tools/gate_helpers.sh
+
+          # No negated check may come back. This is the actual regression guard:
+          # the bug was a shell idiom, so the guard is against the idiom.
+          if grep -nE '^[[:space:]]*![[:space:]]+(grep|test|git|cmp)' .github/workflows/*.yml; then
+            echo 'A negated check was reintroduced. `set -e` does not fail on `!`.' >&2
+            echo 'Use forbid / forbid_span from tools/gate_helpers.sh instead.' >&2
+            exit 1
+          fi
+
+          probe="$(mktemp)"
+          trap 'rm -f "$probe"' EXIT
+
+          # A mention in a comment is documentation, and must pass.
+          printf '// ConsentManager was removed here\nval x = 1\n' > "$probe"
+          forbid 'ConsentManager' "$probe"
+          echo 'ok: comment mention accepted'
+
+          # The same symbol in code must fail, and must say so.
+          printf 'val y = ConsentManager.adsAllowed\n' >> "$probe"
+          if ( forbid 'ConsentManager' "$probe" ) >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: forbid accepted a real match' >&2
+            exit 1
+          fi
+          echo 'ok: code match rejected'
+
+          # Same for the multi-line form.
+          printf 'fun handleTimeout() {\n    cancelJob()\n}\n' > "$probe"
+          if ( forbid_span 'fun handleTimeout\(\)[\s\S]{0,200}?cancelJob\(\)' "$probe" ) >/dev/null 2>&1; then
+            echo 'NEGATIVE TEST FAILED: forbid_span accepted a real match' >&2
+            exit 1
+          fi
+          echo 'ok: forbid_span rejects a real span'
+
+      # Resolution, not parsing.
+      #
+      # v0.9.4 postmortem: a new file used VidsizeTheme in its @Preview and did
+      # not import it. Every check in this workflow passed - the file parses,
+      # the XML is valid, every grep matched - because none of them resolved a
+      # single symbol. The failure surfaced only inside kotlinc, 46 seconds into
+      # the Gradle step, as two errors that were really one:
+      #
+      #   Unresolved reference 'VidsizeTheme'
+      #   @Composable invocations can only happen from a @Composable function
+      #
+      # The second was the first one's shadow. This step finds the first one in
+      # under a second, before any compiler starts.
+      # Structure, before resolution and long before the compiler.
+      #
+      # v0.9.7 postmortem: a regex that removed a block from ProcessingOverlay
+      # matched across a brace boundary and deleted the closing `) {` of a
+      # `VidsizeCard(` call. The file no longer parsed, but every check in this
+      # repository passed - the reference checker only asks whether symbols are
+      # imported - so the first thing to notice was kotlinc, forty seconds into
+      # the Gradle step, reporting "Mixing named and positional arguments",
+      # "Unresolved reference 'Spacer'" and "Expecting ')'" from three different
+      # places, none of them the edit.
+      #
+      # Bracket balance is not parsing, but every mechanical edit that cuts
+      # across a block boundary unbalances something, and this names the line
+      # where the edit went wrong rather than where the compiler gave up.
+      - name: Kotlin structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_kotlin_syntax.py
+
+      - name: Structure check must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          O=app/src/main/java/com/vidsize/compressor/ui/screens/ProcessingOverlay.kt
+          probe() {
+            rm -rf app_backup
+            cp -r app app_backup
+            python3 - "$1" "$2" "$3" <<'PY'
+          import sys
+          p, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
+          s = open(p, encoding='utf-8').read()
+          assert old in s, f"probe text not found in {p}"
+          open(p, 'w', encoding='utf-8').write(s.replace(old, new, 1))
+          PY
+            if python3 tools/check_kotlin_syntax.py >/dev/null 2>&1; then
+              rm -rf app; mv app_backup app
+              echo "NEGATIVE TEST FAILED: checker accepted $4" >&2
+              exit 1
+            fi
+            rm -rf app; mv app_backup app
+            echo "ok: rejected -> $4"
+          }
+
+          # The exact v0.9.7 damage: a removed closing `) {`.
+          probe "$O" '            contentPadding = 0.dp,
+                  ) {' '            contentPadding = 0.dp,' \
+                "a deleted closing paren-brace"
+          # And an extra closer, the other direction.
+          probe "$O" '        VidsizeCard(' '        VidsizeCard()' \
+                "an extra closing paren"
+
+          python3 tools/check_kotlin_syntax.py
+          echo "ok: restored tree still passes"
+
+      - name: Kotlin reference resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_kotlin_references.py
+
+      - name: Reference check must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe() {
+            rm -rf app_backup
+            cp -r app app_backup
+            sed -i "$2" "$1"
+            if python3 tools/check_kotlin_references.py >/dev/null 2>&1; then
+              rm -rf app; mv app_backup app
+              echo "NEGATIVE TEST FAILED: checker accepted $3" >&2
+              exit 1
+            fi
+            rm -rf app; mv app_backup app
+            echo "ok: rejected -> $3"
+          }
+
+          W=app/src/main/java/com/vidsize/compressor/ui/components/OutputChoiceDialog.kt
+          R=app/src/main/java/com/vidsize/compressor/ui/screens/ResultScreen.kt
+
+          # Compose-only imports that have previously escaped the source gate.
+          probe "$W" '/import com.vidsize.compressor.ui.theme.VidsizeTheme/d' \
+                "a deleted VidsizeTheme import"
+          probe "$R" '/import com.vidsize.compressor.PlayerActivity/d' \
+                "a deleted PlayerActivity import"
+          # A symbol that exists nowhere at all.
+          probe "$R" 's/val context = LocalContext.current/val context = NoSuchHelper.get()/' \
+                "a reference to a class that does not exist"
+
+          # v0.9.5: the lower-case half of the same class. `scope.launch { }`
+          # shipped without its import and the capitalised check could not see
+          # it - the name is lower-case AND it sits after a dot, so it read as a
+          # member call. Both halves are probed here.
+          C=app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt
+          probe "$C" '/^import kotlinx.coroutines.launch$/d' \
+                "a deleted kotlinx.coroutines.launch import"
+          probe "$C" '/^import androidx.compose.runtime.rememberCoroutineScope$/d' \
+                "a deleted rememberCoroutineScope import"
+          probe "$R" '/^import androidx.compose.runtime.setValue$/d' \
+                "a deleted setValue import behind a var delegate"
+
+          python3 tools/check_kotlin_references.py
+          echo "ok: restored tree still passes"
+
+      - name: Android string resource escaping
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/check_string_resources.py
+
+      - name: String resource check must FAIL when broken (negative test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A gate nobody has ever seen fail is a gate nobody knows works.
+          tmp="$(mktemp -d)"
+          cp -r app "$tmp/app"
+          trap 'rm -rf "$tmp"' EXIT
+
+          probe() {
+            rm -rf app_backup
+            cp -r app app_backup
+            python3 - "$1" <<'PY'
+          import sys
+          p = 'app/src/main/res/values/strings.xml'
+          s = open(p, encoding='utf-8').read()
+          i = s.index('<string ')
+          s = s[:i] + sys.argv[1] + '\n    ' + s[i:]
+          open(p, 'w', encoding='utf-8').write(s)
+          PY
+            if python3 tools/check_string_resources.py >/dev/null 2>&1; then
+              rm -rf app; mv app_backup app
+              echo "NEGATIVE TEST FAILED: checker accepted $1" >&2
+              exit 1
+            fi
+            rm -rf app; mv app_backup app
+            echo "ok: rejected -> $1"
+          }
+
+          probe '<string name="neg_apos">it'"'"'s broken</string>'
+          probe '<string name="neg_escape">bad \q escape</string>'
+          probe '<string name="neg_uni">bad \u12 escape</string>'
+          probe '<string name="neg_at">@drawable/x</string>'
+
+          python3 tools/check_string_resources.py
+          echo "ok: restored tree still passes"
+
       - name: Debug QA gate
-        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+        run: gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleAdsQa --stacktrace
 
       - name: Closed-test runtime-safe AAB gate
         run: gradle :app:lintClosedTest :app:bundleClosedTest --stacktrace
@@ -458,25 +1731,113 @@ jobs:
             -PVIDSIZE_HOME_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/3333333333 \
             -PVIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/4444444444 \
             -PVIDSIZE_NATIVE_RESULT_AD_UNIT_ID=ca-app-pub-1111111111111111/5555555555 \
+            -PVIDSIZE_APP_OPEN_AD_UNIT_ID=ca-app-pub-1111111111111111/6666666666 \
+            -PVIDSIZE_INTERSTITIAL_AD_UNIT_ID=ca-app-pub-1111111111111111/7777777777 \
+            -PVIDSIZE_REWARDED_AD_UNIT_ID=ca-app-pub-1111111111111111/8888888888
+
+      - name: New gates must FAIL when broken (negative tests)
+        shell: bash
+        run: |
+          set -uo pipefail
+          # A gate nobody has watched fail is not a gate. Each case below breaks
+          # the invariant on purpose, asserts the check fires, and restores the
+          # working tree before the next one.
+          ADS=app/src/main/java/com/vidsize/compressor/ads
+          TR=app/src/main/res/values-tr/strings.xml
+
+          restore() { git checkout -- "$@"; }
+
+          # --- 1. A reintroduced silent quota must be caught -----------------
+          cp $ADS/AdPacing.kt /tmp/AdPacing.kt.bak
+          printf '\nprivate const val COOLDOWN_MILLIS = 21600000L\n' >> $ADS/AdPacing.kt
+          if ! grep -rq 'COOLDOWN_MILLIS' $ADS; then
+            echo 'negative test 1 did not break anything' >&2; exit 1
+          fi
+          caught=0
+          for banned in INSTALL_GRACE MIN_SESSIONS_BEFORE COOLDOWN_MILLIS DAILY_LIMIT; do
+            grep -rq "$banned" $ADS && caught=1
+          done
+          cp /tmp/AdPacing.kt.bak $ADS/AdPacing.kt
+          test "$caught" -eq 1 || { echo 'GATE 2 DID NOT FIRE' >&2; exit 1; }
+          echo 'ok: silent-quota gate fires'
+
+          # --- 2. A translation that states the duration must be caught ------
+          cp $TR /tmp/strings-tr.bak
+          sed -i 's|<string name="ad_free_title">[^<]*</string>|<string name="ad_free_title">15 dakika reklamsiz</string>|' $TR
+          if grep -q 'name="ad_free_title">[^<]*%1[$]d' $TR; then
+            cp /tmp/strings-tr.bak $TR
+            echo 'GATE 3 DID NOT FIRE: hardcoded duration went unnoticed' >&2; exit 1
+          fi
+          cp /tmp/strings-tr.bak $TR
+          echo 'ok: reward-duration parity gate fires'
+
+          # --- 3. An incomplete identifier set must not package a release ----
+          # This is the trap the two new slots create: supply the legacy five and
+          # every format - banners included - switches off with nothing said.
+          set +e
+          gradle :app:bundleRelease --stacktrace \
+            -PVIDSIZE_ADMOB_APP_ID=ca-app-pub-1111111111111111~2222222222 \
+            -PVIDSIZE_HOME_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/3333333333 \
+            -PVIDSIZE_COMPRESSION_BANNER_AD_UNIT_ID=ca-app-pub-1111111111111111/4444444444 \
+            -PVIDSIZE_NATIVE_RESULT_AD_UNIT_ID=ca-app-pub-1111111111111111/5555555555 \
             -PVIDSIZE_APP_OPEN_AD_UNIT_ID=ca-app-pub-1111111111111111/6666666666
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'A release packaged with the interstitial and rewarded units missing.' >&2
+            exit 1
+          fi
+          echo "ok: incomplete identifier set rejected (exit ${status})"
+
+          # --- 4. Generated Python bytecode must never dirty the tree --------
+          # The failure this guards against already happened once (run
+          # 34890837352): every gate passed, and the job still died because
+          # `from check_kotlin_references import strip_noise` had written
+          # tools/__pycache__/check_kotlin_references.cpython-312.pyc, which the
+          # clean-tree assertion below correctly refused.
+          #
+          # Asserting that .gitignore CONTAINS a pattern would be a string test,
+          # not a gate. So this creates the exact artifact and asks git.
+          mkdir -p tools/__pycache__
+          echo 'generated' > tools/__pycache__/negative_test.cpython-312.pyc
+          if [ -n "$(git status --porcelain tools/__pycache__)" ]; then
+            echo 'GATE FAILED: generated Python bytecode is not ignored.' >&2
+            echo 'Add __pycache__/ and *.py[cod] to .gitignore.' >&2
+            git status --porcelain tools/__pycache__ >&2
+            rm -rf tools/__pycache__
+            exit 1
+          fi
+          rm -rf tools/__pycache__
+          echo 'ok: generated bytecode cannot dirty the tree'
+
+          # The tree must be exactly as checked out before the audit ZIP is cut.
+          test -z "$(git status --porcelain)" || {
+            echo 'negative tests left the working tree dirty:' >&2
+            git status --porcelain >&2
+            echo >&2
+            echo 'Every entry above is a file that would travel inside the' >&2
+            echo 'source audit ZIP without being in the commit it claims to' >&2
+            echo 'attest to. Fix the step that created it - do not relax this.' >&2
+            exit 1
+          }
 
       - name: Create exact source audit ZIP
         shell: bash
-        run: git archive --format=zip --output=vidsize-v089-source-audit.zip HEAD
+        run: git archive --format=zip --output=vidsize-source-audit.zip HEAD
 
       - name: Upload QA APK
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-qa-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: vidsize-qa-apk
+          path: app/build/outputs/apk/*/*.apk
           if-no-files-found: warn
 
       - name: Upload UNSIGNED closed-test audit AAB
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-closed-test-UNSIGNED-audit-aab
+          name: vidsize-closed-test-UNSIGNED-audit-aab
           path: app/build/outputs/bundle/closedTest/*.aab
           if-no-files-found: warn
 
@@ -484,15 +1845,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-source-audit
-          path: vidsize-v089-source-audit.zip
+          name: vidsize-source-audit
+          path: vidsize-source-audit.zip
           if-no-files-found: warn
 
       - name: Upload lint reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vidsize-v089-lint
+          name: vidsize-lint
           path: |
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-closedTest.html

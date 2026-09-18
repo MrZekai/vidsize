@@ -15,4 +15,18 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
+
+    <!--
+      Player theme.
+
+      The rest of Vidsize is light-only, and Theme.Vidsize above pins a white
+      window background so no screen flashes dark before Compose draws. The
+      player is the one window where the opposite is true: it draws a black
+      surface, so a white window background would flash white for a frame every
+      time a video is opened.
+    -->
+    <style name="Theme.Vidsize.Player" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

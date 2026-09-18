@@ -20,6 +20,34 @@ object Fmt {
     private const val MB = KB * 1000.0
     private const val GB = MB * 1000.0
 
+    /**
+     * Short date and time for a recent-items row, in the device's own format.
+     *
+     * ## Why a recent row is titled by its clock and not by its file name
+     *
+     * The row used to show the output file name, ellipsised to one line. Every
+     * name this app generates has the shape
+     * `Vidsize_2026-09-14_19-24-11.mp4`, and the ellipsis landed on the hyphen
+     * before the hour - so every job from the same day rendered as the identical
+     * string `Vidsize_2026-09-14_19-…`. Two rows could differ in nothing a user
+     * could see, including their sizes.
+     *
+     * The name carried no information anyway: the user never chose it, the app
+     * generated it, and the only thing in it that varies is the timestamp. So
+     * the row now shows the timestamp itself, in the format the device already
+     * uses everywhere else.
+     */
+    fun dateTime(millis: Long): String {
+        if (millis <= 0L) return ""
+        val locale = Locale.getDefault()
+        val date = java.util.Date(millis)
+        val day = java.text.SimpleDateFormat("d MMM", locale).format(date)
+        val time = java.text.DateFormat
+            .getTimeInstance(java.text.DateFormat.SHORT, locale)
+            .format(date)
+        return "$day $time"
+    }
+
     /** Human file size. Picks the unit so the number always has 3-4 digits. */
     fun bytes(value: Long): String {
         if (value <= 0L) return "0 MB"
