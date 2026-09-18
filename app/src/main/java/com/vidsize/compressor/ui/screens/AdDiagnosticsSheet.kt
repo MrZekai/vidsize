@@ -34,6 +34,7 @@ import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.VidsizeApplication
 import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.AdGate
+import com.vidsize.compressor.ads.DailyImpressionPolicy
 import com.vidsize.compressor.ads.AdPacing
 import com.vidsize.compressor.media.DecoderSupport
 import com.vidsize.compressor.media.LastFailure
@@ -271,6 +272,15 @@ private fun VerdictPanel(verdict: AdGate.Verdict) {
             "Blocked: a finished result has not been seen yet.",
             "Applies to the app-open ad only, so the user is never met by an ad " +
                 "in front of the video they just waited for.",
+            VidsizeColor.Indigo,
+        )
+        AdGate.Verdict.DAILY_CAP_REACHED -> Triple(
+            "Blocked: the daily allowance is spent.",
+            "This user has already seen ${DailyImpressionPolicy.MAX_PER_DAY} " +
+                "interstitials today, which is the AdMob panel's cap and now the " +
+                "app's own. Nothing is broken and no creative is being requested. " +
+                "It clears at midnight in this device's time zone - not after a " +
+                "pacing countdown.",
             VidsizeColor.Indigo,
         )
         AdGate.Verdict.PACING -> Triple(

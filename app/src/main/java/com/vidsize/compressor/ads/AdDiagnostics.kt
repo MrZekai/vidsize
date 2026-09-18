@@ -106,7 +106,14 @@ object AdDiagnostics {
             rewardedLoaded = RewardedAds.isLoaded,
             appOpenLoaded = appOpen.hasLoadedAd,
             appOpenSuppressed = appOpen.isSuppressingNextForeground,
-            verdict = AdGate.evaluate(loaded = InterstitialAds.isLoaded),
+            // The same call the interstitial itself makes, daily count
+            // included - otherwise the screen would report ALLOWED while the
+            // format was refusing, which is the exact confusion this screen
+            // exists to prevent.
+            verdict = AdGate.evaluate(
+                loaded = InterstitialAds.isLoaded,
+                shownToday = InterstitialAds.shownToday(),
+            ),
         )
     }
 
