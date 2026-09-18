@@ -55,7 +55,7 @@ jobs:
           gradle-version: '9.5.0'
 
       - name: Build adsQa APK
-        run: ./gradlew :app:assembleAdsQa --stacktrace
+        run: gradle :app:assembleAdsQa --stacktrace
 
       - name: Verify APK
         shell: bash
