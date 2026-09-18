@@ -35,7 +35,7 @@ code{background:#EEEFF6;padding:2px 6px;border-radius:4px;font-size:.9em}
   </div>
 
   <h1>Privacy Policy</h1>
-  <p class="date">Effective 23 August 2026 · Last updated 24 August 2026</p>
+  <p class="date">Effective 23 August 2026 · Last updated 18 September 2026</p>
 
   <div class="card">
     <p><strong>The short version.</strong> Vidsize compresses your videos entirely on your phone. Your videos are never uploaded to us or to anyone else. We do not have an account system, we do not have a server that stores your files, and we cannot see your content. The only third party involved is Google AdMob, which serves the ads that keep the app free.</p>
@@ -45,10 +45,10 @@ code{background:#EEEFF6;padding:2px 6px;border-radius:4px;font-size:.9em}
   <p>Vidsize ("the app") is an Android application published on Google Play. In this policy, "we" and "us" refer to the developer of Vidsize. Contact details are at the end of this page.</p>
 
   <h2>2. Your videos</h2>
-  <p>When you select a video, Vidsize reads it from your device using the Android system photo picker, compresses it locally using your phone's own hardware, and saves the result to your device's gallery folder <code>Movies/Vidsize</code>.</p>
+  <p>When you select a video, Vidsize reads it from your device using the Android system file picker (the Storage Access Framework), compresses it locally using your phone's own hardware, and saves the result to your device's gallery folder <code>Movies/Vidsize</code>.</p>
   <ul>
     <li>Your videos are <strong>never</strong> transmitted to us or to any third party.</li>
-    <li>We do not request broad access to your photo or video library. The system picker gives the app access only to the single file you choose.</li>
+    <li>We do not request broad access to your photo, video or file storage. The system picker gives the app access only to the single file you choose, and to nothing else.</li>
     <li>Compression works with no network connection at all.</li>
   </ul>
 
@@ -81,7 +81,8 @@ code{background:#EEEFF6;padding:2px 6px;border-radius:4px;font-size:.9em}
   <h2>6. Permissions the app requests</h2>
   <ul>
     <li><strong>Internet and network state</strong> — used only to load ads and to show the consent form. Video compression itself requires no connection.</li>
-    <li><strong>No photo or video library permission</strong> — Vidsize uses the Android photo picker instead, so it never asks for access to your whole library.</li>
+    <li><strong>Notifications</strong> — asked for the first time you start a compression, so the app can show its progress while the job runs in the background. Declining it does not stop compression; you simply do not see the progress notification.</li>
+    <li><strong>No photo, video or storage permission</strong> — Vidsize uses the Android system file picker (Storage Access Framework) instead, so it never asks for access to your library or your files as a whole. It receives only the one video you pick.</li>
   </ul>
 
   <h2>7. Children</h2>

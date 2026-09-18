@@ -50,6 +50,25 @@ object CompressionJobState {
          * possible ending for the longest possible job.
          */
         TIMEOUT,
+        /**
+         * Android refused to let the foreground service start.
+         *
+         * From Android 12, `startForegroundService` throws
+         * `ForegroundServiceStartNotAllowedException` when the app is not in a
+         * state the platform considers valid for starting one - a call arriving
+         * as the user taps COMPRESS, a race with backgrounding, or one of the
+         * aggressive OEM restrictions (Xiaomi, Realme) that tighten the rule
+         * further.
+         *
+         * Up to v0.9.14 that exception was uncaught and crashed the app. A crash
+         * here is expensive twice over: the user loses the job AND it lands in
+         * Android vitals, where a bad enough rate halts a staged rollout. It is
+         * also genuinely recoverable - bringing the app to the foreground and
+         * tapping again normally works - so it deserves a message, not a
+         * stack trace.
+         */
+        SERVICE_START_FAILED,
+
         GENERIC,
     }
 

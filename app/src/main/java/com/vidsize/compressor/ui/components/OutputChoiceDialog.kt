@@ -49,6 +49,16 @@ enum class RewardedChoiceMessage {
  * before the ad starts, then creates one clean export after the SDK confirms
  * the reward. Nothing is encoded twice.
  */
+/**
+ * Clear space kept between the dialog's banner and the next tappable thing.
+ *
+ * Larger than [HomeBannerAd]'s 12dp on purpose: Home separates the banner from
+ * the system navigation bar, where a mis-tap costs the user a stray gesture.
+ * Here it separates the banner from Cancel, where a mis-tap costs an accidental
+ * ad click on the screen with the highest reach-past-the-ad pressure in the app.
+ */
+private val AdTapBuffer = 20.dp
+
 @Composable
 fun OutputChoiceDialog(
     waitingForAd: Boolean,
@@ -140,6 +150,17 @@ fun OutputChoiceDialog(
                         )
                         Spacer(Modifier.height(Space.xs))
                         CompressionBannerAd(modifier = Modifier.fillMaxWidth())
+                        // Dead space between the creative and whatever comes
+                        // next - which, when there is no message, is Cancel.
+                        //
+                        // 8dp was not enough. This is a modal: the user is
+                        // reaching for Cancel with the banner directly in the
+                        // path, and a thumb that lands 6dp high registers as an
+                        // ad click. That is the user's most annoying moment and
+                        // AdMob's definition of invalid traffic at the same time.
+                        // HomeBannerAd already isolates itself for this reason;
+                        // the dialog simply never got the same treatment.
+                        Spacer(Modifier.height(AdTapBuffer))
                     }
 
                     val messageText = when (message) {

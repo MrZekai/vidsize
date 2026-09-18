@@ -13,6 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import com.vidsize.compressor.ads.ConsentManager
+import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.RewardedAds
 import com.vidsize.compressor.ui.VidsizeRoot
 import com.vidsize.compressor.ui.theme.VidsizeTheme
@@ -98,6 +99,19 @@ class MainActivity : ComponentActivity() {
         // SDK initialization have already completed. With ENABLE_ADS false the
         // manager short-circuits, so the ads SDK is never touched.
         (application as VidsizeApplication).appOpenAdManager.preload()
+
+        // The deferred interstitial is consumed here, and only here.
+        //
+        // onResume is the one callback that fires for every way back into the
+        // app: the share sheet closing, an external gallery being dismissed, the
+        // task switcher. markPending() armed the flag on the way out and
+        // suppressed the app-open ad for that same return, so this is the ad the
+        // return was reserved for.
+        //
+        // Placed after the app-open preload and before RewardedAds so a return
+        // that owes an interstitial is not competing with an app-open request in
+        // the same frame; AdGate's shared interval settles any tie.
+        InterstitialAds.showPendingIfAny(this)
 
         // Rewarded is preloaded here rather than on the Home composable alone so
         // the output chooser is ready on the first frame of a warm return, not one

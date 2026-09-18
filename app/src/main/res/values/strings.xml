@@ -176,4 +176,5 @@
     <string name="notice_decoder_fallback_body">The device\'s codec table does not report support for %1$d × %2$d. Vidsize will still try fallback and software decoders, and will start the output at 1080p or lower. This may take longer.</string>
     <string name="error_source_undecodable">Vidsize tried the device\'s available fallback and software decoders, but none could open this source. The source codec — not the requested output resolution — stopped the job on this device.</string>
     <string name="player_error">This video could not be played. The file may be damaged or still being written.</string>
+    <string name="error_service_start">Android wouldn\'t let the compression start just now. This usually happens when the app was moving to the background. Bring Vidsize to the front and tap Compress again.</string>
 </resources>

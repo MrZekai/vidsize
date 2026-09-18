@@ -163,11 +163,19 @@ Defer instead of cancel:
 | Cancelled / failed job | Clean. No call site exists. |
 | History row on Home | Clean. Maintenance flow. |
 
-`Context.deferInterstitialOnReturn(outputToken)` is one function rather than two calls on
-purpose. It both marks the pending ad and suppresses the app-open ad. Doing only
-the first lets the app-open ad land on re-entry, which then blocks the
-interstitial for 180 seconds and reads to a tester as "the deferred ad is
-broken".
+`InterstitialAds.markPending(context, outputToken)` does both jobs rather than
+leaving two calls at the call site. It marks the pending ad **and** calls
+`suppressAppOpenOnReturn()` itself. Doing only the first lets the app-open ad
+land on re-entry, which then blocks the interstitial for 180 seconds and reads
+to a tester as "the deferred ad is broken".
+
+> Documented as `Context.deferInterstitialOnReturn(outputToken)` until v0.9.15.
+> No such function ever existed. The audit that found it also found that
+> `InterstitialAds` had no callers at all: every exit called
+> `suppressAppOpenOnReturn()` on its own, so the app-open ad was deleted on
+> every return and nothing was ever shown in its place. The format earned zero
+> and cost the app-open impressions as well. Wiring it up is what v0.9.15 does;
+> this note stays so the next reader knows the API name changed for a reason.
 
 The pending flag is process-level and **not** persisted. If the process died
 while the user was away, the ad dies with it — resurrecting it on the next cold

@@ -8,6 +8,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.AdPacing
+import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.AppOpenAdManager
 import com.vidsize.compressor.ads.AppOpenAdPolicy
 import com.vidsize.compressor.growth.ReviewPrompt
@@ -38,6 +39,15 @@ class VidsizeApplication : Application(), Application.ActivityLifecycleCallbacks
         AdPacing.init(this)
         AdDiagnostics.init(this)
         ReviewPrompt.init(this)
+
+        // Interstitial counters live in the same preference file as the shared
+        // full-screen clock above.
+        //
+        // This call was missing up to v0.9.14, and its absence was silent in the
+        // worst way: `prefs` stayed null, so `shownToday()` always answered 0 and
+        // `recordShownToday()` wrote nothing. The daily cap could never bind and
+        // the diagnostics screen reported a counter that was structurally frozen.
+        InterstitialAds.init(this)
 
         // Scratch files from a process that was killed mid-job. Safe here and
         // only here: at process start no job of ours can be running, so every

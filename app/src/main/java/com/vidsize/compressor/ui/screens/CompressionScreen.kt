@@ -74,6 +74,7 @@ import com.vidsize.compressor.ui.components.HairLine
 import androidx.compose.runtime.rememberCoroutineScope
 import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.AdSlots
+import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.RewardedAds
 import com.vidsize.compressor.ads.WatermarkOffer
 import com.vidsize.compressor.ads.findHostActivity
@@ -292,6 +293,18 @@ fun CompressionScreen(
 
     LaunchedEffect(videoUri) {
         RewardedAds.preload(context)
+
+        // The interstitial the result screen will need, requested now.
+        //
+        // Vidsize has minutes of runway here that most apps do not: the earliest
+        // a result screen can exist is one full encode away, so a request made
+        // when this screen opens is in hand long before anything wants to show
+        // it. There is deliberately no load timeout - nobody is waiting on it,
+        // and a slow fill costs nothing.
+        //
+        // preload() no-ops when a creative is already held or a request is in
+        // flight, and discards outright when consent has not been given.
+        InterstitialAds.preload(context)
     }
 
     fun startCompression(watermark: Boolean = true) {
@@ -755,6 +768,8 @@ private fun FailureDialog(
         CompressionJobState.FailureReason.ENCODER_UNSUPPORTED -> R.string.error_encoder_unsupported
         CompressionJobState.FailureReason.SOURCE_UNDECODABLE -> R.string.error_source_undecodable
         CompressionJobState.FailureReason.TIMEOUT -> R.string.error_timeout_body
+        CompressionJobState.FailureReason.SERVICE_START_FAILED ->
+            R.string.error_service_start
         CompressionJobState.FailureReason.GENERIC -> R.string.error_generic
     }
 

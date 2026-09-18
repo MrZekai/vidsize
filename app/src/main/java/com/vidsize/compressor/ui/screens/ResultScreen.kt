@@ -43,8 +43,8 @@ import com.vidsize.compressor.PlayerActivity
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.AdDiagnostics
+import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.findHostActivity
-import com.vidsize.compressor.ads.suppressAppOpenOnReturn
 import com.vidsize.compressor.growth.ReviewPrompt
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
@@ -156,6 +156,31 @@ fun ResultScreen(
     // A touch already in flight is absorbed instead of being routed to an
     // action the user never chose.
     var interactive by remember(result.outputUri) { mutableStateOf(false) }
+
+    /**
+     * Leaving the result screen without leaving the app.
+     *
+     * The three ways out of this screen - the back arrow, system back, and
+     * "Compress another video" - all mean the same thing: this job is finished
+     * and the user is moving on. That is the natural break an interstitial is
+     * supposed to occupy, and until v0.9.14 none of them showed one.
+     *
+     * The output URI is the token, which is what keeps this honest: InterstitialAds
+     * refuses a second display for an output it has already shown one for, so a
+     * finished compression can produce at most ONE interstitial no matter which
+     * exit the user takes, or how many times they come back to it. AdGate still
+     * applies the shared interval and the daily cap on top of that.
+     *
+     * The navigation runs whether or not an ad appeared. A creative that failed
+     * to load, a consent refusal or a paced-out verdict must never leave the user
+     * stuck on a screen they asked to leave.
+     */
+    fun leaveScreen(navigate: () -> Unit) {
+        context.findHostActivity()?.let { activity ->
+            InterstitialAds.showNow(activity, result.outputUri.toString())
+        }
+        navigate()
+    }
     LaunchedEffect(result.outputUri) {
         delay(ARRIVAL_GUARD_MS)
         interactive = true
@@ -176,7 +201,7 @@ fun ResultScreen(
     // every one of them would meet an ad in response to a system gesture.
     //
     // Same destination, different callback, deliberately.
-    BackHandler { onSystemBack() }
+    BackHandler { leaveScreen(onSystemBack) }
 
     // Ask for a Play review at the peak of the experience, not on the way out.
     //
@@ -211,7 +236,7 @@ fun ResultScreen(
             IconAction(
                 icon = R.drawable.ic_arrow_back,
                 contentDescription = stringResource(R.string.back),
-                onClick = onBack,
+                onClick = { leaveScreen(onBack) },
             )
         }
 
@@ -345,7 +370,7 @@ fun ResultScreen(
                 // simply no longer standing in the user's path.
                 TertiaryButton(
                     text = stringResource(R.string.result_another),
-                    onClick = onCompressAnother,
+                    onClick = { leaveScreen(onCompressAnother) },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = interactive,
                 )
@@ -466,7 +491,12 @@ private fun shareVideo(context: Context, uri: Uri) {
             Intent.createChooser(intent, context.getString(R.string.share_chooser)),
         )
     }.isSuccess
-    if (launched) context.suppressAppOpenOnReturn()
+    // markPending suppresses the app-open ad itself, so this replaces the bare
+    // suppressAppOpenOnReturn() that used to stand here. Up to v0.9.14 that bare
+    // call was the whole story: the return was stripped of its app-open ad and
+    // nothing was ever shown in its place, so every share made the app quieter
+    // in both directions and earned nothing.
+    if (launched) InterstitialAds.markPending(context, uri.toString())
 }
 
 /**
@@ -487,8 +517,12 @@ private fun showInGallery(context: Context, uri: Uri) {
     }
     val launched = runCatching { context.startActivity(externalView) }.isSuccess
     if (launched) {
-        context.suppressAppOpenOnReturn()
+        // Left the app: owe the user's return an interstitial instead of simply
+        // deleting the app-open ad that would have greeted it.
+        InterstitialAds.markPending(context, uri.toString())
     } else {
+        // Stayed inside Vidsize. No external return to defer anything to, and
+        // PlayerActivity is not a transition worth interrupting.
         context.startActivity(PlayerActivity.intent(context, uri))
     }
 }

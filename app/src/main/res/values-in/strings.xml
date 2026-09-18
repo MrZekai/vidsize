@@ -145,4 +145,5 @@
     <string name="notice_decoder_fallback_body">Tabel codec perangkat tidak melaporkan dukungan untuk %1$d × %2$d. Vidsize tetap akan mencoba dekoder cadangan dan perangkat lunak, lalu memulai keluaran pada 1080p atau lebih rendah. Proses mungkin lebih lama.</string>
     <string name="error_source_undecodable">Vidsize telah mencoba dekoder cadangan dan perangkat lunak yang tersedia, tetapi tidak ada yang dapat membuka sumber ini. Codec sumber pada perangkat ini — bukan resolusi keluaran yang diminta — menghentikan proses.</string>
     <string name="player_error">Video ini tidak dapat diputar. Berkasnya mungkin rusak atau masih sedang ditulis.</string>
+    <string name="error_service_start">Android tidak mengizinkan kompresi dimulai saat ini. Ini biasanya terjadi ketika aplikasi sedang berpindah ke latar belakang. Buka Vidsize di depan lalu ketuk Kompres lagi.</string>
 </resources>

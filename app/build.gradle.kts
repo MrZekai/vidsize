@@ -154,8 +154,8 @@ android {
         applicationId = "com.vidsize.compressor"
         minSdk = 29
         targetSdk = 36
-        versionCode = 32
-        versionName = "0.9.14"
+        versionCode = 33
+        versionName = "0.9.15"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

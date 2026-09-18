@@ -428,7 +428,23 @@ class CompressionService : Service() {
             // target job that silently did nothing would be far worse than an
             // unused extra.
             if (targetBytes != null) intent.putExtra(EXTRA_TARGET_BYTES, targetBytes)
-            ContextCompat.startForegroundService(context, intent)
+
+            // Guarded, like cancel() below it already was.
+            //
+            // startForegroundService throws ForegroundServiceStartNotAllowedException
+            // on Android 12+ when the app is not in a valid state to start one.
+            // That is not a hypothetical: a call arriving as the user taps
+            // COMPRESS, a race with the app being backgrounded, or an OEM that
+            // restricts this further will all produce it. Uncaught it crashed the
+            // app and fed Android vitals; caught, the screen shows a failure the
+            // user can act on and the job can simply be started again.
+            runCatching { ContextCompat.startForegroundService(context, intent) }
+                .onFailure {
+                    CompressionJobState.markFailed(
+                        reason = CompressionJobState.FailureReason.SERVICE_START_FAILED,
+                        debugMessage = it.diagnostic(),
+                    )
+                }
         }
 
         /** Cancels the running compression, if any. */

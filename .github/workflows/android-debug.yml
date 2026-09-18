@@ -82,8 +82,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 32' app/build.gradle.kts
-          grep -q 'versionName = "0.9.14"' app/build.gradle.kts
+          grep -q 'versionCode = 33' app/build.gradle.kts
+          grep -q 'versionName = "0.9.15"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -186,17 +186,31 @@ jobs:
           forbid 'ConsentManager' $UI/components/HomeBannerAd.kt
           forbid 'ConsentManager' $UI/screens/ProcessingOverlay.kt
 
-          # --- Gate 5: interstitial delivery is disabled --------------------
-          # Keep the implementation available for a later product decision,
-          # but no lifecycle or user-flow entry point may initialise, preload,
-          # queue or show it in this build.
-          forbid 'InterstitialAds' $COMPRESS
-          forbid 'InterstitialAds' $RESULT
-          forbid 'InterstitialAds' $MAIN
-          forbid 'InterstitialAds' app/src/main/java/com/vidsize/compressor/VidsizeApplication.kt
-          forbid 'InterstitialAds' $ADS/ExternalNavigation.kt
+          # --- Gate 5: interstitial delivery is WIRED -----------------------
+          # This gate used to forbid every InterstitialAds reference, on the
+          # grounds that the format was "disabled pending a product decision".
+          # docs/DECISIONS.md names the revenue model as "Home/Result native +
+          # Interstitial + Rewarded", so no such decision was ever taken - and a
+          # prohibition cannot tell a format switched off on purpose from one
+          # that quietly lost its call sites, which is what had happened. The
+          # audit found zero callers outside AdDiagnostics: the format earned
+          # nothing, while the exits it was meant to pair with went on deleting
+          # the app-open ad, giving up impressions in both directions.
+          #
+          # Each link of the chain is now required, so it cannot come apart
+          # again without the build saying so.
+          grep -q 'InterstitialAds.init(' \
+            app/src/main/java/com/vidsize/compressor/VidsizeApplication.kt
+          grep -q 'InterstitialAds.preload(' $COMPRESS
+          grep -q 'InterstitialAds.markPending(' $RESULT
+          grep -q 'InterstitialAds.showNow(' $RESULT
+          grep -q 'InterstitialAds.showPendingIfAny(' $MAIN
+          # markPending() suppresses the app-open ad itself. A bare suppression
+          # left on the result screen is the regression above, exactly.
+          forbid 'suppressAppOpenOnReturn' $RESULT
           forbid 'deferInterstitialOnReturn' $RESULT
-          grep -q 'suppressAppOpenOnReturn' $RESULT
+          # One interstitial per finished job, enforced by the output token.
+          grep -q 'InterstitialAds.showNow(activity, result.outputUri.toString())' $RESULT
 
           # The rewarded offer appears on exactly one surface: an explicit
           # two-way chooser after COMPRESS and before any encode. The result
@@ -217,11 +231,19 @@ jobs:
           grep -q 'Verdict.RESULT_WAITING' $ADS/AdGate.kt
           grep -q 'requireIdleJob = true' $ADS/AppOpenAdPolicy.kt
 
-          # --- Gate 7b: a system back gesture never answers with an ad -------
-          # Both the in-app arrow and the platform gesture stay ad-free.
-          grep -q 'BackHandler { onSystemBack() }' $RESULT
+          # --- Gate 7b: leaving the result screen is one path ----------------
+          # The arrow, the system gesture and "Compress another" all leave a
+          # finished job, so they all go through leaveScreen() and none of them
+          # may navigate without it. The token inside leaveScreen is what caps
+          # this at one interstitial per completed compression, whichever exit
+          # the user picks.
+          grep -q 'BackHandler { leaveScreen(onSystemBack) }' $RESULT
+          grep -q 'fun leaveScreen(' $RESULT
           grep -Pzoq 'onSystemBack = \{ CompressionJobState\.reset\(\) \},' $COMPRESS
-          forbid_span 'onSystemBack[\s\S]{0,120}?InterstitialAds' $COMPRESS
+          # The compression screen itself stays free of full-screen ads: nothing
+          # interrupts an active job or fronts a result the user has not seen.
+          forbid 'InterstitialAds.showNow' $COMPRESS
+          forbid 'InterstitialAds.showPendingIfAny' $COMPRESS
 
           # --- Gate 7c: growth surfaces are wired --------------------------
           # The share-sheet path has existed since v0.8.x and was never
@@ -237,8 +259,12 @@ jobs:
           grep -q 'review-ktx' app/build.gradle.kts
 
           # --- Gate 8: the share-sheet entry point still suppresses app open ---
+          # The suppression stays. What was dropped here is the companion
+          # `forbid 'showPendingIfAny' $MAIN`, added when the interstitial was
+          # believed to be switched off: onResume is the one callback that fires
+          # for every way back into the app, so it is the only correct place to
+          # consume a deferred interstitial. Gate 5 above now requires it.
           grep -q 'appOpenAdManager.suppressNextForeground()' $MAIN
-          forbid 'showPendingIfAny' $MAIN
 
           # --- Gate 9: diagnostics exists and is reachable from a signed build ---
           grep -q 'DIAGNOSTICS_TAP_COUNT = 7' $SETTINGS
@@ -648,7 +674,11 @@ jobs:
           # 3 - back from the result must clear the finished job state.
           has "$RESULT" 'BackHandler'
           has "$SCREEN" 'onBack = { CompressionJobState.reset() }'
-          nothas "$SCREEN" 'InterstitialAds'
+          # The compression screen hosts the result screen but must not itself
+          # show a full-screen ad; preloading one for later is the only
+          # interstitial call allowed here.
+          nothas "$SCREEN" 'InterstitialAds.showNow'
+          nothas "$SCREEN" 'InterstitialAds.showPendingIfAny'
 
           # 4 - the native ad keeps its reserved slot and its one-time binding,
           # and the page can scroll far enough to expose the whole creative.
@@ -1264,6 +1294,64 @@ jobs:
           done
 
           echo 'ok: v0.9.12 decoder and player gates'
+
+      - name: v0.9.15 interstitial wiring and foreground-service safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          source tools/gate_helpers.sh
+          MEDIA=app/src/main/java/com/vidsize/compressor/media
+          UI=app/src/main/java/com/vidsize/compressor/ui
+
+          # --- the foreground service start may not crash the app ------------
+          # Android 12+ throws ForegroundServiceStartNotAllowedException when the
+          # app is not in a valid state to start one: a call arriving as the user
+          # taps COMPRESS, a race with backgrounding, an OEM that restricts this
+          # further. Uncaught it crashed the app and fed Android vitals, where a
+          # bad enough rate halts a staged rollout. cancel() next to it had been
+          # guarded since v0.8.x; start() never was.
+          grep -q 'runCatching { ContextCompat.startForegroundService(context, intent) }' \
+            $MEDIA/CompressionService.kt
+          grep -q 'FailureReason.SERVICE_START_FAILED' $MEDIA/CompressionService.kt
+          grep -q 'SERVICE_START_FAILED' $MEDIA/CompressionJobState.kt
+          # ...and the user is told, rather than left on a screen that did nothing.
+          grep -q 'FailureReason.SERVICE_START_FAILED ->' $UI/screens/CompressionScreen.kt
+          for f in app/src/main/res/values*/strings.xml; do
+            grep -q 'name="error_service_start"' "$f" || {
+              echo "GATE FAILED: error_service_start missing from $f" >&2; exit 1; }
+          done
+
+          # --- the dialog banner keeps its distance from Cancel ---------------
+          # A modal with the creative in the path of the thumb reaching for
+          # Cancel is how an accidental ad click - AdMob invalid traffic -
+          # happens. HomeBannerAd already isolates itself; the dialog did not.
+          grep -q 'private val AdTapBuffer' $UI/components/OutputChoiceDialog.kt
+          BUF="$(grep -o 'AdTapBuffer = [0-9]*' $UI/components/OutputChoiceDialog.kt \
+            | head -1 | awk '{print $3}')"
+          if [ "${BUF:-0}" -lt 16 ]; then
+            echo "GATE FAILED: AdTapBuffer is ${BUF}dp; under 16dp the banner sits" >&2
+            echo "in the path of the thumb reaching for Cancel." >&2
+            exit 1
+          fi
+          echo "ok: dialog ad buffer ${BUF}dp"
+
+          # --- the privacy policy must describe the mechanism in the code -----
+          # The policy claimed the Android photo picker; the app uses SAF
+          # (OpenDocument). Play cross-checks the Data Safety form against this
+          # page, and the two shipped copies must stay byte-identical.
+          for f in docs/privacy.html app/src/main/assets/legal/privacy.html; do
+            grep -q 'Storage Access Framework' "$f" || {
+              echo "GATE FAILED: $f does not name the Storage Access Framework." >&2
+              echo "The app selects video with ActivityResultContracts.OpenDocument." >&2
+              exit 1; }
+            grep -q 'Notifications' "$f" || {
+              echo "GATE FAILED: $f omits the notification permission." >&2; exit 1; }
+          done
+          cmp -s docs/privacy.html app/src/main/assets/legal/privacy.html || {
+            echo "GATE FAILED: the two privacy policy copies have drifted." >&2; exit 1; }
+          forbid 'system photo picker' docs/privacy.html
+
+          echo 'ok: v0.9.15 gates'
 
       - name: SAF video selection and 4K decoder diagnostics
         shell: bash

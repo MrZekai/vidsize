@@ -28,6 +28,37 @@ def reject(text: str, needle: str, label: str) -> None:
         errors.append(f"forbidden {label}: {needle}")
 
 
+def code_only(text: str) -> str:
+    """Kotlin source with comment lines removed.
+
+    A prohibition that fires on a comment is a false positive, and the one that
+    prompted this helper was exactly that: a comment explaining WHY a call had
+    been replaced tripped the gate forbidding the call. The shell gates already
+    learned this lesson (tools/gate_helpers.sh has the same helper); the Python
+    checkers had not.
+
+    Line-oriented on purpose. A full Kotlin parser is not needed to decide
+    whether a line is commentary, and every prohibition here is about a call
+    that must not be written, which is always a whole line of code.
+    """
+    kept = []
+    in_block = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if in_block:
+            if "*/" in stripped:
+                in_block = False
+            continue
+        if stripped.startswith("/*"):
+            if "*/" not in stripped:
+                in_block = True
+            continue
+        if stripped.startswith("//") or stripped.startswith("*"):
+            continue
+        kept.append(line)
+    return "\n".join(kept)
+
+
 compression = read(
     "app/src/main/java/com/vidsize/compressor/ui/screens/CompressionScreen.kt"
 )
@@ -119,18 +150,41 @@ for text, label in ((gate, "AdGate"), (diagnostics, "AdDiagnostics")):
     require(text, "AdPacing.now()", f"monotonic clock in {label}")
     reject(text, "System.currentTimeMillis()", f"wall clock in {label}")
 
-# Interstitial delivery is intentionally disabled. The implementation remains
-# available for a future product decision, but no lifecycle or user-flow call
-# site may initialise, preload, queue or show it.
-for text, label in (
-    (compression, "compression screen"),
-    (result, "result screen"),
-    (main_activity, "main activity"),
-    (application, "application"),
-    (external_navigation, "external navigation"),
-):
-    reject(text, "InterstitialAds", f"interstitial call in {label}")
-reject(result, "deferInterstitialOnReturn", "deferred interstitial on external exit")
+# Interstitial delivery, wired.
+#
+# This block used to REJECT every InterstitialAds reference, on the grounds that
+# the format was "intentionally disabled". Two things were wrong with that.
+# docs/DECISIONS.md names the revenue model as "Home/Result native +
+# Interstitial + Rewarded", so the format was never a product decision to drop;
+# and a prohibition cannot tell the difference between a format switched off on
+# purpose and one that quietly lost its call sites - which is precisely what had
+# happened. InterstitialAds had zero callers anywhere but AdDiagnostics, so the
+# format earned nothing AND the exits it was paired with kept deleting the
+# app-open ad on the way back, giving up impressions in both directions.
+#
+# The gate is now the other way round: each half of the chain is required, so it
+# cannot fall apart again without the build saying so.
+require(application, "InterstitialAds.init(", "interstitial preferences init")
+require(compression, "InterstitialAds.preload(", "interstitial preload before the result screen")
+require(result, "InterstitialAds.markPending(", "deferred interstitial on external exit")
+require(result, "InterstitialAds.showNow(", "immediate interstitial on in-app exit")
+require(main_activity, "InterstitialAds.showPendingIfAny(", "deferred interstitial consumed on return")
+
+# markPending() calls suppressAppOpenOnReturn() itself, so the result screen must
+# not also call it directly: a bare suppression with no ad behind it is the exact
+# shape of the regression above - the app-open impression is spent and nothing
+# replaces it.
+reject(code_only(result), "suppressAppOpenOnReturn", "unpaired app-open suppression on the result screen")
+
+# The product rules that stay prohibitions, from docs/DECISIONS.md:
+# no full-screen ad during an active compression, and none in front of a result
+# the user has not seen yet.
+reject(code_only(compression), "InterstitialAds.showNow", "full-screen ad during compression")
+reject(code_only(compression), "InterstitialAds.showPendingIfAny", "full-screen ad during compression")
+# Vidsize's own player is a clean inspection path and never arms an ad.
+reject(result, "PlayerActivity.intent(context, uri))\n        InterstitialAds", "interstitial armed by the in-app player")
+# The name that never existed. Documented for two releases, implemented never.
+reject(code_only(result), "deferInterstitialOnReturn", "call to a function that does not exist")
 
 # Home has a strict three-entry cap, so composing its short content once avoids
 # lazy-list measurement overhead. Monetisation is a banner anchored outside the

@@ -146,4 +146,5 @@
     <string name="notice_decoder_fallback_body">Cihazın kodek tablosu %1$d × %2$d için destek bildirmiyor. Vidsize yine de yedek ve yazılım çözücüleri deneyecek; çıktıyı 1080p veya altında başlatacak. İşlem daha uzun sürebilir.</string>
     <string name="error_source_undecodable">Vidsize cihazdaki yedek ve yazılım çözücülerin tümünü denedi ancak hiçbiri bu kaynağı açamadı. İşi durduran, istenen çıktı çözünürlüğü değil kaynak kodeğin bu cihazda çözülememesiydi.</string>
     <string name="player_error">Bu video oynatılamadı. Dosya bozuk olabilir ya da hâlâ yazılıyor olabilir.</string>
+    <string name="error_service_start">Android şu anda sıkıştırmanın başlamasına izin vermedi. Bu genelde uygulama arka plana geçerken olur. Vidsize\'i öne getirip Sıkıştır\'a tekrar dokun.</string>
 </resources>
