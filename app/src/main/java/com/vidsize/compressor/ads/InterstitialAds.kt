@@ -120,6 +120,17 @@ object InterstitialAds {
             return
         }
         if (loading || ad != null) return
+
+        // Do not request an impression the day has no room for.
+        //
+        // A capped request still costs a network round trip and then sits in
+        // memory as a creative that will never be served. The panel would refuse
+        // it anyway; knowing the answer locally means not asking. The counter
+        // rolls over with the calendar day, and preload() is called often enough
+        // (every compression screen) that the next day's first request needs no
+        // special handling.
+        if (!DailyImpressionPolicy.canShow(shownToday())) return
+
         val unitId = AdIds.interstitial ?: return
 
         loading = true
@@ -178,7 +189,7 @@ object InterstitialAds {
      */
     fun showNow(activity: Activity, outputToken: String): Boolean {
         if (outputToken == lastShownOutputToken) return false
-        val verdict = AdGate.evaluate(loaded = ad != null)
+        val verdict = AdGate.evaluate(loaded = ad != null, shownToday = shownToday())
         lastVerdict = verdict
         if (verdict != AdGate.Verdict.ALLOWED) {
             preload(activity)
@@ -204,7 +215,7 @@ object InterstitialAds {
         pendingOutputToken = null
         if (outputToken == null || outputToken == lastShownOutputToken) return false
 
-        val verdict = AdGate.evaluate(loaded = ad != null)
+        val verdict = AdGate.evaluate(loaded = ad != null, shownToday = shownToday())
         lastVerdict = verdict
         if (verdict != AdGate.Verdict.ALLOWED) {
             preload(activity)
@@ -257,8 +268,17 @@ object InterstitialAds {
     /**
      * How many interstitials this user has seen today.
      *
-     * Read by the diagnostics sheet and by nothing else. It is a fact about the
-     * app, not a condition on it - the daily ceiling is the AdMob panel's job.
+     * This used to be read by the diagnostics sheet and by nothing else, and its
+     * own comment said "the daily ceiling is the AdMob panel's job". That is no
+     * longer true: the panel caps interstitials at three per user per day, and
+     * since v0.9.16 the app enforces the same number through
+     * [DailyImpressionPolicy] - both before requesting a creative and at the
+     * moment of showing one.
+     *
+     * The day is a calendar day in the device's own time zone, which is the same
+     * day the user experiences. It is deliberately NOT derived from
+     * [AdPacing.now], whose monotonic clock is correct for measuring an interval
+     * and meaningless for naming a date.
      */
     fun shownToday(): Int {
         val store = prefs ?: return 0

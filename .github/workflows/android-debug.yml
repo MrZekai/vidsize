@@ -82,8 +82,8 @@ jobs:
           grep -q 'android:minHeight="18dp"' app/src/main/res/layout/native_ad_result.xml
           grep -Fq 'android:value="${ADMOB_APP_ID}"' app/src/main/AndroidManifest.xml
           grep -q 'minSdk = 29' app/build.gradle.kts
-          grep -q 'versionCode = 33' app/build.gradle.kts
-          grep -q 'versionName = "0.9.15"' app/build.gradle.kts
+          grep -q 'versionCode = 34' app/build.gradle.kts
+          grep -q 'versionName = "0.9.16"' app/build.gradle.kts
           grep -q 'create("closedTest")' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "true"' app/build.gradle.kts
           grep -q 'USE_TEST_ADS", "false"' app/build.gradle.kts
@@ -134,16 +134,55 @@ jobs:
           grep -q 'GAP_MILLIS: Long = 3L \* 60L \* 1000L' $ADS/FullScreenPacingPolicy.kt
           grep -q 'FULL_SCREEN_GAP_MILLIS: Long = FullScreenPacingPolicy.GAP_MILLIS' $ADS/AdPacing.kt
 
-          # --- Gate 2: no silent quota has crept back in ---
+          # --- Gate 2: no SILENT quota has crept back in ---
           # A forbidden-name list, because every one of these returned false
           # without a trace and the outcome was indistinguishable from no fill.
+          #
+          # The word doing the work is "silent". MAX_PER_DAY was on this list
+          # until v0.9.16 and has been taken off, because the AdMob panel now
+          # caps interstitials at three per user per day and a limit the app
+          # cannot see is its own kind of undiagnosable: a tester who had spent
+          # the allowance would ask for a fourth ad, get nothing, and have no way
+          # to tell a cap from no fill - the exact ambiguity this gate exists to
+          # prevent. It is allowed back only on the condition below, that it
+          # announces itself.
           for banned in INSTALL_GRACE MIN_SESSIONS_BEFORE COOLDOWN_MILLIS DAILY_LIMIT \
-                        SESSION_QUOTA MAX_PER_SESSION MAX_PER_DAY FREE_USES MIN_COMPRESSIONS; do
+                        SESSION_QUOTA MAX_PER_SESSION FREE_USES MIN_COMPRESSIONS; do
             if grep -rqn "$banned" $ADS; then
               echo "Silent quota reintroduced in ads/: $banned" >&2
               exit 1
             fi
           done
+
+          # --- Gate 2b: the daily cap exists and SAYS ITS NAME ---------------
+          # Mirrors the AdMob panel's three-per-user-per-day frequency cap. Each
+          # line below is one half of "not silent": the limit is a pure testable
+          # policy, the gate returns a verdict of its own rather than folding
+          # into PACING, and the diagnostics screen renders that verdict in words
+          # a tester can act on.
+          grep -q 'MAX_PER_DAY: Int = 3' $ADS/DailyImpressionPolicy.kt
+          # Two greps, not one. The enum constant existing is not the same as
+          # it being RETURNED: folding the branch back into PACING leaves the
+          # declaration in place and the verdict unreachable, and a single grep
+          # on the bare name passes happily through that. Verified by breaking
+          # it exactly that way.
+          # code_only, not a bare grep. The class KDoc names [Verdict.DAILY_CAP_REACHED]
+          # in prose, so a plain grep matched the comment and passed while the
+          # branch had been folded back into PACING. Verified by breaking it that
+          # way twice: once to find the hole, once to confirm it is closed.
+          code_only $ADS/AdGate.kt | grep -q 'DAILY_CAP_REACHED,'
+          code_only $ADS/AdGate.kt | grep -q 'Verdict.DAILY_CAP_REACHED'
+          code_only $ADS/AdGate.kt | grep -q 'DailyImpressionPolicy.canShow(shownToday)'
+          grep -q 'DAILY_CAP_REACHED' $UI/screens/AdDiagnosticsSheet.kt
+          # ...and the interstitial actually consults it, at both points that
+          # matter: before spending a request, and before showing.
+          grep -q 'DailyImpressionPolicy.canShow(shownToday())' $ADS/InterstitialAds.kt
+          grep -c 'shownToday = shownToday()' $ADS/InterstitialAds.kt | grep -q '^2$'
+          # The pure policy is unit-tested; a cap nobody tested is a cap nobody
+          # can move safely.
+          test -f app/src/test/java/com/vidsize/compressor/ads/DailyImpressionPolicyTest.kt
+          grep -q 'theFirstThreeAreAllowedAndTheFourthIsNot' \
+            app/src/test/java/com/vidsize/compressor/ads/DailyImpressionPolicyTest.kt
 
           # --- Gate 3: the reward buys a mark-free export, and nothing else ---
           # v0.9.4 replaced the ten-minute ad-free window. The old reward was

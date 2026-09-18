@@ -1,4 +1,4 @@
-name: Play Closed Test - Signed AAB
+name: Production - Signed Vidsize AAB + APK
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   signed-closed-test:
-    name: Build and verify signed closed-test AAB
+    name: Build and verify the production artifacts
     runs-on: ubuntu-latest
 
     env:
@@ -132,7 +132,18 @@ jobs:
             :app:verifyAdUnitCoverage \
             :app:verifyRewardCopyParity \
             :app:bundleClosedTest \
+            :app:assembleClosedTest \
             --stacktrace
+
+          # Both outputs come from the SAME variant and the same R8 pass.
+          #
+          # The AAB is what Play accepts. The APK exists because an AAB cannot be
+          # installed on a phone directly, and the one thing this build is for is
+          # being run on real hardware before it reaches anyone: R8 and resource
+          # shrinking are ON here and nowhere the developer has tested so far.
+          # Without an installable artifact that check needs a Play upload and a
+          # round trip through internal testing, which is the friction that gets
+          # it skipped.
 
       - name: Verify AAB signature and signer certificate
         id: meta
@@ -166,11 +177,23 @@ jobs:
           version_code="$(awk '/versionCode = /{print $3; exit}' app/build.gradle.kts)"
           compact="${version_name//./}"
 
+          apk="$(
+            find app/build/outputs/apk/closedTest \
+              -maxdepth 1 -type f -name '*.apk' -print -quit
+          )"
+          test -n "$apk"
+          test -s "$apk"
+          apksigner verify --print-certs "$apk" >/dev/null 2>&1 \
+            || jarsigner -verify "$apk" >/dev/null
+
           mkdir -p release
-          output="release/Vidsize-v${version_name}-closed-test-SIGNED.aab"
+          output="release/Vidsize-${version_name}-production.aab"
+          apk_output="release/Vidsize-${version_name}-production.apk"
           cp "$aab" "$output"
+          cp "$apk" "$apk_output"
 
           sha256="$(sha256sum "$output" | awk '{print $1}')"
+          apk_sha256="$(sha256sum "$apk_output" | awk '{print $1}')"
 
           {
             echo "Application ID: com.vidsize.compressor"
@@ -179,24 +202,36 @@ jobs:
             echo "Commit: $(git rev-parse HEAD)"
             echo "Upload certificate SHA256: $bundle_fp"
             echo "AAB SHA256: $sha256"
+            echo "APK SHA256: $apk_sha256"
+            echo ""
+            echo "Variant: closedTest - this IS the production build."
+            echo "  It is initWith(release), carries no applicationId suffix, is"
+            echo "  not debuggable, and ships the real AdMob units. The debug and"
+            echo "  adsQa artifacts produced by the QA workflow are test builds"
+            echo "  (.debug / .adsqa suffixes) and are never uploaded anywhere."
+            echo ""
             echo "Ads mode: enabled with required production AdMob identifiers"
             echo "Ad units: production (Google sample identifiers rejected by Gradle gate)"
             echo "R8: enabled"
             echo "Resource shrinking: enabled"
           } > release/SIGNING-REPORT.txt
 
-          echo "artifact=vidsize-v${compact}-closed-test-SIGNED-aab" >> "$GITHUB_OUTPUT"
+          echo "artifact=Vidsize-${version_name}-production" >> "$GITHUB_OUTPUT"
           echo "file=$output" >> "$GITHUB_OUTPUT"
+          echo "apk=$apk_output" >> "$GITHUB_OUTPUT"
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
 
-          echo "Signed AAB: $output"
+          echo "Signed AAB (upload to Play): $output"
           echo "AAB SHA256: $sha256"
+          echo "Signed APK (install on a phone): $apk_output"
+          echo "APK SHA256: $apk_sha256"
 
-      - name: Upload Play-ready signed AAB
+      - name: Upload production artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.meta.outputs.artifact }}
           path: |
+            ${{ steps.meta.outputs.apk }}
             ${{ steps.meta.outputs.file }}
             release/SIGNING-REPORT.txt
           if-no-files-found: error
