@@ -44,15 +44,52 @@ def main() -> int:
             r"takePersistableUriPermission\s*\(.*?FLAG_GRANT_READ_URI_PERMISSION",
             "The SAF read grant must be persisted for foreground-service work.",
         ),
+        # Both pickers exist, and BOTH suppress the app-open ad.
+        #
+        # This gate used to forbid Photo Picker outright, after a user could not
+        # find a browser-downloaded clip in the grid. That ban was too broad: it
+        # left SAF as the only way in, and SAF is a file-manager list - picking a
+        # video by file name in an app whose whole subject is video. The rule the
+        # ban was reaching for is not "no Photo Picker", it is "Download/ must
+        # stay reachable". Requiring both keeps that rule and gets the grid back.
         lambda: require(
             root_ui,
-            r"suppressNextForeground\s*\(\s*\).*?fileBrowser\.launch\s*\(\s*arrayOf\(\"video/\*\"\)\s*\)",
-            "App-open suppression must cover the SAF round trip.",
+            r"ActivityResultContracts\.PickVisualMedia\s*\(\s*\)",
+            "The primary picker must be Photo Picker: a grid of video thumbnails.",
         ),
-        lambda: forbid(
+        lambda: require(
             root_ui,
-            r"\bPickVisualMedia(?:Request)?\b",
-            "Photo Picker was reintroduced; downloaded videos can disappear again.",
+            r"PickVisualMediaRequest\(\s*ActivityResultContracts\.PickVisualMedia\.VideoOnly",
+            "The grid must be restricted to video; photos are not compressible here.",
+        ),
+        lambda: require(
+            root_ui,
+            r"val\s+launchFileBrowser\s*:",
+            "The SAF escape hatch must stay reachable for Download/ and friends.",
+        ),
+        lambda: require(
+            root_ui,
+            r"onBrowseFiles\s*=\s*launchFileBrowser",
+            "The file browser must be wired to the home screen, not just declared.",
+        ),
+        # One helper, called by both launchers. Written as a requirement on the
+        # helper plus each call, because the old single-regex form only ever
+        # covered the SAF path and would have passed a Photo Picker launch that
+        # greeted every return with a full-screen app-open ad.
+        lambda: require(
+            root_ui,
+            r"val\s+suppressAppOpen\s*:\s*\(\)\s*->\s*Unit\s*=\s*\{\s*\n\s*\(context",
+            "App-open suppression must live in one helper both launchers call.",
+        ),
+        lambda: require(
+            root_ui,
+            r"suppressAppOpen\(\)\s*\n\s*photoPicker\.launch",
+            "App-open suppression must cover the Photo Picker round trip.",
+        ),
+        lambda: require(
+            root_ui,
+            r"suppressAppOpen\(\)\s*\n\s*fileBrowser\.launch\s*\(\s*arrayOf\(\"video/\*\"\)\s*\)",
+            "App-open suppression must cover the SAF round trip.",
         ),
         lambda: forbid(
             root_ui,

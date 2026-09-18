@@ -147,4 +147,6 @@
     <string name="error_source_undecodable">Vidsize cihazdaki yedek ve yazılım çözücülerin tümünü denedi ancak hiçbiri bu kaynağı açamadı. İşi durduran, istenen çıktı çözünürlüğü değil kaynak kodeğin bu cihazda çözülememesiydi.</string>
     <string name="player_error">Bu video oynatılamadı. Dosya bozuk olabilir ya da hâlâ yazılıyor olabilir.</string>
     <string name="error_service_start">Android şu anda sıkıştırmanın başlamasına izin vermedi. Bu genelde uygulama arka plana geçerken olur. Vidsize\'i öne getirip Sıkıştır\'a tekrar dokun.</string>
+    <string name="cta_browse_files">Dosyalardan seç</string>
+    <string name="error_source_access_lost">Vidsize bu videoya erişimini kaybetti; Android uygulamayı çalışırken kapattıysa bu olabilir. Videoyu tekrar seçtiğinde normal şekilde çalışır.</string>
 </resources>

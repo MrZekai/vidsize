@@ -177,4 +177,6 @@
     <string name="error_source_undecodable">Vidsize tried the device\'s available fallback and software decoders, but none could open this source. The source codec — not the requested output resolution — stopped the job on this device.</string>
     <string name="player_error">This video could not be played. The file may be damaged or still being written.</string>
     <string name="error_service_start">Android wouldn\'t let the compression start just now. This usually happens when the app was moving to the background. Bring Vidsize to the front and tap Compress again.</string>
+    <string name="cta_browse_files">Browse files instead</string>
+    <string name="error_source_access_lost">Vidsize lost access to this video, which can happen if Android closed the app while it was working. Pick the video again and it will run normally.</string>
 </resources>

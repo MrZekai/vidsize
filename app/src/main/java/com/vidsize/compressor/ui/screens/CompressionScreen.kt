@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -152,8 +153,15 @@ fun CompressionScreen(
 
     // Never write state during composition: clear the local "starting" latch
     // from an effect once the service has actually reported Running.
-    LaunchedEffect(busy) {
-        if (busy) starting = false
+    LaunchedEffect(jobStatus) {
+        // Cleared on ANY settled state, not only on Running.
+        //
+        // SERVICE_START_FAILED never reaches Running: CompressionService.start
+        // catches ForegroundServiceStartNotAllowedException and writes Failed
+        // directly. Watching `busy` alone left this latch true forever, so the
+        // failure dialog appeared over a processing overlay that could not be
+        // dismissed - a full-screen scrim with a spinner that never advances.
+        if (jobStatus !is CompressionJobState.Status.Idle) starting = false
     }
 
     // One flag for "a job is on screen". Everything that must be disabled while
@@ -277,13 +285,32 @@ fun CompressionScreen(
         }
     }
 
+    // Which video the job state on screen belongs to.
+    //
+    // rememberSaveable, so it survives the recreation this guard used to break.
+    var stateOwner by rememberSaveable { mutableStateOf<String?>(null) }
+
     LaunchedEffect(videoUri) {
         // CompressionJobState is a process singleton. Without this, a Failed or
         // Done state left over from the previous video is rendered against the
         // new one before the user has touched anything.
-        if (CompressionJobState.status !is CompressionJobState.Status.Running) {
+        //
+        // Keyed on the OWNER, not on videoUri alone. A rotation recreates the
+        // activity and re-runs this effect with the same URI, and Done/Failed
+        // are not Running - so the old form reset them. Rotating on the result
+        // screen dropped the user back to the level picker with Share, Show in
+        // Gallery and Open Video gone; rotating with the failure dialog up
+        // dismissed it silently. The file and the history row survived, so this
+        // was confusion rather than data loss, but it is the kind of confusion
+        // that reads as the app losing work.
+        val incoming = videoUri.toString()
+        val belongsToAnotherVideo = stateOwner != null && stateOwner != incoming
+        if (belongsToAnotherVideo &&
+            CompressionJobState.status !is CompressionJobState.Status.Running
+        ) {
             CompressionJobState.reset()
         }
+        stateOwner = incoming
         val probed = runCatching {
             withContext(Dispatchers.IO) { VideoProbe.probe(context, videoUri) }
         }.getOrNull()
@@ -770,6 +797,8 @@ private fun FailureDialog(
         CompressionJobState.FailureReason.TIMEOUT -> R.string.error_timeout_body
         CompressionJobState.FailureReason.SERVICE_START_FAILED ->
             R.string.error_service_start
+        CompressionJobState.FailureReason.SOURCE_ACCESS_LOST ->
+            R.string.error_source_access_lost
         CompressionJobState.FailureReason.GENERIC -> R.string.error_generic
     }
 
@@ -778,7 +807,8 @@ private fun FailureDialog(
     // Picking another video is also the useful step after a timeout: this one
     // hit the platform's daily background limit, so retrying it unchanged will
     // hit the same wall.
-    val offerAnotherVideo = failure.reason == CompressionJobState.FailureReason.INVALID_VIDEO ||
+    val offerAnotherVideo = failure.reason == CompressionJobState.FailureReason.SOURCE_ACCESS_LOST ||
+        failure.reason == CompressionJobState.FailureReason.INVALID_VIDEO ||
         failure.reason == CompressionJobState.FailureReason.ENCODER_UNSUPPORTED ||
         failure.reason == CompressionJobState.FailureReason.SOURCE_UNDECODABLE ||
         failure.reason == CompressionJobState.FailureReason.NO_SAVINGS ||

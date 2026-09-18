@@ -58,6 +58,29 @@ code_only() {
 # `if code_only | grep -q` form was immune because a pipeline inside `if` is
 # exempt from `set -e`; this form has to opt back into that exemption
 # explicitly, which is what the `&&`/`||` list does.
+# has_code <fixed-string> <file>
+#
+# Fails unless the string appears in the file's CODE (comments stripped).
+#
+# Written with `grep -c` rather than the obvious `code_only f | grep -q s`,
+# because that form is flaky in a way that depends on file size. `grep -q` exits
+# the moment it matches, which closes the pipe; `code_only` is then killed by
+# SIGPIPE and, under `set -o pipefail`, the pipeline reports 141. A small file
+# fits in the pipe buffer and finishes writing before the reader leaves, so the
+# gate passes - and the same gate fails on a larger file for no reason the
+# author can see. Found exactly that way: identical checks passed on AdGate.kt
+# and failed on ResultScreen.kt.
+#
+# `grep -c` drains its input, so there is no early close and no signal.
+has_code() {
+  local count
+  count="$(code_only "$2" | grep -c -F -- "$1" 2>/dev/null)" || true
+  if [ "${count:-0}" -lt 1 ]; then
+    echo "GATE FAILED (must appear in code): $1 -> $2" >&2
+    exit 1
+  fi
+}
+
 forbid() {
   local count status
   count="$(code_only "$2" | grep -c "$1" 2>/dev/null)" && status=0 || status=$?

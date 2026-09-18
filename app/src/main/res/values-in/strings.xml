@@ -146,4 +146,6 @@
     <string name="error_source_undecodable">Vidsize telah mencoba dekoder cadangan dan perangkat lunak yang tersedia, tetapi tidak ada yang dapat membuka sumber ini. Codec sumber pada perangkat ini — bukan resolusi keluaran yang diminta — menghentikan proses.</string>
     <string name="player_error">Video ini tidak dapat diputar. Berkasnya mungkin rusak atau masih sedang ditulis.</string>
     <string name="error_service_start">Android tidak mengizinkan kompresi dimulai saat ini. Ini biasanya terjadi ketika aplikasi sedang berpindah ke latar belakang. Buka Vidsize di depan lalu ketuk Kompres lagi.</string>
+    <string name="cta_browse_files">Cari lewat berkas</string>
+    <string name="error_source_access_lost">Vidsize kehilangan akses ke video ini, yang bisa terjadi jika Android menutup aplikasi saat sedang bekerja. Pilih videonya lagi dan prosesnya akan berjalan normal.</string>
 </resources>

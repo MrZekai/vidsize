@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,10 +60,39 @@ fun VidsizeRoot(
         onVideoConsumed()
     }
 
-    // ACTION_OPEN_DOCUMENT is intentional here. Photo Picker only exposes its
-    // visual-media collection and can omit videos downloaded by a browser into
-    // Download/. SAF shows every document provider (including Downloads) and
-    // does not need a broad storage permission.
+    /*
+     * TWO pickers, and the reason neither one alone was enough.
+     *
+     * The app shipped Photo Picker first. It is the grid of video thumbnails
+     * everyone already knows from tapping the camera roll - the right surface
+     * for choosing a video, because choosing a video is a visual act. But it
+     * only exposes MediaStore's visual-media collection, and a clip a browser
+     * dropped into Download/ often is not in it. A user with the file plainly
+     * on their phone was told, in effect, that it did not exist.
+     *
+     * So it was replaced with SAF, which can reach every document provider and
+     * needs no storage permission. That fixed the missing videos and cost the
+     * thing that made the screen feel finished: SAF is a file-manager list, and
+     * picking a video from a list of file names is the amateur moment in an app
+     * whose entire job is video.
+     *
+     * Both replacements were the same mistake in opposite directions. The grid
+     * is the right default because it is what nearly every user wants nearly
+     * every time; the file browser is the right escape hatch because "nearly"
+     * is not "always". They are offered as exactly that - a primary action and
+     * a quiet second line - rather than as a dialog asking the user to classify
+     * their own video before they have seen it.
+     */
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        // No persistable grant is taken here, and none is available: Photo
+        // Picker hands back a one-shot read grant scoped to this task. That is
+        // sufficient - CompressionService runs inside the same process and the
+        // grant outlives the picker for as long as the task is alive.
+        if (uri != null) selectedVideo = uri.toString()
+    }
+
     val fileBrowser = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -80,10 +110,26 @@ fun VidsizeRoot(
         }
     }
 
-    val launchVideoPicker: () -> Unit = {
+    // Leaving for a picker is an errand Vidsize sent the user on, so the return
+    // is not a session start. Both paths suppress the app-open ad; forgetting it
+    // on the new one would greet every gallery return with a full-screen ad.
+    val suppressAppOpen: () -> Unit = {
         (context.applicationContext as? VidsizeApplication)
             ?.appOpenAdManager
             ?.suppressNextForeground()
+    }
+
+    /** The default. A grid of video thumbnails, which is how people pick video. */
+    val launchVideoPicker: () -> Unit = {
+        suppressAppOpen()
+        photoPicker.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
+        )
+    }
+
+    /** The escape hatch, for Download/ and anything else the grid cannot see. */
+    val launchFileBrowser: () -> Unit = {
+        suppressAppOpen()
         fileBrowser.launch(arrayOf("video/*"))
     }
 
@@ -101,6 +147,7 @@ fun VidsizeRoot(
         HomeScreen(
             summary = history.summary,
             onSelectVideo = launchVideoPicker,
+            onBrowseFiles = launchFileBrowser,
             onClearHistory = { history.clear() },
             // QA v0.8.7 BUG-06: the recent rows are the route back to a
             // compressed file, so they have to actually do something.

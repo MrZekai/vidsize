@@ -97,15 +97,18 @@ class CompressionService : Service() {
         // second valid request arrives while the current export is active, renew
         // foreground state first, then ignore the duplicate work request.
         startForegroundSafely(buildNotification(progressPercent = null))
+        // A duplicate request while a job is running: the work is discarded, but
+        // the start id is NOT. latestStartId has already advanced to this one
+        // above, and that is deliberate - see the stop below.
         if (job?.isActive == true) return START_NOT_STICKY
 
         // The encoder has not reported anything yet: probe, Transformer setup and
         // the first PROGRESS_STATE_AVAILABLE can take many seconds on a large
         // file. Showing a stationary "0%" for that long reads as a hang, so the
         // overlay starts in its indeterminate state instead.
+        terminalStateWritten = false
         CompressionJobState.markRunning(progressKnown = false)
 
-        val currentStartId = startId
         job = scope.launch {
             runCatching {
                 CompressionEngine.compress(
@@ -132,7 +135,23 @@ class CompressionService : Service() {
                 showCompletionNotification()
             }.onFailure { throwable ->
                 if (throwable is CancellationException) {
-                    CompressionJobState.reset()
+                    // A cancellation the SERVICE caused has already written the
+                    // terminal state, and must not be wiped back to Idle here.
+                    //
+                    // handleTimeout() runs on the main thread: it calls
+                    // job.cancel() and then markFailed(TIMEOUT) immediately. The
+                    // job is suspended inside suspendCancellableCoroutine on the
+                    // same looper, so its resumption is POSTED - this block runs
+                    // one turn later and used to reset() straight over the
+                    // TIMEOUT that had just been recorded. The result was
+                    // exactly the regression handleTimeout's comment claims to
+                    // have fixed: after six hours the user found Idle, with no
+                    // output and no explanation, and FailureReason.TIMEOUT was
+                    // unreachable in practice.
+                    //
+                    // A cancellation the USER caused still resets, which is
+                    // right: they asked for nothing to have happened.
+                    if (!terminalStateWritten) CompressionJobState.reset()
                 } else {
                     val reason = when {
                         throwable is InvalidVideoException ->
@@ -144,6 +163,10 @@ class CompressionService : Service() {
                         // Before EncoderUnsupportedException: a decoder failure
                         // caught inside the ladder is rethrown as this, and it
                         // is the more specific of the two.
+                        // Before every codec reason: a permission failure is
+                        // not a format problem and must not be reported as one.
+                        throwable.looksLikeLostAccess() ->
+                            CompressionJobState.FailureReason.SOURCE_ACCESS_LOST
                         throwable is SourceUndecodableException ->
                             CompressionJobState.FailureReason.SOURCE_UNDECODABLE
                         throwable is EncoderUnsupportedException ->
@@ -160,7 +183,19 @@ class CompressionService : Service() {
                     )
                 }
             }
-            stopSelfSafely(currentStartId)
+            // latestStartId, NOT the id this job captured when it began.
+            //
+            // stopSelf(id) only stops the service when `id` is the most recent
+            // start delivered. A duplicate request arriving mid-job advances
+            // that counter, so stopping against the captured id silently did
+            // nothing: the notification cleared, but the Service instance and
+            // its CoroutineScope stayed alive as a started background service
+            // until the platform reclaimed them.
+            //
+            // Stopping against the newest id is also why the duplicate above
+            // must not stop anything itself - stopSelf on what is then the most
+            // recent id would tear down the service with the job still running.
+            stopSelfSafely(latestStartId)
         }
 
         return START_NOT_STICKY
@@ -186,6 +221,9 @@ class CompressionService : Service() {
         // A six-hour job that the platform killed is a failure and has to be
         // reported as one, with a reason of its own so the dialog can say what
         // actually happened instead of offering a generic retry.
+        // Set BEFORE cancelling, so the job's own onFailure - which runs a
+        // looper turn later - can see that a terminal state is already owed.
+        terminalStateWritten = true
         job?.cancel()
         CompressionJobState.markFailed(CompressionJobState.FailureReason.TIMEOUT)
         notifyTimeout()
@@ -216,6 +254,16 @@ class CompressionService : Service() {
             manager?.notify(TIMEOUT_NOTIFICATION_ID, notification)
         }
     }
+
+    /**
+     * True when this service has already written the job's final state.
+     *
+     * Read by the coroutine's cancellation branch, which cannot otherwise tell
+     * a user-requested cancel (reset to Idle) from a platform timeout the
+     * service has already reported (leave the failure alone).
+     */
+    @Volatile
+    private var terminalStateWritten = false
 
     private fun cancelJob() {
         job?.cancel()
@@ -489,6 +537,27 @@ internal fun Throwable.diagnostic(limit: Int = 3): String {
         depth++
     }
     return parts.joinToString(" ← ")
+}
+
+/**
+ * True when the failure is the app no longer being allowed to read the source.
+ *
+ * Walks the cause chain for the same reason [looksLikeOutOfSpace] does: Media3
+ * wraps everything in `ExportException`, whose own message is the error code,
+ * and the SecurityException that actually explains the failure sits one or two
+ * levels down. A message-only check would classify every one of these as
+ * GENERIC and hand the user advice that cannot work.
+ */
+internal fun Throwable.looksLikeLostAccess(): Boolean {
+    var current: Throwable? = this
+    var depth = 0
+    val seen = mutableSetOf<Throwable>()
+    while (current != null && depth < 8 && seen.add(current)) {
+        if (current is SecurityException) return true
+        current = current.cause
+        depth++
+    }
+    return false
 }
 
 internal fun Throwable.looksLikeOutOfSpace(): Boolean {

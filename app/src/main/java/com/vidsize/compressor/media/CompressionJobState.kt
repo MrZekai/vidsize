@@ -69,6 +69,23 @@ object CompressionJobState {
          */
         SERVICE_START_FAILED,
 
+        /**
+         * The app lost permission to read the video it was given.
+         *
+         * Introduced with the Photo Picker in v0.9.17, and the honest cost of
+         * that change. SAF's `takePersistableUriPermission` survives process
+         * death; Photo Picker's grant does not - it lasts as long as the task.
+         * So a compression interrupted by the system killing the process, then
+         * resumed from the saved URI, can find that URI no longer readable.
+         *
+         * Rare, but not hypothetical: a five-minute job on a low-memory phone is
+         * exactly the situation the platform reclaims processes in. Reported as
+         * GENERIC it would have told the user to "try a different compression
+         * level", which cannot possibly help. The one thing that does help is
+         * picking the video again, so that is what it says.
+         */
+        SOURCE_ACCESS_LOST,
+
         GENERIC,
     }
 

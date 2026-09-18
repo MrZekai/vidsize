@@ -43,6 +43,7 @@ Exit status is the number of failed steps, so it chains with &&.
 
 import re
 import shutil
+import os
 import subprocess
 import sys
 import tempfile
@@ -100,12 +101,27 @@ def main() -> int:
                 print(f"  --   {name[:60]:62s} (Gradle gerekli)")
                 continue
 
-            path = work / ".gate-tmp.sh"
-            path.write_text(script, encoding="utf-8")
-            result = subprocess.run(
-                ["bash", str(path)], cwd=work, capture_output=True, text=True
-            )
-            path.unlink(missing_ok=True)
+            # The scratch script lives OUTSIDE the tree it is testing.
+            #
+            # It used to be written to `work/.gate-tmp.sh`, which meant that for
+            # as long as a step ran, the tree it was inspecting contained an
+            # untracked file this tool had put there. Any gate asserting a clean
+            # working tree - and there is one, because an untracked file is
+            # exactly what travels into a commit by accident - saw
+            # `?? .gate-tmp.sh` and failed for a reason that exists nowhere in
+            # CI. A test harness that fails the thing it is testing is worse
+            # than no harness.
+            with tempfile.NamedTemporaryFile(
+                "w", suffix=".sh", encoding="utf-8", delete=False
+            ) as handle:
+                handle.write(script)
+                script_path = handle.name
+            try:
+                result = subprocess.run(
+                    ["bash", script_path], cwd=work, capture_output=True, text=True
+                )
+            finally:
+                os.unlink(script_path)
 
             ran += 1
             if result.returncode == 0:
@@ -120,11 +136,21 @@ def main() -> int:
                 # bare `grep -q` under `set -e`, which says nothing on its way
                 # out. Re-run it traced so the line is named rather than hunted.
                 print("         (cikti yok - sessiz bir 'grep -q' basarisizligi)")
-                path.write_text(script, encoding="utf-8")
-                traced = subprocess.run(
-                    ["bash", "-x", str(path)], cwd=work, capture_output=True, text=True
-                )
-                path.unlink(missing_ok=True)
+                # Outside the tree, for the same reason as the run above.
+                with tempfile.NamedTemporaryFile(
+                    "w", suffix=".sh", encoding="utf-8", delete=False
+                ) as handle:
+                    handle.write(script)
+                    traced_path = handle.name
+                try:
+                    traced = subprocess.run(
+                        ["bash", "-x", traced_path],
+                        cwd=work,
+                        capture_output=True,
+                        text=True,
+                    )
+                finally:
+                    os.unlink(traced_path)
                 for line in traced.stderr.strip().splitlines()[-3:]:
                     print(f"         son komut: {line}")
                 continue
