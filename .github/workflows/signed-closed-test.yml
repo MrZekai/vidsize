@@ -2,6 +2,14 @@ name: Production - Signed Vidsize AAB + APK
 
 on:
   workflow_dispatch:
+    inputs:
+      diagnostic_no_r8:
+        description: >-
+          DIAGNOSTIC ONLY - build with R8 and resource shrinking OFF.
+          Produces an installable APK for isolating a shrinking-related
+          crash. The result must never be uploaded to Play.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +36,12 @@ jobs:
       # which is correct for the unsigned audit AAB and catastrophic here: a
       # signed, uploadable, revenue-free bundle that nothing complains about.
       VIDSIZE_REQUIRE_ADS: "true"
+
+      # Off for every ordinary run. When a dispatch turns it on, closedTest is
+      # built with R8 and resource shrinking disabled and nothing else changed,
+      # so installing the result answers one question: is the launch crash
+      # caused by shrinking?
+      VIDSIZE_DISABLE_R8: "${{ inputs.diagnostic_no_r8 && 'true' || 'false' }}"
 
       # AdMob identifiers. Five are required; a blank one switches off EVERY
       # format, banners included, and verifyProductionAdConfig names it.
@@ -301,6 +315,12 @@ jobs:
           )"
 
           {
+            if [ "${VIDSIZE_DISABLE_R8:-false}" = "true" ]; then
+              echo "*** DIAGNOSTIC BUILD - DO NOT UPLOAD TO PLAY ***"
+              echo "R8 and resource shrinking were disabled on purpose, to"
+              echo "isolate a launch crash. This is not the release artifact."
+              echo ""
+            fi
             echo "Application ID: com.vidsize.compressor"
             echo "Version name: $version_name"
             echo "Version code: $version_code"
@@ -326,11 +346,21 @@ jobs:
               echo "    none"
             fi
             echo "Ad units: production (Google sample identifiers rejected by Gradle gate)"
-            echo "R8: enabled"
-            echo "Resource shrinking: enabled"
+            if [ "${VIDSIZE_DISABLE_R8:-false}" = "true" ]; then
+              echo "R8: DISABLED (diagnostic)"
+              echo "Resource shrinking: DISABLED (diagnostic)"
+            else
+              echo "R8: enabled"
+              echo "Resource shrinking: enabled"
+            fi
           } > release/SIGNING-REPORT.txt
 
-          echo "artifact=Vidsize-${version_name}-production" >> "$GITHUB_OUTPUT"
+          if [ "${VIDSIZE_DISABLE_R8:-false}" = "true" ]; then
+            artifact_name="Vidsize-${version_name}-DIAGNOSTIC-no-r8"
+          else
+            artifact_name="Vidsize-${version_name}-production"
+          fi
+          echo "artifact=$artifact_name" >> "$GITHUB_OUTPUT"
           echo "file=$output" >> "$GITHUB_OUTPUT"
           echo "apk=$apk_output" >> "$GITHUB_OUTPUT"
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"

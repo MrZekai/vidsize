@@ -161,6 +161,32 @@ val enableTestAdsInDebug: Boolean =
  * stop being an acceptable configuration and become a build failure that names
  * the keys that were missing.
  */
+/**
+ * Diagnostic escape hatch: build `closedTest` with R8 and resource shrinking
+ * OFF, changing nothing else.
+ *
+ * ## Why this exists
+ *
+ * `closedTest` turned R8 on in v0.9.9, and the first build that both minified
+ * AND carried real ad identifiers crashed on launch. Every other factor - the
+ * signing key, the identifiers, the manifest, the code - is shared with builds
+ * that work, so the question is a single yes/no: is the crash caused by
+ * shrinking?
+ *
+ * Answering it by reading the artifact is not possible; answering it by
+ * attaching a debugger needs hardware that is not always available. Answering
+ * it by installing one APK is. Two builds that differ in exactly one setting
+ * turn an open-ended hunt into one bit of information.
+ *
+ * An artifact built this way is a diagnostic and nothing else. It is named so
+ * it cannot be mistaken for a release, and the signing report says in the first
+ * line that it must not be uploaded.
+ */
+val disableR8: Boolean =
+    (providers.gradleProperty("VIDSIZE_DISABLE_R8").orNull
+        ?: System.getenv("VIDSIZE_DISABLE_R8")
+        ?: "false").equals("true", ignoreCase = true)
+
 val requireAdsConfigured: Boolean =
     (providers.gradleProperty("VIDSIZE_REQUIRE_ADS").orNull
         ?: System.getenv("VIDSIZE_REQUIRE_ADS")
@@ -293,8 +319,11 @@ android {
             manifestPlaceholders["ADMOB_APP_ID"] =
                 admobAppId.ifBlank { googleTestAdMobAppId }
 
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Both follow the diagnostic switch together. Shrinking resources
+            // without shrinking code is a configuration nobody ships, and it
+            // would make the experiment answer a question nobody asked.
+            isMinifyEnabled = !disableR8
+            isShrinkResources = !disableR8
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
