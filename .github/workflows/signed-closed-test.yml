@@ -247,21 +247,31 @@ jobs:
               2>/dev/null || true
           )"
 
-          app_id_hits=0
-          if [ -n "${VIDSIZE_ADMOB_APP_ID:-}" ]; then
-            app_id_hits="$(
-              printf '%s' "$manifest" | grep -a -c -F "$VIDSIZE_ADMOB_APP_ID" || true
-            )"
-          fi
+          # The app id is matched by SHAPE first and only then compared.
+          #
+          # This was `grep -c -F "$VIDSIZE_ADMOB_APP_ID"`, which degenerates the
+          # moment the configured value is not an identifier: with every secret
+          # stored as "-" the fixed-string search matched nearly every line of
+          # the manifest and the check reported success over a bundle whose
+          # AdMob application id was a hyphen. A check whose strength depends on
+          # the input being already correct is not a check.
+          manifest_app_id="$(
+            printf '%s' "$manifest" \
+              | grep -a -o -E 'ca-app-pub-[0-9]{16}~[0-9]{10}' | head -1 || true
+          )"
           sample_hits="$(printf '%s' "$manifest" | grep -a -c '3940256099942544' || true)"
           native_layout="$(
             unzip -l "$output" | grep -c 'base/res/layout/native_ad_result\.xml' || true
           )"
 
           ads_failures=0
-          if [ "$app_id_hits" -eq 0 ]; then
-            echo "FAIL: the configured AdMob app id is not in the merged manifest." >&2
-            echo "      VIDSIZE_ADMOB_APP_ID did not reach the build." >&2
+          if [ -z "$manifest_app_id" ]; then
+            echo "FAIL: no well-formed AdMob app id in the merged manifest." >&2
+            echo "      Expected ca-app-pub-<16 digits>~<10 digits>." >&2
+            ads_failures=1
+          elif [ -n "${VIDSIZE_ADMOB_APP_ID:-}" ] \
+               && [ "$manifest_app_id" != "$VIDSIZE_ADMOB_APP_ID" ]; then
+            echo "FAIL: the manifest app id is not the configured one." >&2
             ads_failures=1
           fi
           if [ "$sample_hits" -ne 0 ]; then

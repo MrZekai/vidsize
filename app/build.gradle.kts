@@ -39,6 +39,32 @@ val rewardedAdUnitId: String = adId("VIDSIZE_REWARDED_AD_UNIT_ID")
 val googleTestAdMobAppId = "ca-app-pub-3940256099942544~3347511713"
 
 /**
+ * The shape an AdMob identifier has to have.
+ *
+ * ## Why a non-blank check was not enough
+ *
+ * `adsConfigured` asked only whether each identifier was present and was not
+ * Google's sample. Both questions have the same answer for a real identifier
+ * and for the string "-", so a run whose five repository secrets had all been
+ * stored as "-" configured cleanly, passed every gate, and produced a signed,
+ * uploadable bundle whose AdMob application id was a hyphen. Nothing in the app
+ * or in CI objected, because nothing had ever been asked to look at the value
+ * itself.
+ *
+ * An AdMob application id is `ca-app-pub-` followed by a 16-digit publisher and
+ * `~` and a 10-digit id; an ad unit uses `/` in place of `~`. The format is
+ * fixed and public, so a malformed identifier is never a judgement call - it is
+ * a typo, a truncated paste, or a secret that was set the wrong way, and all
+ * three should stop a release rather than reach one.
+ */
+val admobAppIdShape = Regex("""^ca-app-pub-\d{16}~\d{10}$""")
+val admobUnitShape = Regex("""^ca-app-pub-\d{16}/\d{10}$""")
+
+/** The shape the named slot must have; the app id is the only `~` one. */
+fun admobShapeFor(name: String): Regex =
+    if (name == "VIDSIZE_ADMOB_APP_ID") admobAppIdShape else admobUnitShape
+
+/**
  * Google's public sample publisher. Any identifier containing it renders
  * Google's own "Test Ad" placeholder creative and earns the developer nothing,
  * and the sample *native* unit is what draws the "AdMob native ad validator"
@@ -103,6 +129,9 @@ val optionalAdIds = linkedMapOf(
 )
 
 val adsConfigured = requiredAdIds.values.none { it.isBlank() } &&
+    (requiredAdIds + optionalAdIds).all { (name, value) ->
+        value.isBlank() || admobShapeFor(name).matches(value)
+    } &&
     (requiredAdIds.values + optionalAdIds.values).none { it.contains(googleSamplePublisher) }
 
 /** Opt-in escape hatch so a developer can still exercise ad layout locally. */
@@ -461,6 +490,32 @@ val verifyProductionAdConfig = tasks.register("verifyProductionAdConfig") {
                 append(
                     "Refusing to package a release with the ads subsystem " +
                         "silently shrunk away.",
+                )
+            }
+        }
+
+        // A present identifier still has to be an identifier.
+        //
+        // The first production run stored all five secrets as the single
+        // character "-", which is neither blank nor Google's sample, so every
+        // check above and below it passed and the bundle shipped with a hyphen
+        // where its AdMob application id should be. Checking the shape is the
+        // difference between "a value was supplied" and "an identifier was
+        // supplied", and only the second one earns anything.
+        val malformed = (requiredAdIds + optionalAdIds)
+            .filterValues { it.isNotBlank() }
+            .filter { (name, value) -> !admobShapeFor(name).matches(value) }
+        check(malformed.isEmpty()) {
+            buildString {
+                appendLine("Malformed AdMob identifiers:")
+                malformed.forEach { (name, value) -> appendLine("  - $name = \"$value\"") }
+                appendLine()
+                appendLine("Expected ca-app-pub-<16 digits>~<10 digits> for the app id")
+                appendLine("and ca-app-pub-<16 digits>/<10 digits> for an ad unit.")
+                append(
+                    "A secret set with `gh secret set NAME --body -` stores the " +
+                        "literal \"-\"; pass the value, or pipe it on stdin with " +
+                        "no --body flag at all.",
                 )
             }
         }
