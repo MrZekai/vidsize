@@ -111,6 +111,32 @@ val enableTestAdsInDebug: Boolean =
         ?: System.getenv("VIDSIZE_ENABLE_TEST_ADS")
         ?: "false").equals("true", ignoreCase = true)
 
+/**
+ * Set by the production workflow, and by nothing else.
+ *
+ * ## The hole this closes
+ *
+ * `closedTest` is deliberately permissive about identifiers: with none present
+ * it packages with ads off and still builds, which is what lets the unsigned
+ * audit AAB be reviewed by someone who cannot switch the ads SDK on at all.
+ * That permissiveness is right for the audit path and dangerous for the release
+ * path, because both use the same variant.
+ *
+ * A production run with a missing or misspelled repository secret therefore
+ * produced a valid, correctly signed bundle with the entire ads subsystem
+ * shrunk away by R8 - no build failure, no warning, and a manifest carrying the
+ * inert Google sample app id. Nobody catches that at review. It is caught weeks
+ * later, in an AdMob report that reads zero.
+ *
+ * So the release path states its intent. When this is true, absent identifiers
+ * stop being an acceptable configuration and become a build failure that names
+ * the keys that were missing.
+ */
+val requireAdsConfigured: Boolean =
+    (providers.gradleProperty("VIDSIZE_REQUIRE_ADS").orNull
+        ?: System.getenv("VIDSIZE_REQUIRE_ADS")
+        ?: "false").equals("true", ignoreCase = true)
+
 // Play Upload Key material is reconstructed only inside the signed GitHub
 // Actions workflow. No private signing material is committed to the repository.
 // The ordinary QA/audit workflow intentionally leaves closedTest unsigned.
@@ -420,7 +446,23 @@ val verifyProductionAdConfig = tasks.register("verifyProductionAdConfig") {
     doLast {
         val missing = requiredAdIds.filterValues { it.isBlank() }.keys
         check(missing.isEmpty()) {
-            "Production AdMob configuration is incomplete: ${missing.joinToString()}"
+            buildString {
+                appendLine("Production AdMob configuration is incomplete.")
+                appendLine()
+                appendLine("Missing identifiers:")
+                missing.forEach { appendLine("  - $it") }
+                appendLine()
+                appendLine(
+                    "In CI these arrive as repository secrets of the same names " +
+                        "(Settings > Secrets and variables > Actions). Locally " +
+                        "they can come from an untracked ads.properties at the " +
+                        "repository root, or from -P flags.",
+                )
+                append(
+                    "Refusing to package a release with the ads subsystem " +
+                        "silently shrunk away.",
+                )
+            }
         }
 
         // QA v0.8.7 BUG-01: the shipped build carried Google's sample publisher,
@@ -603,6 +645,17 @@ tasks.matching {
     //
     // So the dependency is conditional on the thing that distinguishes the two
     // cases: whether identifiers were actually supplied.
+    //
+    // Pre-production finding: "whether identifiers were supplied" is the wrong
+    // discriminator on its own, because it is exactly the condition that fails
+    // when a release goes wrong. `if (adsConfigured)` runs the check only in the
+    // case that needs no check, and skips it in the case that does - so a
+    // production run missing a repository secret sailed through and shipped a
+    // signed bundle with no ads in it.
+    //
+    // [requireAdsConfigured] supplies the missing half: the release path says so
+    // up front, and then absent identifiers are a failure rather than a
+    // configuration.
     dependsOn(verifyAdsOffWithoutRealIds, verifyAdUnitCoverage, verifyRewardCopyParity)
-    if (adsConfigured) dependsOn(verifyProductionAdConfig)
+    if (adsConfigured || requireAdsConfigured) dependsOn(verifyProductionAdConfig)
 }

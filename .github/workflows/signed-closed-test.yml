@@ -22,6 +22,13 @@ jobs:
       VIDSIZE_UPLOAD_KEYSTORE_TYPE: ${{ secrets.VIDSIZE_UPLOAD_KEYSTORE_TYPE }}
       VIDSIZE_UPLOAD_CERT_SHA256: ${{ secrets.VIDSIZE_UPLOAD_CERT_SHA256 }}
 
+      # This is the release path, so a missing AdMob secret is a build failure
+      # rather than an "ads off" configuration. Without this the closedTest
+      # variant packages happily with the whole ads subsystem shrunk away by R8,
+      # which is correct for the unsigned audit AAB and catastrophic here: a
+      # signed, uploadable, revenue-free bundle that nothing complains about.
+      VIDSIZE_REQUIRE_ADS: "true"
+
       # AdMob identifiers. Five are required; a blank one switches off EVERY
       # format, banners included, and verifyProductionAdConfig names it.
       VIDSIZE_ADMOB_APP_ID: ${{ secrets.VIDSIZE_ADMOB_APP_ID }}
@@ -195,6 +202,70 @@ jobs:
           sha256="$(sha256sum "$output" | awk '{print $1}')"
           apk_sha256="$(sha256sum "$apk_output" | awk '{print $1}')"
 
+          # --- Ads present in the artifact, measured rather than asserted -----
+          #
+          # This block used to be three hardcoded echo lines claiming ads were
+          # enabled. They printed the same text whatever was in the bundle, so
+          # the one document a reviewer reads before uploading to Play was the
+          # one place guaranteed not to notice an ads-free build. A report that
+          # cannot be wrong cannot be evidence.
+          #
+          # Three signals, all read out of the bundle that is about to ship:
+          #
+          #  1. The AdMob application id in the merged manifest is not Google's
+          #     sample publisher. Gradle substitutes the sample id as an inert
+          #     placeholder whenever real identifiers are absent, so its
+          #     presence here is the signature of an unconfigured build.
+          #  2. The ad classes survived R8. When ENABLE_ADS is false the whole
+          #     subsystem is dead code and R8 rewrites the mapping entry to
+          #     R8$$REMOVED$$CLASS$$. Checking the map is stronger than
+          #     grepping the dex, where an obfuscated class has no usable name
+          #     and a handful of unrelated string constants survive regardless.
+          #  3. The native ad layout is packaged. Resource shrinking drops it
+          #     the moment nothing references it, and the result screen's
+          #     native ad is the placement that pays.
+          #
+          # Any of the three failing means the bundle earns nothing. That is a
+          # failed build, not a footnote.
+          manifest="$(unzip -p "$output" base/manifest/AndroidManifest.xml | tr -d '\000')"
+          map="$(
+            unzip -p "$output" \
+              BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map \
+              2>/dev/null || true
+          )"
+
+          sample_hits="$(printf '%s' "$manifest" | grep -a -c '3940256099942544' || true)"
+          removed_ads="$(
+            printf '%s\n' "$map" \
+              | grep -c -E '^com\.vidsize\.compressor\.ads\..* -> R8\$\$REMOVED' || true
+          )"
+          native_layout="$(
+            unzip -l "$output" | grep -c 'base/res/layout/native_ad_result\.xml' || true
+          )"
+
+          ads_failures=0
+          if [ "$sample_hits" -ne 0 ]; then
+            echo "FAIL: the merged manifest carries Google's sample AdMob app id." >&2
+            echo "      The build ran without real identifiers." >&2
+            ads_failures=1
+          fi
+          if [ "$removed_ads" -ne 0 ]; then
+            echo "FAIL: R8 removed $removed_ads ad class(es) as dead code:" >&2
+            printf '%s\n' "$map" \
+              | grep -E '^com\.vidsize\.compressor\.ads\..* -> R8\$\$REMOVED' >&2 || true
+            ads_failures=1
+          fi
+          if [ "$native_layout" -eq 0 ]; then
+            echo "FAIL: base/res/layout/native_ad_result.xml is not in the bundle." >&2
+            echo "      The result-screen native ad cannot render." >&2
+            ads_failures=1
+          fi
+          if [ "$ads_failures" -ne 0 ]; then
+            echo "" >&2
+            echo "Refusing to publish an artifact that cannot serve ads." >&2
+            exit 1
+          fi
+
           {
             echo "Application ID: com.vidsize.compressor"
             echo "Version name: $version_name"
@@ -210,7 +281,10 @@ jobs:
             echo "  adsQa artifacts produced by the QA workflow are test builds"
             echo "  (.debug / .adsqa suffixes) and are never uploaded anywhere."
             echo ""
-            echo "Ads mode: enabled with required production AdMob identifiers"
+            echo "Ads mode: enabled - verified against this bundle, not assumed"
+            echo "  Google sample app id in manifest: absent (checked)"
+            echo "  Ad classes removed by R8 as dead code: none (checked)"
+            echo "  base/res/layout/native_ad_result.xml: present (checked)"
             echo "Ad units: production (Google sample identifiers rejected by Gradle gate)"
             echo "R8: enabled"
             echo "Resource shrinking: enabled"
