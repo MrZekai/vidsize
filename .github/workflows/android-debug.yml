@@ -443,8 +443,27 @@ jobs:
           test "$(grep -c 'applicationIdSuffix' app/build.gradle.kts)" -eq 2
 
           # A closed test built WITH real identifiers runs the production check,
-          # including the privacy-policy pairing for App Open.
-          grep -q 'if (adsConfigured) dependsOn(verifyProductionAdConfig)' app/build.gradle.kts
+          # including the privacy-policy pairing for App Open - and so does a
+          # release run that declared it REQUIRES them.
+          #
+          # This gate used to pin the literal text
+          # 'if (adsConfigured) dependsOn(verifyProductionAdConfig)', which
+          # froze a defect in place: that condition runs the check only when it
+          # cannot fail and skips it in exactly the case it exists for, so a
+          # production build with a missing AdMob secret shipped signed and
+          # ads-free with nothing complaining. Pinning a line of code makes the
+          # gate a copy of the code rather than a statement about it, and the
+          # copy cannot notice the original is wrong.
+          #
+          # So assert the two properties instead. Both halves must be present:
+          # the real-identifier case, and the release-path case.
+          grep -q 'adsConfigured || requireAdsConfigured' app/build.gradle.kts
+          grep -q 'dependsOn(verifyProductionAdConfig)' app/build.gradle.kts
+          grep -q 'VIDSIZE_REQUIRE_ADS' app/build.gradle.kts
+
+          # And the release workflow actually sets it. Without this line the
+          # Gradle side is inert: the switch exists and nothing flips it.
+          grep -q 'VIDSIZE_REQUIRE_ADS: "true"' .github/workflows/signed-closed-test.yml
 
           # The diagnostics sheet must never print an ad unit id.
           if grep -qE 'Line\(.*AdIds\.' $UI/screens/AdDiagnosticsSheet.kt; then
