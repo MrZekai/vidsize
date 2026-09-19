@@ -1075,8 +1075,19 @@ jobs:
           # had never run on a device.
           awk '/create\("closedTest"\)/,/^        }/' app/build.gradle.kts \
             > /tmp/closedtest.txt
-          grep -q 'isMinifyEnabled = true' /tmp/closedtest.txt
-          grep -q 'isShrinkResources = true' /tmp/closedtest.txt
+          # The switch must live in THIS block. It was once written into
+          # `release` instead - the two assignment lines look identical there -
+          # and closedTest, which sets them again after initWith, kept
+          # shrinking on while two diagnostic builds reported it off. Asserting
+          # the extracted closedTest block is what makes that impossible.
+          grep -q 'isMinifyEnabled = shrinkCode' /tmp/closedtest.txt
+          grep -q 'isShrinkResources = shrinkCode && shrinkResourcesToo' /tmp/closedtest.txt
+          # ...and release keeps the plain values, so the two cannot be swapped.
+          awk '/^        release \{/,/^        \}/' app/build.gradle.kts > /tmp/release.txt
+          grep -q 'isMinifyEnabled = true' /tmp/release.txt
+          grep -q 'isShrinkResources = true' /tmp/release.txt
+          # Shipping default stays full; only an explicit dispatch weakens it.
+          grep -q '?: "full").trim().lowercase()' app/build.gradle.kts
           grep -q 'androidx.media3.transformer' app/proguard-rules.pro
           grep -q 'com.vidsize.compressor.model' app/proguard-rules.pro
 

@@ -329,11 +329,8 @@ android {
             manifestPlaceholders["ADMOB_APP_ID"] =
                 admobAppId.ifBlank { googleTestAdMobAppId }
 
-            // Resource shrinking requires code shrinking, so the two can be
-            // (on, on), (on, off) or (off, off) - never (off, on). The three
-            // shrinkMode values are exactly those three states.
-            isMinifyEnabled = shrinkCode
-            isShrinkResources = shrinkCode && shrinkResourcesToo
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -384,8 +381,20 @@ android {
             // thing the public will get. An R8 fault found by ten testers is a
             // bad week; the same fault found after a production rollout is a
             // one-star review that stays.
-            isMinifyEnabled = true
-            isShrinkResources = true
+            //
+            // Which is exactly what happened, so [shrinkMode] now governs this
+            // - and it governs THIS block, not `release`. An earlier attempt
+            // put the switch in `release` by matching on the two lines plus the
+            // `proguardFiles(` call that follows them, a shape that occurs only
+            // there. Both diagnostic builds therefore shipped minified while
+            // reporting that they were not, and `initWith(getByName("release"))`
+            // could not have saved it either: this block sets the values again
+            // after the copy.
+            //
+            // Resource shrinking requires code shrinking, so the states are
+            // (on, on), (on, off) and (off, off) - never (off, on).
+            isMinifyEnabled = shrinkCode
+            isShrinkResources = shrinkCode && shrinkResourcesToo
             manifestPlaceholders["ADMOB_APP_ID"] =
                 admobAppId.ifBlank { googleTestAdMobAppId }
 

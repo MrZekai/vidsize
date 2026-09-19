@@ -95,8 +95,12 @@ jobs:
           grep -Fq 'initWith(getByName("release"))' app/build.gradle.kts
           grep -Fq 'buildConfigField("boolean", "USE_TEST_ADS", "false")' app/build.gradle.kts
           grep -Fq 'buildConfigField("boolean", "ENABLE_ADS", "$adsConfigured")' app/build.gradle.kts
-          grep -Fq 'isMinifyEnabled = true' app/build.gradle.kts
-          grep -Fq 'isShrinkResources = true' app/build.gradle.kts
+          # Asserted against the closedTest block, not the whole file: a
+          # file-wide grep passes on `release`'s copy of the same line and says
+          # nothing about the variant being built.
+          awk '/create\("closedTest"\)/,/^        }/' app/build.gradle.kts > /tmp/ct.txt
+          grep -Fq 'isMinifyEnabled = shrinkCode' /tmp/ct.txt
+          grep -Fq 'isShrinkResources = shrinkCode && shrinkResourcesToo' /tmp/ct.txt
           grep -Fq 'verifyClosedTestSigningConfig' app/build.gradle.kts
           grep -Fq 'verifyProductionAdConfig' app/build.gradle.kts
           echo "Version: $version_name ($version_code)"
@@ -283,6 +287,36 @@ jobs:
             unzip -l "$output" | grep -c 'base/res/layout/native_ad_result\.xml' || true
           )"
 
+          # --- the requested shrink mode actually reached the artifact -------
+          #
+          # A build setting is a request, not a result. Two diagnostic builds
+          # were produced from a switch that had been written into the wrong
+          # build type: the workflow asked for shrinking off, the bundle came
+          # back minified, and the report repeated the request rather than the
+          # outcome. Hours went into reasoning about a variable that had never
+          # moved.
+          #
+          # R8 writes BUNDLE-METADATA/.../proguard.map whenever it runs, and
+          # writes nothing when it does not. That is the outcome, readable from
+          # the finished bundle, so the mode is now confirmed rather than
+          # assumed - and any future edit that lands in the wrong block fails
+          # here instead of two days later.
+          if [ "${VIDSIZE_SHRINK:-full}" = "none" ]; then
+            if [ -n "$map" ]; then
+              echo "FAIL: VIDSIZE_SHRINK=none but R8 ran - the bundle has an" >&2
+              echo "      obfuscation map. The setting did not reach closedTest." >&2
+              exit 1
+            fi
+            echo "Confirmed: no obfuscation map, R8 did not run."
+          else
+            if [ -z "$map" ]; then
+              echo "FAIL: VIDSIZE_SHRINK=$VIDSIZE_SHRINK but the bundle has no" >&2
+              echo "      obfuscation map, so R8 did not run." >&2
+              exit 1
+            fi
+            echo "Confirmed: obfuscation map present, R8 ran."
+          fi
+
           ads_failures=0
           if [ -z "$manifest_app_id" ]; then
             echo "FAIL: no well-formed AdMob app id in the merged manifest." >&2
@@ -321,9 +355,10 @@ jobs:
 
           {
             if [ "${VIDSIZE_SHRINK:-full}" != "full" ]; then
-              echo "*** DIAGNOSTIC BUILD - DO NOT UPLOAD TO PLAY ***"
-              echo "Shrinking was weakened on purpose (VIDSIZE_SHRINK=$VIDSIZE_SHRINK)"
-              echo "to isolate a launch crash. This is not the release artifact."
+              echo "Shrinking: reduced on purpose (VIDSIZE_SHRINK=$VIDSIZE_SHRINK)."
+              echo "This is a real, signed, uploadable build - larger than the"
+              echo "full-shrink one, and verified below against the bundle"
+              echo "itself rather than against the setting that asked for it."
               echo ""
             fi
             echo "Application ID: com.vidsize.compressor"
@@ -358,10 +393,14 @@ jobs:
             esac
           } > release/SIGNING-REPORT.txt
 
+          # Every mode produces a real, signed, uploadable artifact; the name
+          # says which one so a bundle is never mistaken for another. "none" is
+          # a deliberate release configuration - larger, and correct - not a
+          # thing to be warned away from.
           if [ "${VIDSIZE_SHRINK:-full}" = "full" ]; then
             artifact_name="Vidsize-${version_name}-production"
           else
-            artifact_name="Vidsize-${version_name}-DIAGNOSTIC-shrink-${VIDSIZE_SHRINK}"
+            artifact_name="Vidsize-${version_name}-production-shrink-${VIDSIZE_SHRINK}"
           fi
           echo "artifact=$artifact_name" >> "$GITHUB_OUTPUT"
           echo "file=$output" >> "$GITHUB_OUTPUT"
