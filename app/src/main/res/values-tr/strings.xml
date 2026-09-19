@@ -149,4 +149,8 @@
     <string name="error_service_start">Android şu anda sıkıştırmanın başlamasına izin vermedi. Bu genelde uygulama arka plana geçerken olur. Vidsize\'i öne getirip Sıkıştır\'a tekrar dokun.</string>
     <string name="cta_browse_files">Dosyalardan seç</string>
     <string name="error_source_access_lost">Vidsize bu videoya erişimini kaybetti; Android uygulamayı çalışırken kapattıysa bu olabilir. Videoyu tekrar seçtiğinde normal şekilde çalışır.</string>
+    <string name="settings_rate_title">Vidsize\'ı değerlendirin</string>
+    <string name="settings_rate_body">Play Store sayfasını açar</string>
+    <string name="result_rate_cta">Vidsize işinize yaradı mı? Puan verin</string>
+    <string name="rate_store_unavailable">Play Store bu cihazda açılamadı. Puan vermek için Google Play\'de Vidsize\'ı aratabilirsiniz.</string>
 </resources>

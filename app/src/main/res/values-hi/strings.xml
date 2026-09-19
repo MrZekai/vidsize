@@ -149,4 +149,8 @@
     <string name="error_service_start">Android ने अभी कंप्रेशन शुरू करने नहीं दिया। यह आमतौर पर तब होता है जब ऐप बैकग्राउंड में जा रहा हो। Vidsize को सामने लाएँ और फिर से कंप्रेस पर टैप करें।</string>
     <string name="cta_browse_files">फ़ाइलों में देखें</string>
     <string name="error_source_access_lost">Vidsize का इस वीडियो तक पहुँच खत्म हो गई। ऐसा तब हो सकता है जब Android ने काम के दौरान ऐप बंद कर दिया हो। वीडियो दोबारा चुनें, फिर यह सामान्य रूप से चलेगा।</string>
+    <string name="settings_rate_title">Vidsize को रेट करें</string>
+    <string name="settings_rate_body">Play Store पेज खोलता है</string>
+    <string name="result_rate_cta">Vidsize पसंद आया? रेटिंग दें</string>
+    <string name="rate_store_unavailable">इस डिवाइस पर Play Store नहीं खुल सका। रेटिंग देने के लिए आप Google Play पर Vidsize खोज सकते हैं।</string>
 </resources>

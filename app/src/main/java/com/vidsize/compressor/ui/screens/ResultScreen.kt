@@ -8,6 +8,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,17 +31,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.vidsize.compressor.BuildConfig
 import com.vidsize.compressor.PlayerActivity
 import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
@@ -46,6 +52,7 @@ import com.vidsize.compressor.ads.AdDiagnostics
 import com.vidsize.compressor.ads.InterstitialAds
 import com.vidsize.compressor.ads.findHostActivity
 import com.vidsize.compressor.growth.ReviewPrompt
+import com.vidsize.compressor.growth.StoreListing
 import com.vidsize.compressor.model.CompressionPreset
 import com.vidsize.compressor.model.CompressionResult
 import com.vidsize.compressor.ui.buildVideoShareIntent
@@ -156,6 +163,10 @@ fun ResultScreen(
     // A touch already in flight is absorbed instead of being routed to an
     // action the user never chose.
     var interactive by remember(result.outputUri) { mutableStateOf(false) }
+
+    // Set only when neither Play nor a browser opened. A tap the user
+    // chose to make may not vanish into nothing.
+    var rateUnavailable by rememberSaveable { mutableStateOf(false) }
 
     /**
      * Leaving the result screen without leaving the app.
@@ -383,6 +394,70 @@ fun ResultScreen(
                     enabled = interactive,
                 )
 
+                // The rating invitation, placed at the one honest moment for
+                // it: a job the user waited on has just finished and the
+                // saving is on screen as a measured number. That is when a
+                // person actually feels like saying something, and it is why
+                // ReviewPrompt fires here too.
+                //
+                // A quiet text link rather than a fourth button. Three stacked
+                // buttons already carry the real work of this screen, and a
+                // request for a favour that shouts louder than "compress
+                // another video" has its priorities the wrong way round.
+                //
+                // It opens the store listing rather than Play's in-app review
+                // flow - see StoreListing for why a deliberate tap may not be
+                // answered with something that is allowed to show nothing.
+                Spacer(Modifier.height(Space.md))
+                // The failure answer is inline, not a dialog.
+                //
+                // This screen may not host a Dialog - it is a full page, and
+                // the v0.8.4 fix that made it one is guarded. A modal would
+                // also be a heavy answer to a trivial, rare miss. So the row
+                // reports in place: the invitation becomes the explanation and
+                // stops accepting taps, which is a visible response either way
+                // and keeps the promise that a deliberate tap is never met
+                // with nothing.
+                if (rateUnavailable) {
+                    Text(
+                        text = stringResource(R.string.rate_store_unavailable),
+                        style = VidsizeType.micro,
+                        color = VidsizeColor.Muted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = Space.xs),
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(VidsizeShape.small)
+                            .clickable(role = Role.Button, enabled = interactive) {
+                                rateUnavailable = !StoreListing.openForRating(
+                                    context,
+                                    BuildConfig.APPLICATION_ID,
+                                )
+                            }
+                            .padding(vertical = Space.xs),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_star),
+                            contentDescription = null,
+                            tint = VidsizeColor.Indigo,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(Space.xs))
+                        Text(
+                            text = stringResource(R.string.result_rate_cta),
+                            style = VidsizeType.supporting,
+                            color = VidsizeColor.Indigo,
+                        )
+                    }
+                }
+
 
                 if (adsVisible) {
                     // A divider, a label and 24dp of dead space above; a divider
@@ -419,6 +494,7 @@ fun ResultScreen(
             }
         }
     }
+
 }
 
 /* ------------------------------------------------------------------------- */

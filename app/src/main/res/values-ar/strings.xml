@@ -153,4 +153,8 @@
     <string name="error_service_start">لم يسمح Android ببدء الضغط الآن. يحدث هذا عادةً عندما ينتقل التطبيق إلى الخلفية. افتح Vidsize في المقدمة ثم اضغط على ضغط مرة أخرى.</string>
     <string name="cta_browse_files">التصفح من الملفات</string>
     <string name="error_source_access_lost">فقد Vidsize إمكانية الوصول إلى هذا الفيديو، وقد يحدث ذلك إذا أغلق Android التطبيق أثناء عمله. اختر الفيديو مرة أخرى وسيعمل بشكل طبيعي.</string>
+    <string name="settings_rate_title">قيّم Vidsize</string>
+    <string name="settings_rate_body">يفتح صفحة متجر Play</string>
+    <string name="result_rate_cta">أعجبك Vidsize؟ اترك تقييمًا</string>
+    <string name="rate_store_unavailable">تعذّر فتح متجر Play على هذا الجهاز. يمكنك البحث عن Vidsize في Google Play لترك تقييم.</string>
 </resources>

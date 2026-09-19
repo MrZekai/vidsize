@@ -150,4 +150,8 @@
     <string name="error_service_start">O Android não permitiu iniciar a compressão agora. Isso costuma acontecer quando o app está indo para segundo plano. Traga o Vidsize para a frente e toque em Comprimir novamente.</string>
     <string name="cta_browse_files">Procurar nos arquivos</string>
     <string name="error_source_access_lost">O Vidsize perdeu o acesso a este vídeo, o que pode acontecer se o Android fechou o app enquanto ele trabalhava. Escolha o vídeo novamente e ele funcionará normalmente.</string>
+    <string name="settings_rate_title">Avaliar o Vidsize</string>
+    <string name="settings_rate_body">Abre a página na Play Store</string>
+    <string name="result_rate_cta">Gostou do Vidsize? Deixe sua avaliação</string>
+    <string name="rate_store_unavailable">Não foi possível abrir a Play Store neste dispositivo. Você pode procurar por Vidsize no Google Play para avaliar.</string>
 </resources>

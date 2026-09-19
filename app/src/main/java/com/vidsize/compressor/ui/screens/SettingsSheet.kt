@@ -53,6 +53,7 @@ import com.vidsize.compressor.R
 import com.vidsize.compressor.ads.AdSlots
 import com.vidsize.compressor.ads.ConsentManager
 import com.vidsize.compressor.ads.suppressAppOpenOnReturn
+import com.vidsize.compressor.growth.StoreListing
 import com.vidsize.compressor.ui.components.HairLine
 import com.vidsize.compressor.ui.components.SecondaryButton
 import com.vidsize.compressor.ui.theme.Space
@@ -80,6 +81,11 @@ fun SettingsSheet(
     val context = LocalContext.current
     var legalPageName by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmClearHistory by rememberSaveable { mutableStateOf(false) }
+
+    // Set only when neither Play nor a browser could be opened. A tap that
+    // silently does nothing is the one outcome a deliberate button may not
+    // have, so the sheet says so instead.
+    var storeMissing by rememberSaveable { mutableStateOf(false) }
 
     // Seven taps on the version row opens the ad diagnostics screen.
     //
@@ -221,6 +227,31 @@ fun SettingsSheet(
                         Spacer(Modifier.height(Space.md))
                     }
 
+                    // Above "clear history" on purpose. Everything below this
+                    // point in the sheet is the destructive row and the legal
+                    // links, and a request for goodwill sitting under a red
+                    // delete button asks for it at the wrong moment.
+                    //
+                    // This is the permanent home for rating. The prompt that
+                    // matters more is on the result screen, where the user has
+                    // just been handed something; this one is for the person
+                    // who went looking.
+                    ActionRow(
+                        icon = R.drawable.ic_star,
+                        tint = VidsizeColor.Indigo,
+                        tintSoft = VidsizeColor.IndigoSoft,
+                        title = stringResource(R.string.settings_rate_title),
+                        body = stringResource(R.string.settings_rate_body),
+                        onClick = {
+                            storeMissing = !StoreListing.openForRating(
+                                context,
+                                BuildConfig.APPLICATION_ID,
+                            )
+                        },
+                    )
+
+                    Spacer(Modifier.height(Space.md))
+
                     ActionRow(
                         icon = R.drawable.ic_delete,
                         tint = VidsizeColor.Danger,
@@ -317,6 +348,22 @@ fun SettingsSheet(
             dismissButton = {
                 TextButton(onClick = { confirmClearHistory = false }) {
                     Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    // Shown only when the store could not be reached at all - no Play app and
+    // no browser. Rare, and silent failure is not an option for a control the
+    // user pressed on purpose.
+    if (storeMissing) {
+        AlertDialog(
+            onDismissRequest = { storeMissing = false },
+            title = { Text(stringResource(R.string.settings_rate_title)) },
+            text = { Text(stringResource(R.string.rate_store_unavailable)) },
+            confirmButton = {
+                TextButton(onClick = { storeMissing = false }) {
+                    Text(stringResource(R.string.close))
                 }
             },
         )

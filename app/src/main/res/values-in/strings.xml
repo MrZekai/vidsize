@@ -148,4 +148,8 @@
     <string name="error_service_start">Android tidak mengizinkan kompresi dimulai saat ini. Ini biasanya terjadi ketika aplikasi sedang berpindah ke latar belakang. Buka Vidsize di depan lalu ketuk Kompres lagi.</string>
     <string name="cta_browse_files">Cari lewat berkas</string>
     <string name="error_source_access_lost">Vidsize kehilangan akses ke video ini, yang bisa terjadi jika Android menutup aplikasi saat sedang bekerja. Pilih videonya lagi dan prosesnya akan berjalan normal.</string>
+    <string name="settings_rate_title">Beri rating Vidsize</string>
+    <string name="settings_rate_body">Membuka halaman Play Store</string>
+    <string name="result_rate_cta">Suka dengan Vidsize? Beri rating</string>
+    <string name="rate_store_unavailable">Play Store tidak dapat dibuka di perangkat ini. Anda dapat mencari Vidsize di Google Play untuk memberi rating.</string>
 </resources>
