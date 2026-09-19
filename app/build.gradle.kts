@@ -162,30 +162,40 @@ val enableTestAdsInDebug: Boolean =
  * the keys that were missing.
  */
 /**
- * Diagnostic escape hatch: build `closedTest` with R8 and resource shrinking
- * OFF, changing nothing else.
+ * Diagnostic escape hatch: weaken shrinking on `closedTest`, one step at a
+ * time, changing nothing else.
  *
- * ## Why this exists
+ * ## Why it has three settings and not two
  *
  * `closedTest` turned R8 on in v0.9.9, and the first build that both minified
- * AND carried real ad identifiers crashed on launch. Every other factor - the
- * signing key, the identifiers, the manifest, the code - is shared with builds
- * that work, so the question is a single yes/no: is the crash caused by
- * shrinking?
+ * AND carried real ad identifiers crashed on launch. Turning everything off
+ * proved shrinking was responsible - the same build with `none` opens and runs
+ * - but "shrinking" is two mechanisms with nothing in common:
  *
- * Answering it by reading the artifact is not possible; answering it by
- * attaching a debugger needs hardware that is not always available. Answering
- * it by installing one APK is. Two builds that differ in exactly one setting
- * turn an open-ended hunt into one bit of information.
+ *  - **code** shrinking removes classes and methods nothing references, which
+ *    breaks anything loaded by name;
+ *  - **resource** shrinking removes drawables, layouts and styles nothing
+ *    references, which breaks anything inflated or themed by name and throws
+ *    Resources.NotFoundException rather than ClassNotFoundException.
  *
- * An artifact built this way is a diagnostic and nothing else. It is named so
- * it cannot be mistaken for a release, and the signing report says in the first
- * line that it must not be uploaded.
+ * The fixes are unrelated - a keep rule in proguard-rules.pro for the first, a
+ * tools:keep entry in res/raw/keep.xml for the second - so guessing between
+ * them costs a build either way. `code` keeps code shrinking on and turns
+ * resource shrinking off, which separates them in one run.
+ *
+ * Anything but `full` is a diagnostic. The artifact is named so it cannot be
+ * mistaken for a release and its signing report says so on the first line.
  */
-val disableR8: Boolean =
-    (providers.gradleProperty("VIDSIZE_DISABLE_R8").orNull
-        ?: System.getenv("VIDSIZE_DISABLE_R8")
-        ?: "false").equals("true", ignoreCase = true)
+val shrinkMode: String =
+    (providers.gradleProperty("VIDSIZE_SHRINK").orNull
+        ?: System.getenv("VIDSIZE_SHRINK")
+        ?: "full").trim().lowercase()
+
+/** Code shrinking (R8) is on for everything except the all-off diagnostic. */
+val shrinkCode: Boolean = shrinkMode != "none"
+
+/** Resource shrinking additionally goes off in the `code` diagnostic. */
+val shrinkResourcesToo: Boolean = shrinkMode == "full"
 
 val requireAdsConfigured: Boolean =
     (providers.gradleProperty("VIDSIZE_REQUIRE_ADS").orNull
@@ -319,11 +329,11 @@ android {
             manifestPlaceholders["ADMOB_APP_ID"] =
                 admobAppId.ifBlank { googleTestAdMobAppId }
 
-            // Both follow the diagnostic switch together. Shrinking resources
-            // without shrinking code is a configuration nobody ships, and it
-            // would make the experiment answer a question nobody asked.
-            isMinifyEnabled = !disableR8
-            isShrinkResources = !disableR8
+            // Resource shrinking requires code shrinking, so the two can be
+            // (on, on), (on, off) or (off, off) - never (off, on). The three
+            // shrinkMode values are exactly those three states.
+            isMinifyEnabled = shrinkCode
+            isShrinkResources = shrinkCode && shrinkResourcesToo
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
