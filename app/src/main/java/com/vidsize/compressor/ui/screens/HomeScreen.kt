@@ -75,6 +75,7 @@ import com.vidsize.compressor.ui.theme.Space
 fun HomeScreen(
     summary: HistorySummary,
     onSelectVideo: () -> Unit,
+    onBrowseFiles: () -> Unit = {},
     onClearHistory: () -> Unit,
     onOpenEntry: (CompressionHistoryEntry) -> Unit = {},
     onShareEntry: (CompressionHistoryEntry) -> Unit = {},
@@ -98,7 +99,7 @@ fun HomeScreen(
         ) {
             Spacer(Modifier.height(Space.xs))
 
-            HeroPanel(onSelectVideo = onSelectVideo)
+            HeroPanel(onSelectVideo = onSelectVideo, onBrowseFiles = onBrowseFiles)
 
             Spacer(Modifier.height(Space.sm))
 
@@ -223,7 +224,7 @@ private fun HomeTopBar(onSettings: () -> Unit) {
 /* ------------------------------------------------------------------------- */
 
 @Composable
-private fun HeroPanel(onSelectVideo: () -> Unit) {
+private fun HeroPanel(onSelectVideo: () -> Unit, onBrowseFiles: () -> Unit) {
     VidsizeCard(
         modifier = Modifier.fillMaxWidth(),
         shape = VidsizeShape.hero,
@@ -275,6 +276,20 @@ private fun HeroPanel(onSelectVideo: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = R.drawable.ic_video_file,
             trailingIcon = R.drawable.ic_chevron_right,
+        )
+
+        // The second line, deliberately quiet.
+        //
+        // Nearly every user wants the grid above and will never read this. It
+        // exists for the one who downloaded a clip in a browser and cannot find
+        // it in the gallery - the case that made this app swap its picker twice.
+        // Shown as a text link rather than a second button so the screen still
+        // has exactly one obvious thing to do.
+        Spacer(Modifier.height(Space.xxs))
+        TertiaryButton(
+            text = stringResource(R.string.cta_browse_files),
+            onClick = onBrowseFiles,
+            modifier = Modifier.fillMaxWidth(),
         )
 
         // The share-sheet entry point, said out loud.

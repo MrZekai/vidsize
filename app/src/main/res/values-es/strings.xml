@@ -148,4 +148,6 @@
     <string name="error_source_undecodable">Vidsize probó los decodificadores alternativos y de software disponibles en el dispositivo, pero ninguno pudo abrir esta fuente. El trabajo se detuvo por el códec de origen en este dispositivo, no por la resolución de salida solicitada.</string>
     <string name="player_error">No se pudo reproducir este vídeo. El archivo puede estar dañado o aún se está escribiendo.</string>
     <string name="error_service_start">Android no ha permitido iniciar la compresión en este momento. Suele ocurrir cuando la aplicación pasa a segundo plano. Abre Vidsize en primer plano y toca Comprimir de nuevo.</string>
+    <string name="cta_browse_files">Buscar en archivos</string>
+    <string name="error_source_access_lost">Vidsize perdió el acceso a este vídeo, algo que puede ocurrir si Android cerró la aplicación mientras trabajaba. Vuelve a elegir el vídeo y funcionará con normalidad.</string>
 </resources>

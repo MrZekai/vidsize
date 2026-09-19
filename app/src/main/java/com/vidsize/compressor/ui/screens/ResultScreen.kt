@@ -201,7 +201,15 @@ fun ResultScreen(
     // every one of them would meet an ad in response to a system gesture.
     //
     // Same destination, different callback, deliberately.
-    BackHandler { leaveScreen(onSystemBack) }
+    // Deliberately NOT leaveScreen(). See the comment above: the arrow carries
+    // the interstitial, the system gesture does not.
+    //
+    // v0.9.15 routed this through leaveScreen() along with the other two exits,
+    // which quietly inverted the policy the comment above spells out - every
+    // back swipe off a result began answering a system navigation gesture with
+    // a full-screen ad. Worse, the CI gate added at the same time asserted the
+    // broken line, so the policy had a test enforcing its violation.
+    BackHandler { onSystemBack() }
 
     // Ask for a Play review at the peak of the experience, not on the way out.
     //

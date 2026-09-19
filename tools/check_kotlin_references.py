@@ -51,6 +51,7 @@ BUILTINS = {
     "Double", "Char", "String", "CharSequence", "Number", "Comparable", "Enum",
     "Throwable", "Exception", "RuntimeException", "IllegalStateException",
     "IllegalArgumentException", "UnsupportedOperationException", "Error",
+    "SecurityException",
     "NullPointerException", "ClassCastException", "NumberFormatException",
     "ArithmeticException", "IndexOutOfBoundsException",
     # Collections and friends
