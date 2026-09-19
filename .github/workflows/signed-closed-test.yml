@@ -210,23 +210,36 @@ jobs:
           # one place guaranteed not to notice an ads-free build. A report that
           # cannot be wrong cannot be evidence.
           #
-          # Three signals, all read out of the bundle that is about to ship:
+          # ## What the first version of this block got wrong
           #
-          #  1. The AdMob application id in the merged manifest is not Google's
-          #     sample publisher. Gradle substitutes the sample id as an inert
-          #     placeholder whenever real identifiers are absent, so its
-          #     presence here is the signature of an unconfigured build.
-          #  2. The ad classes survived R8. When ENABLE_ADS is false the whole
-          #     subsystem is dead code and R8 rewrites the mapping entry to
-          #     R8$$REMOVED$$CLASS$$. Checking the map is stronger than
-          #     grepping the dex, where an obfuscated class has no usable name
-          #     and a handful of unrelated string constants survive regardless.
-          #  3. The native ad layout is packaged. Resource shrinking drops it
-          #     the moment nothing references it, and the result screen's
-          #     native ad is the placement that pays.
+          # It also failed the build when ANY class under the ads package showed
+          # R8$$REMOVED$$CLASS$$ in the obfuscation map. That conflates two
+          # different things. A class disappears from the map both when it was
+          # dead code AND when R8 inlined all of it into its callers - and
+          # inlining small Kotlin objects is exactly what R8 is supposed to do.
           #
-          # Any of the three failing means the bundle earns nothing. That is a
-          # failed build, not a footnote.
+          # The first real production run proved it: the build was correct in
+          # every other respect and was rejected because AdSlots,
+          # FullScreenPacingPolicy and NativeAdLoader had been inlined. The
+          # giveaway was in the same run - AdGate and AdIds, which ARE removed
+          # in an ads-off build, were present, and the native ad layout had
+          # survived resource shrinking, which only happens while something
+          # still references R.layout.native_ad_result.
+          #
+          # A gate that blocks a good artifact is not a strict gate, it is a
+          # broken one. So the removed-class list is now reported and not
+          # judged, and the three hard checks below are things that cannot be
+          # true unless the ads path really was compiled in.
+          #
+          #  1. The merged manifest carries the AdMob app id this run was
+          #     configured with. When identifiers are absent Gradle substitutes
+          #     Google's sample id as an inert placeholder, so the configured
+          #     value being present is positive proof, not an absence.
+          #  2. That sample publisher is nowhere in the manifest.
+          #  3. base/res/layout/native_ad_result.xml is packaged. Resource
+          #     shrinking drops it the moment no surviving code inflates it, so
+          #     its presence proves the result-screen native ad - the placement
+          #     that pays - is still wired.
           manifest="$(unzip -p "$output" base/manifest/AndroidManifest.xml | tr -d '\000')"
           map="$(
             unzip -p "$output" \
@@ -234,25 +247,26 @@ jobs:
               2>/dev/null || true
           )"
 
+          app_id_hits=0
+          if [ -n "${VIDSIZE_ADMOB_APP_ID:-}" ]; then
+            app_id_hits="$(
+              printf '%s' "$manifest" | grep -a -c -F "$VIDSIZE_ADMOB_APP_ID" || true
+            )"
+          fi
           sample_hits="$(printf '%s' "$manifest" | grep -a -c '3940256099942544' || true)"
-          removed_ads="$(
-            printf '%s\n' "$map" \
-              | grep -c -E '^com\.vidsize\.compressor\.ads\..* -> R8\$\$REMOVED' || true
-          )"
           native_layout="$(
             unzip -l "$output" | grep -c 'base/res/layout/native_ad_result\.xml' || true
           )"
 
           ads_failures=0
+          if [ "$app_id_hits" -eq 0 ]; then
+            echo "FAIL: the configured AdMob app id is not in the merged manifest." >&2
+            echo "      VIDSIZE_ADMOB_APP_ID did not reach the build." >&2
+            ads_failures=1
+          fi
           if [ "$sample_hits" -ne 0 ]; then
             echo "FAIL: the merged manifest carries Google's sample AdMob app id." >&2
             echo "      The build ran without real identifiers." >&2
-            ads_failures=1
-          fi
-          if [ "$removed_ads" -ne 0 ]; then
-            echo "FAIL: R8 removed $removed_ads ad class(es) as dead code:" >&2
-            printf '%s\n' "$map" \
-              | grep -E '^com\.vidsize\.compressor\.ads\..* -> R8\$\$REMOVED' >&2 || true
             ads_failures=1
           fi
           if [ "$native_layout" -eq 0 ]; then
@@ -265,6 +279,16 @@ jobs:
             echo "Refusing to publish an artifact that cannot serve ads." >&2
             exit 1
           fi
+
+          # Reported for the record, never judged. Read it as "R8 inlined or
+          # dropped these"; both are normal in a build that passed the three
+          # checks above, and the list is here so a future change in it is
+          # visible rather than invisible.
+          inlined="$(
+            printf '%s\n' "$map" \
+              | grep -E '^com\.vidsize\.compressor\.ads\..* -> R8\$\$REMOVED' \
+              | sed 's/ -> .*//' || true
+          )"
 
           {
             echo "Application ID: com.vidsize.compressor"
@@ -282,9 +306,15 @@ jobs:
             echo "  (.debug / .adsqa suffixes) and are never uploaded anywhere."
             echo ""
             echo "Ads mode: enabled - verified against this bundle, not assumed"
+            echo "  Configured AdMob app id in manifest: present (checked)"
             echo "  Google sample app id in manifest: absent (checked)"
-            echo "  Ad classes removed by R8 as dead code: none (checked)"
             echo "  base/res/layout/native_ad_result.xml: present (checked)"
+            echo "  Ad classes inlined or dropped by R8 (informational):"
+            if [ -n "$inlined" ]; then
+              printf '%s\n' "$inlined" | sed 's/^/    /'
+            else
+              echo "    none"
+            fi
             echo "Ad units: production (Google sample identifiers rejected by Gradle gate)"
             echo "R8: enabled"
             echo "Resource shrinking: enabled"
