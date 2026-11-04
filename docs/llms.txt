@@ -1,0 +1,10 @@
+# Vidsize
+
+Vidsize is a free, ad-supported Android video compressor that processes videos on-device. Choose a target size or compression level; output sizes are estimates and the target is not guaranteed.
+
+## Links
+
+- [Vidsize](https://mrzekai.github.io/vidsize/): Product information and compression guides.
+- [Google Play](https://play.google.com/store/apps/details?id=com.vidsize.compressor): Download Vidsize.
+- [Privacy policy](https://mrzekai.github.io/vidsize/privacy.html): Video processing and advertising details.
+- [Terms of use](https://mrzekai.github.io/vidsize/terms.html): Terms for using Vidsize.
