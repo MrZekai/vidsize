@@ -23,12 +23,11 @@ def main():
     image = Image.new("RGB", (1200, 630), "#F6F6FB")
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle((32, 32, 1168, 598), radius=38, fill="#FFFFFF", outline="#E5E6F0", width=2)
-    draw.rounded_rectangle((82, 78, 170, 166), radius=25, fill="#EEE DFF".replace(" ", ""))
-    # Draw the hourglass/play mark used by the app's SVG at social-preview scale.
-    draw.polygon([(111, 104), (143, 104), (149, 110), (137, 122), (149, 137),
-                  (143, 143), (111, 143), (105, 137), (117, 122), (105, 110)],
-                 fill=INDIGO)
-    draw.polygon([(120, 114), (120, 133), (136, 123)], fill="#EEEDFF")
+    icon = Image.open(ROOT / "store" / "assets" / "icon-512.png").convert("RGB")
+    icon = icon.resize((88, 88), Image.Resampling.LANCZOS)
+    mask = Image.new("L", (88, 88), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, 87, 87), radius=25, fill=255)
+    image.paste(icon, (82, 78), mask)
     draw.text((190, 86), "Vidsize", font=font(60, True), fill=INK)
     draw.text((84, 226), "Compress video", font=font(72, True), fill=INK)
     draw.text((84, 315), "to any size", font=font(72, True), fill=INDIGO)
